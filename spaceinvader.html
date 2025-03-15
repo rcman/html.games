@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Galaga Clone</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+            background: black;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #222;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="480" height="640"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Player
+        const player = {
+            x: canvas.width / 2,
+            y: canvas.height - 50,
+            width: 30,
+            height: 20,
+            speed: 5,
+            dx: 0
+        };
+
+        // Bullets
+        const bullets = [];
+        const bulletSpeed = 7;
+
+        // Enemies
+        const enemies = [];
+        const enemyRows = 4;
+        const enemyCols = 8;
+        const enemyWidth = 30;
+        const enemyHeight = 20;
+        const enemySpeed = 1;
+        let enemyDirection = 1;
+
+        // Game state
+        let score = 0;
+        let gameOver = false;
+
+        // Initialize enemies
+        function initEnemies() {
+            for (let row = 0; row < enemyRows; row++) {
+                for (let col = 0; col < enemyCols; col++) {
+                    enemies.push({
+                        x: col * (enemyWidth + 10) + 50,
+                        y: row * (enemyHeight + 10) + 50,
+                        width: enemyWidth,
+                        height: enemyHeight,
+                        alive: true
+                    });
+                }
+            }
+        }
+
+        // Controls
+        let rightPressed = false;
+        let leftPressed = false;
+        let spacePressed = false;
+
+        document.addEventListener('keydown', keyDownHandler);
+        document.addEventListener('keyup', keyUpHandler);
+
+        function keyDownHandler(e) {
+            if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = true;
+            if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = true;
+            if (e.key === ' ') spacePressed = true;
+        }
+
+        function keyUpHandler(e) {
+            if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = false;
+            if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = false;
+            if (e.key === ' ') spacePressed = false;
+        }
+
+        // Draw functions
+        function drawPlayer() {
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.moveTo(player.x, player.y);
+            ctx.lineTo(player.x - player.width/2, player.y + player.height);
+            ctx.lineTo(player.x + player.width/2, player.y + player.height);
+            ctx.fill();
+        }
+
+        function drawBullet(bullet) {
+            ctx.fillStyle = 'red';
+            ctx.fillRect(bullet.x, bullet.y, 4, 10);
+        }
+
+        function drawEnemy(enemy) {
+            if (enemy.alive) {
+                ctx.fillStyle = 'green';
+                ctx.beginPath();
+                ctx.arc(enemy.x, enemy.y, enemy.width/2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Update functions
+        function updatePlayer() {
+            if (rightPressed && player.x < canvas.width - player.width/2) player.dx = player.speed;
+            else if (leftPressed && player.x > player.width/2) player.dx = -player.speed;
+            else player.dx = 0;
+            
+            player.x += player.dx;
+        }
+
+        function updateBullets() {
+            if (spacePressed && bullets.length < 3) {
+                bullets.push({
+                    x: player.x,
+                    y: player.y - 10,
+                    width: 4,
+                    height: 10
+                });
+                spacePressed = false; // Prevent continuous firing
+            }
+
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].y -= bulletSpeed;
+                if (bullets[i].y < 0) bullets.splice(i, 1);
+            }
+        }
+
+        function updateEnemies() {
+            let hitEdge = false;
+            enemies.forEach(enemy => {
+                if (enemy.alive) {
+                    enemy.x += enemySpeed * enemyDirection;
+                    if (enemy.x > canvas.width - enemy.width || enemy.x < enemy.width) {
+                        hitEdge = true;
+                    }
+                }
+            });
+
+            if (hitEdge) {
+                enemyDirection *= -1;
+                enemies.forEach(enemy => {
+                    if (enemy.alive) enemy.y += 20;
+                });
+            }
+        }
+
+        function checkCollisions() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    if (enemies[j].alive &&
+                        bullets[i].x > enemies[j].x - enemies[j].width/2 &&
+                        bullets[i].x < enemies[j].x + enemies[j].width/2 &&
+                        bullets[i].y > enemies[j].y - enemies[j].height/2 &&
+                        bullets[i].y < enemies[j].y + enemies[j].height/2) {
+                        enemies[j].alive = false;
+                        bullets.splice(i, 1);
+                        score += 10;
+                        break;
+                    }
+                }
+            }
+        }
+
+        function drawScore() {
+            ctx.fillStyle = 'white';
+            ctx.font = '16px Arial';
+            ctx.fillText(`Score: ${score}`, 10, 20);
+        }
+
+        function gameLoop() {
+            if (gameOver) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            updatePlayer();
+            updateBullets();
+            updateEnemies();
+            checkCollisions();
+
+            drawPlayer();
+            bullets.forEach(drawBullet);
+            enemies.forEach(drawEnemy);
+            drawScore();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start game
+        initEnemies();
+        gameLoop();
+    </script>
+</body>
+</html>

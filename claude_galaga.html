@@ -1,0 +1,1030 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galaga Clone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 600px;
+            height: 800px;
+            background-color: #000;
+            border: 2px solid #333;
+        }
+        
+        #game-canvas {
+            width: 100%;
+            height: 100%;
+        }
+        
+        #score-display {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 20px;
+        }
+        
+        #lives-display {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            font-size: 20px;
+        }
+        
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: red;
+            font-size: 40px;
+            font-weight: bold;
+            text-align: center;
+            display: none;
+        }
+        
+        .start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: black;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+        }
+        
+        .start-screen h1 {
+            font-size: 48px;
+            color: #ff0;
+            margin-bottom: 30px;
+            text-transform: uppercase;
+        }
+        
+        .start-screen .start-btn {
+            padding: 10px 20px;
+            background-color: #ff0;
+            color: black;
+            border: none;
+            font-size: 20px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        
+        .start-screen .instructions {
+            margin-top: 40px;
+            font-size: 18px;
+            text-align: center;
+            width: 80%;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div class="start-screen" id="start-screen">
+            <h1>GALAGA</h1>
+            <button class="start-btn" id="start-btn">START GAME</button>
+            <div class="instructions">
+                <p>Use LEFT and RIGHT arrow keys or A/D to move</p>
+                <p>Press SPACE to shoot</p>
+                <p>Destroy all enemies to advance to the next stage</p>
+            </div>
+        </div>
+        <canvas id="game-canvas"></canvas>
+        <div id="score-display">Score: 0</div>
+        <div id="lives-display">Lives: 3</div>
+        <div id="game-over">
+            GAME OVER<br>
+            <span id="final-score"></span><br>
+            Press ENTER to restart
+        </div>
+    </div>
+
+    <script>
+        // Game constants
+        const GAME_WIDTH = 600;
+        const GAME_HEIGHT = 800;
+        const PLAYER_WIDTH = 40;
+        const PLAYER_HEIGHT = 40;
+        const PLAYER_SPEED = 5;
+        const BULLET_WIDTH = 3;
+        const BULLET_HEIGHT = 15;
+        const BULLET_SPEED = 10;
+        const ENEMY_WIDTH = 30;
+        const ENEMY_HEIGHT = 30;
+        const ENEMY_ROWS = 5;
+        const ENEMY_COLS = 10;
+        const ENEMY_PADDING = 15;
+        const ENEMY_FORMATION_TOP = 100;
+        const ENEMY_DIVE_CHANCE = 0.05; // Chance for an enemy to dive (increased from 0.003)
+        const ENEMY_SHOOT_CHANCE = 0.01; // Chance for an enemy to shoot
+        const ENEMY_BULLET_SPEED = 5;
+        const EXPLOSION_DURATION = 20;
+        const STAGE_CLEAR_BONUS = 1000;
+        
+        // Game variables
+        let canvas, ctx;
+        let gameActive = false;
+        let gameLoop;
+        let score = 0;
+        let lives = 3;
+        let level = 1;
+        let player;
+        let playerBullets = [];
+        let enemies = [];
+        let enemyFormation = [];
+        let enemyBullets = [];
+        let explosions = [];
+        let keys = {};
+        let formationDirection = 1;
+        let formationSpeed = 1;
+        let enemyDiveTimer = 0;
+        let stageClear = false;
+        let stageTransition = 0;
+        
+        // Game sprites
+        const sprites = {
+            player: null,
+            enemy1: null,
+            enemy2: null,
+            enemy3: null,
+            explosion: null
+        };
+        
+        // Initialize the game
+        // Initialize the game on window load
+        window.onload = init;
+        function init() {
+            canvas = document.getElementById('game-canvas');
+            ctx = canvas.getContext('2d');
+            canvas.width = GAME_WIDTH;
+            canvas.height = GAME_HEIGHT;
+            
+            // Load sprites
+            createSprites();
+            
+            // Event listeners
+            window.addEventListener('keydown', e => {
+                keys[e.key] = true;
+                if (e.key === 'Enter' && !gameActive) {
+                    resetGame();
+                }
+            });
+            
+            window.addEventListener('keyup', e => {
+                keys[e.key] = false;
+            });
+            
+            document.getElementById('start-btn').addEventListener('click', () => {
+                document.getElementById('start-screen').style.display = 'none';
+                resetGame();
+            });
+        }
+        
+        // Create game sprites
+        function createSprites() {
+            // Create player sprite - SIMPLIFIED AND MORE VISIBLE
+            sprites.player = document.createElement('canvas');
+            sprites.player.width = PLAYER_WIDTH;
+            sprites.player.height = PLAYER_HEIGHT;
+            const playerCtx = sprites.player.getContext('2d');
+            
+            // Clear background
+            playerCtx.clearRect(0, 0, PLAYER_WIDTH, PLAYER_HEIGHT);
+            
+            // Main ship body (bright white)
+            playerCtx.fillStyle = '#FFFFFF';
+            playerCtx.beginPath();
+            playerCtx.moveTo(PLAYER_WIDTH / 2, 0);
+            playerCtx.lineTo(PLAYER_WIDTH, PLAYER_HEIGHT);
+            playerCtx.lineTo(0, PLAYER_HEIGHT);
+            playerCtx.closePath();
+            playerCtx.fill();
+            
+            // Add bright red details
+            playerCtx.fillStyle = '#FF0000';
+            playerCtx.beginPath();
+            playerCtx.moveTo(PLAYER_WIDTH / 2, PLAYER_HEIGHT / 2);
+            playerCtx.lineTo(PLAYER_WIDTH * 0.7, PLAYER_HEIGHT);
+            playerCtx.lineTo(PLAYER_WIDTH * 0.3, PLAYER_HEIGHT);
+            playerCtx.closePath();
+            playerCtx.fill();
+            
+            // Add blue accent
+            playerCtx.fillStyle = '#00FFFF';
+            playerCtx.beginPath();
+            playerCtx.arc(PLAYER_WIDTH / 2, PLAYER_HEIGHT / 2, PLAYER_WIDTH / 6, 0, Math.PI * 2);
+            playerCtx.closePath();
+            playerCtx.fill();
+            
+            // Create enemy sprites
+            const enemyColors = ['#FF5555', '#55AAFF', '#AA55FF'];
+            const enemyTypes = ['enemy1', 'enemy2', 'enemy3'];
+            
+            enemyTypes.forEach((type, index) => {
+                sprites[type] = document.createElement('canvas');
+                sprites[type].width = ENEMY_WIDTH;
+                sprites[type].height = ENEMY_HEIGHT;
+                const enemyCtx = sprites[type].getContext('2d');
+                
+                // Base enemy shape
+                enemyCtx.fillStyle = enemyColors[index];
+                
+                if (type === 'enemy1') {
+                    // Butterfly shape (more defined)
+                    enemyCtx.beginPath();
+                    // Wings
+                    enemyCtx.moveTo(ENEMY_WIDTH / 2, 5);
+                    enemyCtx.lineTo(ENEMY_WIDTH - 5, ENEMY_HEIGHT / 3);
+                    enemyCtx.lineTo(ENEMY_WIDTH - 2, ENEMY_HEIGHT * 2 / 3);
+                    enemyCtx.lineTo(ENEMY_WIDTH / 2, ENEMY_HEIGHT - 3);
+                    enemyCtx.lineTo(2, ENEMY_HEIGHT * 2 / 3);
+                    enemyCtx.lineTo(5, ENEMY_HEIGHT / 3);
+                    enemyCtx.closePath();
+                    enemyCtx.fill();
+                    
+                    // Body details
+                    enemyCtx.fillStyle = 'yellow';
+                    enemyCtx.fillRect(ENEMY_WIDTH * 0.4, 5, ENEMY_WIDTH * 0.2, ENEMY_HEIGHT - 8);
+                    
+                } else if (type === 'enemy2') {
+                    // Bee shape (more detailed)
+                    // Body
+                    enemyCtx.beginPath();
+                    enemyCtx.arc(ENEMY_WIDTH / 2, ENEMY_HEIGHT / 2, ENEMY_WIDTH / 2 - 2, 0, Math.PI * 2);
+                    enemyCtx.closePath();
+                    enemyCtx.fill();
+                    
+                    // Stripes
+                    enemyCtx.fillStyle = 'yellow';
+                    enemyCtx.fillRect(5, ENEMY_HEIGHT / 3, ENEMY_WIDTH - 10, ENEMY_HEIGHT / 6);
+                    enemyCtx.fillRect(5, ENEMY_HEIGHT * 2 / 3 - ENEMY_HEIGHT / 12, ENEMY_WIDTH - 10, ENEMY_HEIGHT / 6);
+                    
+                } else {
+                    // Boss galaga (more detailed)
+                    // Main body
+                    enemyCtx.beginPath();
+                    enemyCtx.moveTo(ENEMY_WIDTH / 2, 2);
+                    enemyCtx.lineTo(ENEMY_WIDTH - 2, ENEMY_HEIGHT / 2);
+                    enemyCtx.lineTo(ENEMY_WIDTH / 2, ENEMY_HEIGHT - 2);
+                    enemyCtx.lineTo(2, ENEMY_HEIGHT / 2);
+                    enemyCtx.closePath();
+                    enemyCtx.fill();
+                    
+                    // Top wing details
+                    enemyCtx.fillStyle = 'yellow';
+                    enemyCtx.beginPath();
+                    enemyCtx.moveTo(ENEMY_WIDTH / 2, 5);
+                    enemyCtx.lineTo(ENEMY_WIDTH * 0.75, ENEMY_HEIGHT / 3);
+                    enemyCtx.lineTo(ENEMY_WIDTH / 4, ENEMY_HEIGHT / 3);
+                    enemyCtx.closePath();
+                    enemyCtx.fill();
+                }
+                
+                // Add eyes or central details
+                enemyCtx.fillStyle = 'white';
+                enemyCtx.beginPath();
+                enemyCtx.arc(ENEMY_WIDTH / 3, ENEMY_HEIGHT / 2, ENEMY_WIDTH / 8, 0, Math.PI * 2);
+                enemyCtx.closePath();
+                enemyCtx.fill();
+                
+                enemyCtx.beginPath();
+                enemyCtx.arc(ENEMY_WIDTH * 2 / 3, ENEMY_HEIGHT / 2, ENEMY_WIDTH / 8, 0, Math.PI * 2);
+                enemyCtx.closePath();
+                enemyCtx.fill();
+            });
+            
+            // Create explosion sprite
+            sprites.explosion = document.createElement('canvas');
+            sprites.explosion.width = ENEMY_WIDTH;
+            sprites.explosion.height = ENEMY_HEIGHT;
+            const explosionCtx = sprites.explosion.getContext('2d');
+            explosionCtx.fillStyle = 'yellow';
+            explosionCtx.beginPath();
+            
+            for (let i = 0; i < 8; i++) {
+                const angle = i * Math.PI / 4;
+                const innerRadius = ENEMY_WIDTH / 6;
+                const outerRadius = ENEMY_WIDTH / 2;
+                
+                explosionCtx.moveTo(
+                    ENEMY_WIDTH / 2 + Math.cos(angle) * innerRadius,
+                    ENEMY_HEIGHT / 2 + Math.sin(angle) * innerRadius
+                );
+                
+                explosionCtx.lineTo(
+                    ENEMY_WIDTH / 2 + Math.cos(angle) * outerRadius,
+                    ENEMY_HEIGHT / 2 + Math.sin(angle) * outerRadius
+                );
+            }
+            
+            explosionCtx.closePath();
+            explosionCtx.fill();
+        }
+        
+        // Reset the game
+        function resetGame() {
+            gameActive = true;
+            score = 0;
+            lives = 3;
+            level = 1;
+            stageClear = false;
+            stageTransition = 0;
+            
+            updateScore();
+            updateLives();
+            
+            document.getElementById('game-over').style.display = 'none';
+            
+            // Create player
+            player = {
+                x: GAME_WIDTH / 2 - PLAYER_WIDTH / 2,
+                y: GAME_HEIGHT - PLAYER_HEIGHT - 20,
+                width: PLAYER_WIDTH,
+                height: PLAYER_HEIGHT,
+                speed: PLAYER_SPEED,
+                canShoot: true,
+                shootCooldown: 0,
+                tilt: 0 // For visual effect when moving
+            };
+            
+            // Clear all arrays
+            playerBullets = [];
+            enemies = [];
+            enemyFormation = [];
+            enemyBullets = [];
+            explosions = [];
+            
+            // Create enemies
+            createEnemies();
+            
+            // Start game loop
+            if (gameLoop) clearInterval(gameLoop);
+            gameLoop = setInterval(update, 1000 / 60);
+        }
+        
+        // Create enemies
+        function createEnemies() {
+            enemyFormation = [];
+            enemies = [];
+            
+            const formationWidth = ENEMY_COLS * (ENEMY_WIDTH + ENEMY_PADDING) - ENEMY_PADDING;
+            const formationStartX = (GAME_WIDTH - formationWidth) / 2;
+            
+            // Create formation grid
+            for (let row = 0; row < ENEMY_ROWS; row++) {
+                for (let col = 0; col < ENEMY_COLS; col++) {
+                    const enemyType = row < 2 ? 'enemy1' : (row < 4 ? 'enemy2' : 'enemy3');
+                    const points = row < 2 ? 50 : (row < 4 ? 80 : 150);
+                    
+                    const enemy = {
+                        x: formationStartX + col * (ENEMY_WIDTH + ENEMY_PADDING),
+                        y: ENEMY_FORMATION_TOP + row * (ENEMY_HEIGHT + ENEMY_PADDING),
+                        width: ENEMY_WIDTH,
+                        height: ENEMY_HEIGHT,
+                        type: enemyType,
+                        points: points,
+                        state: 'formation',
+                        formationX: col,
+                        formationY: row,
+                        divePattern: null,
+                        diveStep: 0,
+                        diveDelay: 0
+                    };
+                    
+                    enemyFormation.push(enemy);
+                    enemies.push(enemy);
+                }
+            }
+            
+            // Increase formation speed with level
+            formationSpeed = 1 + level * 0.2;
+        }
+        
+        // Main game update function
+        function update() {
+            if (!gameActive) return;
+            
+            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            
+            if (stageClear) {
+                handleStageTransition();
+                return;
+            }
+            
+            // DRAW BACKGROUND GRID FOR VISIBILITY
+            drawBackgroundGrid();
+            
+            // Update and draw player
+            updatePlayer();
+            drawPlayer();
+            
+            // Update and draw bullets
+            updateBullets();
+            drawBullets();
+            
+            // Update and draw enemies
+            updateEnemies();
+            drawEnemies();
+            
+            // Update and draw explosions
+            updateExplosions();
+            drawExplosions();
+            
+            // Draw debug info
+            drawDebugInfo();
+            
+            // Check if all enemies are defeated
+            if (enemies.length === 0 && !stageClear) {
+                stageClear = true;
+                score += STAGE_CLEAR_BONUS * level;
+                updateScore();
+            }
+        }
+        
+        // Handle stage transition
+        function handleStageTransition() {
+            ctx.fillStyle = 'white';
+            ctx.font = '30px "Courier New", Courier, monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText(`STAGE ${level} CLEAR!`, GAME_WIDTH / 2, GAME_HEIGHT / 2 - 50);
+            ctx.fillText(`BONUS: ${STAGE_CLEAR_BONUS * level}`, GAME_WIDTH / 2, GAME_HEIGHT / 2);
+            ctx.fillText(`NEXT STAGE IN ${3 - Math.floor(stageTransition / 60)}...`, GAME_WIDTH / 2, GAME_HEIGHT / 2 + 50);
+            
+            stageTransition++;
+            
+            if (stageTransition >= 180) { // 3 seconds
+                level++;
+                stageClear = false;
+                stageTransition = 0;
+                createEnemies();
+            }
+        }
+        
+        // Update player
+        function updatePlayer() {
+            // Move player
+            if ((keys['ArrowLeft'] || keys['a']) && player.x > 0) {
+                player.x -= player.speed;
+                // Add slight visual tilt when moving left
+                player.tilt = -0.1;
+            } else if ((keys['ArrowRight'] || keys['d']) && player.x < GAME_WIDTH - player.width) {
+                player.x += player.speed;
+                // Add slight visual tilt when moving right
+                player.tilt = 0.1;
+            } else {
+                // Reset tilt when not moving
+                player.tilt = 0;
+            }
+            
+            // Shoot
+            if (keys[' '] && player.canShoot) {
+                playerBullets.push({
+                    x: player.x + player.width / 2 - BULLET_WIDTH / 2,
+                    y: player.y - BULLET_HEIGHT,
+                    width: BULLET_WIDTH,
+                    height: BULLET_HEIGHT,
+                    speed: BULLET_SPEED
+                });
+                
+                player.canShoot = false;
+                player.shootCooldown = 15; // Cooldown frames
+            }
+            
+            // Handle cooldown
+            if (!player.canShoot) {
+                player.shootCooldown--;
+                if (player.shootCooldown <= 0) {
+                    player.canShoot = true;
+                }
+            }
+        }
+        
+        // Draw player - SIMPLIFIED AND MORE RELIABLE
+        function drawPlayer() {
+            // Always draw the player directly - no rotation to minimize rendering issues
+            ctx.drawImage(sprites.player, player.x, player.y);
+            
+            // Debug outline to ensure player is visible
+            ctx.strokeStyle = '#FF00FF';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(player.x, player.y, player.width, player.height);
+            
+            // Draw engine thrust (simple rectangle for reliability)
+            ctx.fillStyle = '#FF9900';
+            const thrustHeight = 8; // Fixed height for reliability
+            ctx.fillRect(
+                player.x + player.width * 0.4, 
+                player.y + player.height,
+                player.width * 0.2,
+                thrustHeight
+            );
+        }
+        
+        // Update bullets
+        function updateBullets() {
+            // Update player bullets
+            for (let i = playerBullets.length - 1; i >= 0; i--) {
+                const bullet = playerBullets[i];
+                bullet.y -= bullet.speed;
+                
+                // Remove if off screen
+                if (bullet.y < 0) {
+                    playerBullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check collision with enemies
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    
+                    if (checkCollision(bullet, enemy)) {
+                        // Add explosion
+                        explosions.push({
+                            x: enemy.x,
+                            y: enemy.y,
+                            width: enemy.width,
+                            height: enemy.height,
+                            duration: EXPLOSION_DURATION,
+                            timer: EXPLOSION_DURATION
+                        });
+                        
+                        // Remove bullet and enemy
+                        playerBullets.splice(i, 1);
+                        enemies.splice(j, 1);
+                        
+                        // Update score
+                        score += enemy.points;
+                        updateScore();
+                        
+                        break;
+                    }
+                }
+            }
+            
+            // Update enemy bullets
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                const bullet = enemyBullets[i];
+                bullet.y += bullet.speed;
+                
+                // Remove if off screen
+                if (bullet.y > GAME_HEIGHT) {
+                    enemyBullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check collision with player
+                if (checkCollision(bullet, player)) {
+                    // Add explosion
+                    explosions.push({
+                        x: player.x,
+                        y: player.y,
+                        width: player.width,
+                        height: player.height,
+                        duration: EXPLOSION_DURATION,
+                        timer: EXPLOSION_DURATION
+                    });
+                    
+                    // Remove bullet
+                    enemyBullets.splice(i, 1);
+                    
+                    // Reduce lives
+                    lives--;
+                    updateLives();
+                    
+                    if (lives <= 0) {
+                        gameOver();
+                    } else {
+                        // Reset player position
+                        player.x = GAME_WIDTH / 2 - PLAYER_WIDTH / 2;
+                    }
+                    
+                    break;
+                }
+            }
+        }
+        
+        // Draw bullets
+        function drawBullets() {
+            ctx.fillStyle = '#fff';
+            
+            // Draw player bullets
+            playerBullets.forEach(bullet => {
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+            
+            // Draw enemy bullets
+            ctx.fillStyle = '#f00';
+            enemyBullets.forEach(bullet => {
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+        }
+        
+        // Update enemies - IMPROVED WITH FORCED DIVING
+        function updateEnemies() {
+            // DEBUGGING: Log enemies that are diving
+            const divingCount = enemies.filter(e => e.state === 'diving').length;
+            if (divingCount > 0) {
+                console.log(`Currently ${divingCount} enemies diving`);
+            }
+            
+            // Update formation movement
+            let formationLeft = Infinity;
+            let formationRight = 0;
+            
+            for (const enemy of enemies) {
+                if (enemy.state === 'formation') {
+                    formationLeft = Math.min(formationLeft, enemy.x);
+                    formationRight = Math.max(formationRight, enemy.x + enemy.width);
+                }
+            }
+            
+            // Change direction if formation hits screen edge
+            if ((formationLeft <= 10 && formationDirection < 0) || 
+                (formationRight >= GAME_WIDTH - 10 && formationDirection > 0)) {
+                formationDirection *= -1;
+            }
+            
+            // Move enemies in formation
+            for (const enemy of enemies) {
+                if (enemy.state === 'formation') {
+                    enemy.x += formationSpeed * formationDirection;
+                }
+            }
+            
+            // Handle enemy diving - FORCE DIVES MORE FREQUENTLY
+            enemyDiveTimer++;
+            if (enemyDiveTimer >= 20) { // Even more frequent checks (every 1/3 second)
+                enemyDiveTimer = 0;
+                
+                // Filter enemies in formation
+                const formationEnemies = enemies.filter(enemy => enemy.state === 'formation');
+                
+                // GUARANTEE AT LEAST ONE ENEMY DIVES REGULARLY
+                if (formationEnemies.length > 0 && divingCount < 3) { // Limit to 3 diving enemies at once
+                    // Choose random enemy to dive
+                    const randomIndex = Math.floor(Math.random() * formationEnemies.length);
+                    const diver = formationEnemies[randomIndex];
+                    
+                    // Force a dive every few seconds
+                    if (Math.random() < 0.2) { // 20% chance each check = very frequent dives
+                        console.log("Forcing enemy to dive");
+                        initiateDive(diver);
+                    }
+                }
+            }
+            
+            // Update diving enemies
+            for (const enemy of enemies) {
+                if (enemy.state === 'diving') {
+                    if (enemy.diveDelay > 0) {
+                        enemy.diveDelay--;
+                    } else {
+                        advanceDivePattern(enemy);
+                    }
+                    
+                    // Enemies in diving state can shoot
+                    if (Math.random() < ENEMY_SHOOT_CHANCE) {
+                        enemyShoot(enemy);
+                    }
+                }
+            }
+            
+            // Check for collisions with player
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                
+                if (checkCollision(enemy, player)) {
+                    // Add explosion
+                    explosions.push({
+                        x: player.x,
+                        y: player.y,
+                        width: player.width,
+                        height: player.height,
+                        duration: EXPLOSION_DURATION,
+                        timer: EXPLOSION_DURATION
+                    });
+                    
+                    // Reduce lives
+                    lives--;
+                    updateLives();
+                    
+                    if (lives <= 0) {
+                        gameOver();
+                    } else {
+                        // Reset player position
+                        player.x = GAME_WIDTH / 2 - PLAYER_WIDTH / 2;
+                    }
+                    
+                    break;
+                }
+            }
+        }
+        
+        // Initiate enemy dive
+        function initiateDive(enemy) {
+            enemy.state = 'diving';
+            enemy.diveStep = 0;
+            enemy.diveDelay = 0;
+            
+            // Add visual indicator that enemy is about to dive
+            // Flash the enemy briefly
+            enemy.flashCount = 6; // Flash 3 times (3 on, 3 off)
+            
+            // Create dive pattern
+            const patterns = [
+                // Figure-8 Loop (classic Galaga pattern)
+                [
+                    { dx: 4, dy: 3, steps: 15 },
+                    { dx: 0, dy: 5, steps: 10 },
+                    { dx: -4, dy: 3, steps: 15 },
+                    { dx: -4, dy: -3, steps: 15 },
+                    { dx: 0, dy: -5, steps: 10 },
+                    { dx: 4, dy: -3, steps: 15 },
+                    { dx: 0, dy: 0, steps: 10, returnToFormation: true }
+                ],
+                // Large Swoop Attack
+                [
+                    { dx: -5, dy: 2, steps: 12 },
+                    { dx: -2, dy: 5, steps: 10 },
+                    { dx: 0, dy: 7, steps: 8 },
+                    { dx: 2, dy: 5, steps: 10 },
+                    { dx: 5, dy: 2, steps: 12 },
+                    { dx: 5, dy: -2, steps: 12 },
+                    { dx: 2, dy: -5, steps: 10 },
+                    { dx: 0, dy: 0, steps: 10, returnToFormation: true }
+                ],
+                // Dive bomb with player targeting
+                [
+                    { dx: 0, dy: 10, steps: 25 }, // Fast dive down
+                    { dx: -6, dy: 3, steps: 15 }, // Sweep left
+                    { dx: 6, dy: 3, steps: 15 },  // Sweep right
+                    { dx: -6, dy: 3, steps: 15 }, // Sweep left again
+                    { dx: 0, dy: -8, steps: 30 }, // Return upward
+                    { dx: 0, dy: 0, steps: 10, returnToFormation: true }
+                ],
+                // Spiral attack
+                [
+                    { dx: 5, dy: 1, steps: 10 },
+                    { dx: 4, dy: 3, steps: 10 },
+                    { dx: 2, dy: 5, steps: 10 },
+                    { dx: 0, dy: 6, steps: 10 },
+                    { dx: -2, dy: 5, steps: 10 },
+                    { dx: -4, dy: 3, steps: 10 },
+                    { dx: -5, dy: 1, steps: 10 },
+                    { dx: -5, dy: -1, steps: 10 },
+                    { dx: -4, dy: -3, steps: 10 },
+                    { dx: -2, dy: -5, steps: 10 },
+                    { dx: 0, dy: -6, steps: 10 },
+                    { dx: 0, dy: 0, steps: 10, returnToFormation: true }
+                ]
+            ];
+            
+            // Select random pattern
+            enemy.divePattern = patterns[Math.floor(Math.random() * patterns.length)];
+        }
+        
+        // Advance dive pattern - FIXED FOR FULL COMPLETION
+        function advanceDivePattern(enemy) {
+            // Force enemy back to formation if they've been diving too long (safety check)
+            enemy.diveTimeout = (enemy.diveTimeout || 0) + 1;
+            if (enemy.diveTimeout > 500) { // ~8 seconds max dive time
+                enemy.state = 'formation';
+                console.log("Force returning enemy to formation - timeout");
+                return;
+            }
+            
+            // Check if we've reached the end of the pattern
+            if (enemy.diveStep >= enemy.divePattern.length) {
+                enemy.state = 'formation';
+                console.log("Enemy reached end of dive pattern");
+                return;
+            }
+            
+            const pattern = enemy.divePattern[enemy.diveStep];
+            
+            // Move according to pattern
+            enemy.x += pattern.dx;
+            enemy.y += pattern.dy;
+            
+            // Check boundaries - WRAP AROUND INSTEAD OF STOPPING
+            if (enemy.x < 0) enemy.x = GAME_WIDTH - enemy.width;
+            if (enemy.x > GAME_WIDTH - enemy.width) enemy.x = 0;
+            
+            // If enemy goes off screen vertically, wrap around
+            if (enemy.y > GAME_HEIGHT + 50) { // Give extra space below
+                enemy.y = -enemy.height - 50; // And above
+            }
+            if (enemy.y < -enemy.height - 50) {
+                enemy.y = GAME_HEIGHT + 50;
+            }
+            
+            // If reached end of this pattern step
+            if (--pattern.steps <= 0) {
+                enemy.diveStep++;
+                console.log(`Enemy advancing to dive step: ${enemy.diveStep}`);
+                
+                // Check if should return to formation
+                if (enemy.diveStep < enemy.divePattern.length && 
+                    enemy.divePattern[enemy.diveStep].returnToFormation) {
+                    returnToFormation(enemy);
+                }
+            }
+        }
+        
+        // Return enemy to formation - SIMPLIFIED AND MORE ROBUST
+        function returnToFormation(enemy) {
+            console.log("Returning enemy to formation");
+            
+            // Default position if all else fails
+            let formationX = GAME_WIDTH / 2;
+            let formationY = ENEMY_FORMATION_TOP;
+            
+            // Get formation grid position
+            const formationWidth = ENEMY_COLS * (ENEMY_WIDTH + ENEMY_PADDING) - ENEMY_PADDING;
+            const formationStartX = (GAME_WIDTH - formationWidth) / 2;
+            
+            // Try to use enemy's original position
+            formationX = formationStartX + enemy.formationX * (ENEMY_WIDTH + ENEMY_PADDING);
+            formationY = ENEMY_FORMATION_TOP + enemy.formationY * (ENEMY_HEIGHT + ENEMY_PADDING);
+            
+            // Calculate direct movement vector
+            const dx = (formationX - enemy.x) / 20; // Faster return (20 steps instead of 30)
+            const dy = (formationY - enemy.y) / 20;
+            
+            // Override the current dive step with return path
+            enemy.divePattern[enemy.diveStep] = { 
+                dx: dx, 
+                dy: dy, 
+                steps: 20,
+                returnToFormation: false 
+            };
+            
+            // Reset dive timeout
+            enemy.diveTimeout = 0;
+            
+            // If too far off-screen, just teleport back to formation
+            if (enemy.y < -100 || enemy.y > GAME_HEIGHT + 100) {
+                enemy.x = formationX;
+                enemy.y = formationY;
+                enemy.state = 'formation';
+                console.log("Enemy teleported back to formation - was too far off screen");
+            }
+        }
+        
+        // Enemy shoot
+        function enemyShoot(enemy) {
+            enemyBullets.push({
+                x: enemy.x + enemy.width / 2 - BULLET_WIDTH / 2,
+                y: enemy.y + enemy.height,
+                width: BULLET_WIDTH,
+                height: BULLET_HEIGHT,
+                speed: ENEMY_BULLET_SPEED
+            });
+        }
+        
+        // Draw enemies
+        function drawEnemies() {
+            enemies.forEach(enemy => {
+                // If enemy is flashing before diving, handle the flash effect
+                if (enemy.flashCount > 0) {
+                    enemy.flashCount--;
+                    if (enemy.flashCount % 2 === 0) {
+                        // Draw with flash effect (white)
+                        ctx.globalCompositeOperation = 'difference';
+                        ctx.drawImage(sprites[enemy.type], enemy.x, enemy.y);
+                        ctx.globalCompositeOperation = 'source-over';
+                    } else {
+                        // Draw normally
+                        ctx.drawImage(sprites[enemy.type], enemy.x, enemy.y);
+                    }
+                } else {
+                    ctx.drawImage(sprites[enemy.type], enemy.x, enemy.y);
+                }
+                
+                // Draw trail for diving enemies
+                if (enemy.state === 'diving') {
+                    ctx.globalAlpha = 0.3;
+                    ctx.fillStyle = enemy.type === 'enemy1' ? '#FF5555' : 
+                                    (enemy.type === 'enemy2' ? '#55AAFF' : '#AA55FF');
+                    ctx.beginPath();
+                    ctx.arc(
+                        enemy.x + enemy.width/2, 
+                        enemy.y + enemy.height/2, 
+                        enemy.width/2.5, 
+                        0, Math.PI*2
+                    );
+                    ctx.fill();
+                    ctx.globalAlpha = 1.0;
+                }
+            });
+        }
+        
+        // Update explosions
+        function updateExplosions() {
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                const explosion = explosions[i];
+                explosion.timer--;
+                
+                if (explosion.timer <= 0) {
+                    explosions.splice(i, 1);
+                }
+            }
+        }
+        
+        // Draw explosions
+        function drawExplosions() {
+            explosions.forEach(explosion => {
+                const scaleFactor = explosion.timer / explosion.duration;
+                const width = explosion.width * (2 - scaleFactor);
+                const height = explosion.height * (2 - scaleFactor);
+                const x = explosion.x + (explosion.width - width) / 2;
+                const y = explosion.y + (explosion.height - height) / 2;
+                
+                ctx.globalAlpha = scaleFactor;
+                ctx.drawImage(sprites.explosion, x, y, width, height);
+                ctx.globalAlpha = 1;
+            });
+        }
+        
+        // Check collision between two objects
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.width &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.height &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+        
+        // Update score display
+        function updateScore() {
+            document.getElementById('score-display').textContent = `Score: ${score}`;
+        }
+        
+        // Update lives display
+        function updateLives() {
+            document.getElementById('lives-display').textContent = `Lives: ${lives}`;
+        }
+        
+        // Game over
+        function gameOver() {
+            gameActive = false;
+            document.getElementById('game-over').style.display = 'block';
+            document.getElementById('final-score').textContent = `Final Score: ${score}`;
+        }
+        
+        // Add these new functions at the end before the init() call
+        
+        // Draw background grid for visibility
+        function drawBackgroundGrid() {
+            ctx.strokeStyle = "#222222";
+            ctx.lineWidth = 1;
+            
+            // Draw vertical lines
+            for (let x = 0; x < GAME_WIDTH; x += 50) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, GAME_HEIGHT);
+                ctx.stroke();
+            }
+            
+            // Draw horizontal lines
+            for (let y = 0; y < GAME_HEIGHT; y += 50) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(GAME_WIDTH, y);
+                ctx.stroke();
+            }
+        }
+        
+        // Draw debug info
+        function drawDebugInfo() {
+            const divingCount = enemies.filter(e => e.state === 'diving').length;
+            
+            ctx.fillStyle = "#FFFFFF";
+            ctx.font = "14px monospace";
+            ctx.fillText(`Diving Enemies: ${divingCount}`, 10, GAME_HEIGHT - 40);
+            
+            // Draw player position
+            ctx.fillText(`Player: (${Math.round(player.x)}, ${Math.round(player.y)})`, 10, GAME_HEIGHT - 20);
+        }
+    </script>
+</body>
+</html>
