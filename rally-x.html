@@ -1,0 +1,793 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rally-X HTML5</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #121212;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            position: relative;
+        }
+        #game-canvas {
+            border: 3px solid #444;
+            background-color: #000;
+            box-shadow: 0 0 10px rgba(255,255,255,0.2);
+        }
+        #score-display {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 18px;
+        }
+        #fuel-bar-container {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            width: 200px;
+            height: 20px;
+            background-color: #333;
+            border: 2px solid #555;
+        }
+        #fuel-bar {
+            height: 100%;
+            background-color: #ff0;
+            width: 100%;
+        }
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 36px;
+            text-align: center;
+            display: none;
+            background-color: rgba(0,0,0,0.7);
+            padding: 20px;
+            border-radius: 10px;
+        }
+        #restart-button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #ff0;
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+        }
+        #smoke-button {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            padding: 10px 20px;
+            background-color: #0af;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #level-display {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            font-size: 18px;
+        }
+        #lives-display {
+            position: absolute;
+            top: 40px;
+            left: 10px;
+            color: white;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas" width="800" height="600"></canvas>
+        <div id="score-display">Score: 0</div>
+        <div id="level-display">Level: 1</div>
+        <div id="lives-display">Lives: 3</div>
+        <div id="fuel-bar-container">
+            <div id="fuel-bar"></div>
+        </div>
+        <button id="smoke-button">SMOKE (S)</button>
+        <div id="game-over">
+            <h2>GAME OVER</h2>
+            <button id="restart-button">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Game constants
+        const GRID_SIZE = 40;
+        const PLAYER_SIZE = 30;
+        const ENEMY_SIZE = 30;
+        const FLAG_SIZE = 25;
+        const ROCK_SIZE = 35;
+        const PLAYER_SPEED = 3;
+        const ENEMY_SPEED = 1.5;
+        const SMOKE_DURATION = 3000; // milliseconds
+        const SMOKE_COOLDOWN = 5000; // milliseconds
+        const FLAGS_PER_LEVEL = 10;
+
+        // Game variables
+        let canvas, ctx;
+        let player;
+        let enemies = [];
+        let flags = [];
+        let rocks = [];
+        let maze = [];
+        let lastTime = 0;
+        let score = 0;
+        let level = 1;
+        let lives = 3;
+        let gameOver = false;
+        let smokeActive = false;
+        let smokeAvailable = true;
+        let smokeTimeout;
+        let smokeCooldownTimeout;
+        let flagsCollected = 0;
+        
+        // Images
+        const playerImg = new Image();
+        playerImg.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="#ff0"></circle><circle cx="15" cy="15" r="5" fill="#000"></circle><circle cx="35" cy="15" r="5" fill="#000"></circle><path d="M15 30Q25 45 35 30" stroke="#000" stroke-width="3" fill="none"></path></svg>');
+        
+        const enemyImg = new Image();
+        enemyImg.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><circle cx="25" cy="25" r="20" fill="#f00"></circle><circle cx="15" cy="15" r="5" fill="#000"></circle><circle cx="35" cy="15" r="5" fill="#000"></circle><path d="M15 35Q25 25 35 35" stroke="#000" stroke-width="3" fill="none"></path></svg>');
+        
+        const flagImg = new Image();
+        flagImg.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><rect x="5" y="5" width="5" height="40" fill="#888"></rect><path d="M10 5 L10 25 L40 20 L40 10 Z" fill="#f00"></path></svg>');
+        
+        const rockImg = new Image();
+        rockImg.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 50 50"><path d="M10,40 L20,10 L40,5 L45,25 L30,45 Z" fill="#888" stroke="#444" stroke-width="2"></path></svg>');
+
+        // Initialize key states
+        const keys = {
+            ArrowUp: false,
+            ArrowDown: false,
+            ArrowLeft: false,
+            ArrowRight: false,
+            KeyS: false
+        };
+
+        // Initialize the game
+        function init() {
+            canvas = document.getElementById('game-canvas');
+            ctx = canvas.getContext('2d');
+            
+            // Setup event listeners
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            document.getElementById('smoke-button').addEventListener('click', activateSmoke);
+            document.getElementById('restart-button').addEventListener('click', restartGame);
+            
+            // Start the game
+            startLevel();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Generate a random maze for the level
+        function generateMaze() {
+            const width = Math.floor(canvas.width / GRID_SIZE);
+            const height = Math.floor(canvas.height / GRID_SIZE);
+            
+            // Initialize empty maze
+            maze = [];
+            for (let y = 0; y < height; y++) {
+                const row = [];
+                for (let x = 0; x < width; x++) {
+                    // 0 = path, 1 = wall
+                    // Create outer walls and some random internal walls
+                    if (x === 0 || y === 0 || x === width - 1 || y === height - 1 || (Math.random() < 0.2)) {
+                        row.push(1);
+                    } else {
+                        row.push(0);
+                    }
+                }
+                maze.push(row);
+            }
+            
+            // Create some random pathways to ensure maze is traversable
+            for (let i = 0; i < width * height / 10; i++) {
+                const x = Math.floor(Math.random() * (width - 2)) + 1;
+                const y = Math.floor(Math.random() * (height - 2)) + 1;
+                maze[y][x] = 0;
+            }
+        }
+
+        // Initialize a new level
+        function startLevel() {
+            // Generate maze
+            generateMaze();
+            
+            // Create player
+            const playerX = GRID_SIZE * 2;
+            const playerY = GRID_SIZE * 2;
+            player = {
+                x: playerX,
+                y: playerY,
+                width: PLAYER_SIZE,
+                height: PLAYER_SIZE,
+                speed: PLAYER_SPEED,
+                direction: 0, // 0 = right, 1 = down, 2 = left, 3 = up
+                fuel: 100,
+                smokeClouds: []
+            };
+            
+            // Create enemies
+            enemies = [];
+            const numEnemies = 3 + Math.floor(level / 2); // More enemies as levels progress
+            for (let i = 0; i < numEnemies; i++) {
+                const enemy = createEnemy();
+                enemies.push(enemy);
+            }
+            
+            // Create flags
+            flags = [];
+            for (let i = 0; i < FLAGS_PER_LEVEL; i++) {
+                const flag = createFlag();
+                flags.push(flag);
+            }
+            
+            // Create rocks
+            rocks = [];
+            const numRocks = 5 + level * 2; // More rocks as levels progress
+            for (let i = 0; i < numRocks; i++) {
+                const rock = createRock();
+                rocks.push(rock);
+            }
+            
+            // Reset level-specific variables
+            flagsCollected = 0;
+            smokeActive = false;
+            smokeAvailable = true;
+            
+            // Reset UI elements
+            updateUI();
+        }
+
+        // Create a new enemy at a random position
+        function createEnemy() {
+            let x, y;
+            // Find an empty spot
+            do {
+                x = Math.floor(Math.random() * (canvas.width - GRID_SIZE * 2)) + GRID_SIZE;
+                y = Math.floor(Math.random() * (canvas.height - GRID_SIZE * 2)) + GRID_SIZE;
+            } while (checkCollision(x, y, ENEMY_SIZE, ENEMY_SIZE, player.x, player.y, GRID_SIZE * 3, GRID_SIZE * 3));
+            
+            return {
+                x: x,
+                y: y,
+                width: ENEMY_SIZE,
+                height: ENEMY_SIZE,
+                speed: ENEMY_SPEED * (1 + level * 0.1), // Enemies get faster with level
+                direction: Math.floor(Math.random() * 4)
+            };
+        }
+
+        // Create a new flag at a random position
+        function createFlag() {
+            let x, y;
+            // Find an empty spot
+            do {
+                x = Math.floor(Math.random() * (canvas.width - GRID_SIZE * 2)) + GRID_SIZE;
+                y = Math.floor(Math.random() * (canvas.height - GRID_SIZE * 2)) + GRID_SIZE;
+            } while (checkCollisionWithAny(x, y, FLAG_SIZE, FLAG_SIZE));
+            
+            return {
+                x: x,
+                y: y,
+                width: FLAG_SIZE,
+                height: FLAG_SIZE,
+                collected: false
+            };
+        }
+
+        // Create a new rock at a random position
+        function createRock() {
+            let x, y;
+            // Find an empty spot
+            do {
+                x = Math.floor(Math.random() * (canvas.width - GRID_SIZE * 2)) + GRID_SIZE;
+                y = Math.floor(Math.random() * (canvas.height - GRID_SIZE * 2)) + GRID_SIZE;
+            } while (checkCollisionWithAny(x, y, ROCK_SIZE, ROCK_SIZE));
+            
+            return {
+                x: x,
+                y: y,
+                width: ROCK_SIZE,
+                height: ROCK_SIZE
+            };
+        }
+
+        // Check collision with any existing game object
+        function checkCollisionWithAny(x, y, width, height) {
+            // Check collision with player
+            if (checkCollision(x, y, width, height, player.x, player.y, player.width, player.height)) {
+                return true;
+            }
+            
+            // Check collision with enemies
+            for (const enemy of enemies) {
+                if (checkCollision(x, y, width, height, enemy.x, enemy.y, enemy.width, enemy.height)) {
+                    return true;
+                }
+            }
+            
+            // Check collision with flags
+            for (const flag of flags) {
+                if (!flag.collected && checkCollision(x, y, width, height, flag.x, flag.y, flag.width, flag.height)) {
+                    return true;
+                }
+            }
+            
+            // Check collision with rocks
+            for (const rock of rocks) {
+                if (checkCollision(x, y, width, height, rock.x, rock.y, rock.width, rock.height)) {
+                    return true;
+                }
+            }
+            
+            // Check collision with walls
+            const gridX = Math.floor(x / GRID_SIZE);
+            const gridY = Math.floor(y / GRID_SIZE);
+            
+            for (let row = gridY - 1; row <= gridY + 1; row++) {
+                for (let col = gridX - 1; col <= gridX + 1; col++) {
+                    if (row >= 0 && row < maze.length && col >= 0 && col < maze[0].length) {
+                        if (maze[row][col] === 1) {
+                            const wallX = col * GRID_SIZE;
+                            const wallY = row * GRID_SIZE;
+                            if (checkCollision(x, y, width, height, wallX, wallY, GRID_SIZE, GRID_SIZE)) {
+                                return true;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            return false;
+        }
+
+        // Check collision between two objects
+        function checkCollision(x1, y1, w1, h1, x2, y2, w2, h2) {
+            return x1 < x2 + w2 &&
+                   x1 + w1 > x2 &&
+                   y1 < y2 + h2 &&
+                   y1 + h1 > y2;
+        }
+
+        // Main game loop
+        function gameLoop(timestamp) {
+            // Calculate delta time
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+            
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (!gameOver) {
+                // Update game state
+                update(deltaTime);
+                
+                // Draw the game
+                draw();
+            }
+            
+            // Request the next frame
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Update game state
+        function update(deltaTime) {
+            // Update player position
+            updatePlayer(deltaTime);
+            
+            // Update smoke clouds
+            updateSmokeClouds();
+            
+            // Update enemies
+            updateEnemies(deltaTime);
+            
+            // Check collisions
+            checkCollisions();
+            
+            // Decrease fuel
+            player.fuel -= 0.05 * (deltaTime / 16); // Decrease fuel over time
+            
+            // Check fuel level
+            if (player.fuel <= 0) {
+                loseLife();
+            }
+            
+            // Check if all flags have been collected
+            if (flagsCollected >= FLAGS_PER_LEVEL) {
+                level++;
+                startLevel();
+            }
+            
+            // Update UI
+            updateUI();
+        }
+
+        // Update player position and state
+        function updatePlayer(deltaTime) {
+            let dx = 0;
+            let dy = 0;
+            
+            // Determine movement direction
+            if (keys.ArrowUp) {
+                dy -= player.speed;
+                player.direction = 3;
+            }
+            if (keys.ArrowDown) {
+                dy += player.speed;
+                player.direction = 1;
+            }
+            if (keys.ArrowLeft) {
+                dx -= player.speed;
+                player.direction = 2;
+            }
+            if (keys.ArrowRight) {
+                dx += player.speed;
+                player.direction = 0;
+            }
+            
+            // Check if movement is possible
+            const newX = player.x + dx;
+            const newY = player.y + dy;
+            
+            // Check collision with walls and rocks
+            const canMove = !checkWallCollision(newX, newY, player.width, player.height) &&
+                           !checkRockCollision(newX, newY, player.width, player.height);
+            
+            // Move player if possible
+            if (canMove) {
+                player.x = newX;
+                player.y = newY;
+                
+                // Keep player within canvas bounds
+                player.x = Math.max(player.width / 2, Math.min(canvas.width - player.width / 2, player.x));
+                player.y = Math.max(player.height / 2, Math.min(canvas.height - player.height / 2, player.y));
+            }
+            
+            // Activate smoke if key is pressed and available
+            if (keys.KeyS && smokeAvailable && !smokeActive) {
+                activateSmoke();
+            }
+        }
+
+        // Check collision with walls
+        function checkWallCollision(x, y, width, height) {
+            // Convert pixel position to grid
+            const gridStartX = Math.floor((x - width / 2) / GRID_SIZE);
+            const gridEndX = Math.floor((x + width / 2) / GRID_SIZE);
+            const gridStartY = Math.floor((y - height / 2) / GRID_SIZE);
+            const gridEndY = Math.floor((y + height / 2) / GRID_SIZE);
+            
+            // Check collision with walls
+            for (let row = gridStartY; row <= gridEndY; row++) {
+                for (let col = gridStartX; col <= gridEndX; col++) {
+                    if (row >= 0 && row < maze.length && col >= 0 && col < maze[0].length) {
+                        if (maze[row][col] === 1) {
+                            return true;
+                        }
+                    }
+                }
+            }
+            
+            return false;
+        }
+
+        // Check collision with rocks
+        function checkRockCollision(x, y, width, height) {
+            for (const rock of rocks) {
+                if (checkCollision(x - width / 2, y - height / 2, width, height, 
+                                 rock.x - rock.width / 2, rock.y - rock.width / 2, rock.width, rock.height)) {
+                    return true;
+                }
+            }
+            
+            return false;
+        }
+
+        // Update smoke clouds
+        function updateSmokeClouds() {
+            // Remove expired smoke clouds
+            player.smokeClouds = player.smokeClouds.filter(cloud => cloud.timeLeft > 0);
+            
+            // Decrease time left for each cloud
+            player.smokeClouds.forEach(cloud => cloud.timeLeft -= 16);
+        }
+
+        // Activate the smoke screen
+        function activateSmoke() {
+            if (smokeAvailable && !smokeActive) {
+                smokeActive = true;
+                smokeAvailable = false;
+                
+                // Create smoke cloud
+                player.smokeClouds.push({
+                    x: player.x,
+                    y: player.y,
+                    radius: 150,
+                    timeLeft: SMOKE_DURATION
+                });
+                
+                // Set timeout to end smoke effect
+                smokeTimeout = setTimeout(() => {
+                    smokeActive = false;
+                }, SMOKE_DURATION);
+                
+                // Set cooldown
+                smokeCooldownTimeout = setTimeout(() => {
+                    smokeAvailable = true;
+                }, SMOKE_COOLDOWN);
+                
+                // Update UI
+                const smokeButton = document.getElementById('smoke-button');
+                smokeButton.style.backgroundColor = '#666';
+                setTimeout(() => {
+                    smokeButton.style.backgroundColor = '#0af';
+                }, SMOKE_COOLDOWN);
+            }
+        }
+
+        // Update enemies
+        function updateEnemies(deltaTime) {
+            for (const enemy of enemies) {
+                // Check if enemy is inside smoke cloud
+                const insideSmoke = player.smokeClouds.some(cloud => 
+                    Math.hypot(enemy.x - cloud.x, enemy.y - cloud.y) < cloud.radius);
+                
+                if (insideSmoke) {
+                    // Enemy is confused, random movement
+                    if (Math.random() < 0.05) {
+                        enemy.direction = Math.floor(Math.random() * 4);
+                    }
+                } else {
+                    // Chase player with some randomness
+                    if (Math.random() < 0.02) {
+                        // Random direction
+                        enemy.direction = Math.floor(Math.random() * 4);
+                    } else if (Math.random() < 0.1) {
+                        // Direction towards player
+                        if (Math.abs(enemy.x - player.x) > Math.abs(enemy.y - player.y)) {
+                            enemy.direction = enemy.x < player.x ? 0 : 2;
+                        } else {
+                            enemy.direction = enemy.y < player.y ? 1 : 3;
+                        }
+                    }
+                }
+                
+                // Move enemy
+                let dx = 0;
+                let dy = 0;
+                
+                switch (enemy.direction) {
+                    case 0: dx = enemy.speed; break; // Right
+                    case 1: dy = enemy.speed; break; // Down
+                    case 2: dx = -enemy.speed; break; // Left
+                    case 3: dy = -enemy.speed; break; // Up
+                }
+                
+                // Try to move
+                const newX = enemy.x + dx;
+                const newY = enemy.y + dy;
+                
+                // Check collision with walls and rocks
+                const canMove = !checkWallCollision(newX, newY, enemy.width, enemy.height) &&
+                               !checkRockCollision(newX, newY, enemy.width, enemy.height);
+                
+                // Move enemy if possible or change direction
+                if (canMove) {
+                    enemy.x = newX;
+                    enemy.y = newY;
+                    
+                    // Keep enemy within canvas bounds
+                    enemy.x = Math.max(enemy.width / 2, Math.min(canvas.width - enemy.width / 2, enemy.x));
+                    enemy.y = Math.max(enemy.height / 2, Math.min(canvas.height - enemy.height / 2, enemy.y));
+                } else {
+                    // Change direction if blocked
+                    enemy.direction = Math.floor(Math.random() * 4);
+                }
+            }
+        }
+
+        // Check collisions between player and game objects
+        function checkCollisions() {
+            // Check collision with enemies
+            for (const enemy of enemies) {
+                if (checkCollision(player.x - player.width / 2, player.y - player.height / 2, player.width, player.height,
+                                 enemy.x - enemy.width / 2, enemy.y - enemy.height / 2, enemy.width, enemy.height)) {
+                    loseLife();
+                    return;
+                }
+            }
+            
+            // Check collision with flags
+            for (const flag of flags) {
+                if (!flag.collected && checkCollision(player.x - player.width / 2, player.y - player.height / 2, player.width, player.height,
+                                                  flag.x - flag.width / 2, flag.y - flag.height / 2, flag.width, flag.height)) {
+                    // Collect flag
+                    flag.collected = true;
+                    flagsCollected++;
+                    score += 100 * level;
+                    player.fuel = Math.min(100, player.fuel + 20); // Refuel
+                }
+            }
+        }
+
+        // Lose a life and reset level
+        function loseLife() {
+            lives--;
+            
+            if (lives <= 0) {
+                // Game over
+                gameOver = true;
+                document.getElementById('game-over').style.display = 'block';
+            } else {
+                // Reset position
+                player.x = GRID_SIZE * 2;
+                player.y = GRID_SIZE * 2;
+                player.fuel = 100;
+            }
+        }
+
+        // Update UI elements
+        function updateUI() {
+            document.getElementById('score-display').textContent = `Score: ${score}`;
+            document.getElementById('level-display').textContent = `Level: ${level}`;
+            document.getElementById('lives-display').textContent = `Lives: ${lives}`;
+            
+            // Update fuel bar
+            const fuelBar = document.getElementById('fuel-bar');
+            fuelBar.style.width = `${player.fuel}%`;
+            
+            // Change fuel bar color based on fuel level
+            if (player.fuel > 60) {
+                fuelBar.style.backgroundColor = '#ff0';
+            } else if (player.fuel > 30) {
+                fuelBar.style.backgroundColor = '#fa0';
+            } else {
+                fuelBar.style.backgroundColor = '#f00';
+            }
+        }
+
+        // Draw the game
+        function draw() {
+            // Draw maze
+            drawMaze();
+            
+            // Draw flags
+            drawFlags();
+            
+            // Draw rocks
+            drawRocks();
+            
+            // Draw smoke clouds
+            drawSmokeClouds();
+            
+            // Draw enemies
+            drawEnemies();
+            
+            // Draw player
+            drawPlayer();
+        }
+
+        // Draw the maze
+        function drawMaze() {
+            ctx.fillStyle = '#333';
+            
+            for (let row = 0; row < maze.length; row++) {
+                for (let col = 0; col < maze[row].length; col++) {
+                    if (maze[row][col] === 1) {
+                        ctx.fillRect(col * GRID_SIZE, row * GRID_SIZE, GRID_SIZE, GRID_SIZE);
+                    }
+                }
+            }
+        }
+
+        // Draw the player
+        function drawPlayer() {
+            ctx.save();
+            ctx.translate(player.x, player.y);
+            ctx.rotate(player.direction * Math.PI / 2);
+            ctx.drawImage(playerImg, -player.width / 2, -player.height / 2, player.width, player.height);
+            ctx.restore();
+        }
+
+        // Draw enemies
+        function drawEnemies() {
+            for (const enemy of enemies) {
+                ctx.save();
+                ctx.translate(enemy.x, enemy.y);
+                ctx.rotate(enemy.direction * Math.PI / 2);
+                ctx.drawImage(enemyImg, -enemy.width / 2, -enemy.height / 2, enemy.width, enemy.height);
+                ctx.restore();
+            }
+        }
+
+        // Draw flags
+        function drawFlags() {
+            for (const flag of flags) {
+                if (!flag.collected) {
+                    ctx.drawImage(flagImg, flag.x - flag.width / 2, flag.y - flag.height / 2, flag.width, flag.height);
+                }
+            }
+        }
+
+        // Draw rocks
+        function drawRocks() {
+            for (const rock of rocks) {
+                ctx.drawImage(rockImg, rock.x - rock.width / 2, rock.y - rock.height / 2, rock.width, rock.height);
+            }
+        }
+
+        // Draw smoke clouds
+        function drawSmokeClouds() {
+            for (const cloud of player.smokeClouds) {
+                const alpha = cloud.timeLeft / SMOKE_DURATION;
+                ctx.fillStyle = `rgba(200, 200, 200, ${alpha * 0.7})`;
+                ctx.beginPath();
+                ctx.arc(cloud.x, cloud.y, cloud.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Handle keydown event
+        function handleKeyDown(e) {
+            if (keys.hasOwnProperty(e.code)) {
+                keys[e.code] = true;
+                e.preventDefault();
+            }
+        }
+
+        // Handle keyup event
+        function handleKeyUp(e) {
+            if (keys.hasOwnProperty(e.code)) {
+                keys[e.code] = false;
+                e.preventDefault();
+            }
+        }
+
+        // Restart the game
+        function restartGame() {
+            // Reset game variables
+            score = 0;
+            level = 1;
+            lives = 3;
+            gameOver = false;
+            
+            // Hide game over screen
+            document.getElementById('game-over').style.display = 'none';
+            
+            // Start a new level
+            startLevel();
+            
+            // Clear any active timeouts
+            if (smokeTimeout) clearTimeout(smokeTimeout);
+            if (smokeCooldownTimeout) clearTimeout(smokeCooldownTimeout);
+            
+            // Reset smoke button
+            document.getElementById('smoke-button').style.backgroundColor = '#0af';
+        }
+
+        // Start the game when the page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
