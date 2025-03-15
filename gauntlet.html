@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gauntlet Clone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #111;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        #gameContainer {
+            position: relative;
+        }
+        #gameCanvas {
+            border: 2px solid #333;
+            background-color: #000;
+        }
+        #uiCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+        }
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            z-index: 10;
+        }
+        .character-select {
+            display: flex;
+            margin-top: 20px;
+        }
+        .character {
+            margin: 0 10px;
+            cursor: pointer;
+            padding: 10px;
+            border: 2px solid #333;
+            text-align: center;
+        }
+        .character:hover {
+            border-color: gold;
+        }
+        .character-icon {
+            width: 50px;
+            height: 50px;
+            margin: 0 auto 10px;
+            border-radius: 50%;
+        }
+        #warrior .character-icon {
+            background-color: #ff6b6b;
+        }
+        #valkyrie .character-icon {
+            background-color: #48dbfb;
+        }
+        #wizard .character-icon {
+            background-color: #1dd1a1;
+        }
+        #elf .character-icon {
+            background-color: #feca57;
+        }
+        h1 {
+            color: gold;
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px gold;
+        }
+        .game-over {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 20;
+        }
+        button {
+            background-color: #333;
+            color: white;
+            border: 2px solid gold;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        button:hover {
+            background-color: gold;
+            color: black;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <canvas id="uiCanvas" width="800" height="600"></canvas>
+        
+        <div id="startScreen">
+            <h1>GAUNTLET</h1>
+            <p>Choose your character:</p>
+            <div class="character-select">
+                <div class="character" id="warrior" onclick="selectCharacter('warrior')">
+                    <div class="character-icon"></div>
+                    <div>Warrior</div>
+                    <div>Strong Attack</div>
+                </div>
+                <div class="character" id="valkyrie" onclick="selectCharacter('valkyrie')">
+                    <div class="character-icon"></div>
+                    <div>Valkyrie</div>
+                    <div>Balanced</div>
+                </div>
+                <div class="character" id="wizard" onclick="selectCharacter('wizard')">
+                    <div class="character-icon"></div>
+                    <div>Wizard</div>
+                    <div>Magic Attack</div>
+                </div>
+                <div class="character" id="elf" onclick="selectCharacter('elf')">
+                    <div class="character-icon"></div>
+                    <div>Elf</div>
+                    <div>Fast Speed</div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="gameOver" class="game-over">
+            <h1>GAME OVER</h1>
+            <p>Your score: <span id="finalScore">0</span></p>
+            <button onclick="restartGame()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Game variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiCanvas = document.getElementById('uiCanvas');
+        const uiCtx = uiCanvas.getContext('2d');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOver');
+        
+        // Game state
+        let gameStarted = false;
+        let gameOver = false;
+        let score = 0;
+        let level = 1;
+        let keys = {
+            ArrowUp: false,
+            ArrowDown: false,
+            ArrowLeft: false,
+            ArrowRight: false,
+            ' ': false // Space key for shooting
+        };
+        
+        // Player properties
+        let player = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            width: 32,
+            height: 32,
+            speed: 5,
+            health: 100,
+            maxHealth: 100,
+            type: '',
+            color: '',
+            attackPower: 10,
+            direction: 'down',
+            lastAttackTime: 0,
+            attackCooldown: 300, // milliseconds
+            projectiles: []
+        };
+        
+        // Enemy properties
+        let enemies = [];
+        let enemySpawnRate = 1000; // milliseconds
+        let lastEnemySpawn = 0;
+        
+        // Food properties
+        let foods = [];
+        let foodSpawnRate = 5000; // milliseconds
+        let lastFoodSpawn = 0;
+        
+        // Map properties
+        let tileSize = 32;
+        let map = [];
+        let doors = [];
+        
+        // Character selection
+        function selectCharacter(type) {
+            player.type = type;
+            
+            switch(type) {
+                case 'warrior':
+                    player.color = '#ff6b6b';
+                    player.attackPower = 15;
+                    player.speed = 4;
+                    player.health = 150;
+                    player.maxHealth = 150;
+                    break;
+                case 'valkyrie':
+                    player.color = '#48dbfb';
+                    player.attackPower = 12;
+                    player.speed = 5;
+                    player.health = 120;
+                    player.maxHealth = 120;
+                    break;
+                case 'wizard':
+                    player.color = '#1dd1a1';
+                    player.attackPower = 20;
+                    player.speed = 3;
+                    player.health = 80;
+                    player.maxHealth = 80;
+                    break;
+                case 'elf':
+                    player.color = '#feca57';
+                    player.attackPower = 10;
+                    player.speed = 7;
+                    player.health = 100;
+                    player.maxHealth = 100;
+                    break;
+            }
+            
+            startScreen.style.display = 'none';
+            gameStarted = true;
+            generateMap();
+            gameLoop();
+        }
+        
+        // Generate map
+        function generateMap() {
+            map = [];
+            
+            // Create a basic map with walls (1) and floor (0)
+            for (let y = 0; y < canvas.height / tileSize; y++) {
+                let row = [];
+                for (let x = 0; x < canvas.width / tileSize; x++) {
+                    // Border walls
+                    if (x === 0 || y === 0 || x === (canvas.width / tileSize) - 1 || y === (canvas.height / tileSize) - 1) {
+                        row.push(1);
+                    }
+                    // Random internal walls
+                    else if (Math.random() < 0.1 && !(x === Math.floor(player.x / tileSize) && y === Math.floor(player.y / tileSize))) {
+                        row.push(1);
+                    }
+                    // Floor
+                    else {
+                        row.push(0);
+                    }
+                }
+                map.push(row);
+            }
+            
+            // Add some doors (2) that lead to next level
+            let doorX = Math.floor(Math.random() * (canvas.width / tileSize - 4)) + 2;
+            let doorY = Math.floor(Math.random() * (canvas.height / tileSize - 4)) + 2;
+            map[doorY][doorX] = 2;
+            doors = [{x: doorX * tileSize, y: doorY * tileSize, width: tileSize, height: tileSize}];
+        }
+        
+        // Check collision with walls
+        function checkWallCollision(x, y, width, height) {
+            // Convert pixel coordinates to tile coordinates
+            const leftTile = Math.floor(x / tileSize);
+            const rightTile = Math.floor((x + width) / tileSize);
+            const topTile = Math.floor(y / tileSize);
+            const bottomTile = Math.floor((y + height) / tileSize);
+            
+            // Check each corner for collision with a wall
+            if (map[topTile][leftTile] === 1 || 
+                map[topTile][rightTile] === 1 || 
+                map[bottomTile][leftTile] === 1 || 
+                map[bottomTile][rightTile] === 1) {
+                return true;
+            }
+            
+            return false;
+        }
+        
+        // Check collision with doors
+        function checkDoorCollision() {
+            for (let door of doors) {
+                if (player.x < door.x + door.width &&
+                    player.x + player.width > door.x &&
+                    player.y < door.y + door.height &&
+                    player.y + player.height > door.y) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        
+        // Move to next level
+        function nextLevel() {
+            level++;
+            score += 100;
+            generateMap();
+            enemies = [];
+            foods = [];
+            enemySpawnRate = Math.max(300, 1000 - (level * 50)); // Spawn enemies faster with each level
+        }
+        
+        // Handle player movement
+        function movePlayer() {
+            let newX = player.x;
+            let newY = player.y;
+            
+            if (keys.ArrowUp) {
+                newY -= player.speed;
+                player.direction = 'up';
+            }
+            if (keys.ArrowDown) {
+                newY += player.speed;
+                player.direction = 'down';
+            }
+            if (keys.ArrowLeft) {
+                newX -= player.speed;
+                player.direction = 'left';
+            }
+            if (keys.ArrowRight) {
+                newX += player.speed;
+                player.direction = 'right';
+            }
+            
+            // Check if new position would cause a wall collision
+            if (!checkWallCollision(newX, player.y, player.width, player.height)) {
+                player.x = newX;
+            }
+            if (!checkWallCollision(player.x, newY, player.width, player.height)) {
+                player.y = newY;
+            }
+            
+            // Check for door collision
+            if (checkDoorCollision()) {
+                nextLevel();
+            }
+            
+            // Handle shooting
+            const now = Date.now();
+            if (keys[' '] && now - player.lastAttackTime > player.attackCooldown) {
+                player.lastAttackTime = now;
+                shootProjectile();
+            }
+        }
+        
+        // Shooting projectiles
+        function shootProjectile() {
+            let speedX = 0;
+            let speedY = 0;
+            
+            switch(player.direction) {
+                case 'up':
+                    speedY = -8;
+                    break;
+                case 'down':
+                    speedY = 8;
+                    break;
+                case 'left':
+                    speedX = -8;
+                    break;
+                case 'right':
+                    speedX = 8;
+                    break;
+            }
+            
+            player.projectiles.push({
+                x: player.x + player.width / 2 - 4,
+                y: player.y + player.height / 2 - 4,
+                width: 8,
+                height: 8,
+                speedX: speedX,
+                speedY: speedY,
+                color: player.color
+            });
+        }
+        
+        // Update projectiles
+        function updateProjectiles() {
+            for (let i = player.projectiles.length - 1; i >= 0; i--) {
+                const proj = player.projectiles[i];
+                
+                proj.x += proj.speedX;
+                proj.y += proj.speedY;
+                
+                // Remove if off screen
+                if (proj.x < 0 || proj.x > canvas.width || proj.y < 0 || proj.y > canvas.height) {
+                    player.projectiles.splice(i, 1);
+                    continue;
+                }
+                
+                // Remove if hit wall
+                if (checkWallCollision(proj.x, proj.y, proj.width, proj.height)) {
+                    player.projectiles.splice(i, 1);
+                    continue;
+                }
+                
+                // Check for enemy hits
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    
+                    if (proj.x < enemy.x + enemy.width &&
+                        proj.x + proj.width > enemy.x &&
+                        proj.y < enemy.y + enemy.height &&
+                        proj.y + proj.height > enemy.y) {
+                        
+                        enemy.health -= player.attackPower;
+                        player.projectiles.splice(i, 1);
+                        
+                        // Remove enemy if health depleted
+                        if (enemy.health <= 0) {
+                            enemies.splice(j, 1);
+                            score += 10;
+                        }
+                        
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Spawn enemies
+        function spawnEnemy() {
+            const now = Date.now();
+            
+            if (now - lastEnemySpawn > enemySpawnRate && enemies.length < 10 + level * 2) {
+                lastEnemySpawn = now;
+                
+                let x, y;
+                let validPosition = false;
+                
+                // Find a valid position for the enemy
+                while (!validPosition) {
+                    // Spawn from edges
+                    if (Math.random() < 0.5) {
+                        x = Math.random() < 0.5 ? tileSize : canvas.width - 2 * tileSize;
+                        y = Math.floor(Math.random() * (canvas.height - 2 * tileSize)) + tileSize;
+                    } else {
+                        x = Math.floor(Math.random() * (canvas.width - 2 * tileSize)) + tileSize;
+                        y = Math.random() < 0.5 ? tileSize : canvas.height - 2 * tileSize;
+                    }
+                    
+                    // Check if the position is valid (not in a wall)
+                    if (!checkWallCollision(x, y, tileSize, tileSize)) {
+                        validPosition = true;
+                    }
+                }
+                
+                // Randomly select enemy type
+                const enemyTypes = ['ghost', 'demon', 'grunts'];
+                const type = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+                let color, speed, health;
+                
+                switch(type) {
+                    case 'ghost':
+                        color = '#7bed9f';
+                        speed = 2;
+                        health = 20;
+                        break;
+                    case 'demon':
+                        color = '#ff6b81';
+                        speed = 1.5;
+                        health = 30;
+                        break;
+                    case 'grunts':
+                        color = '#a4b0be';
+                        speed = 3;
+                        health = 15;
+                        break;
+                }
+                
+                enemies.push({
+                    x: x,
+                    y: y,
+                    width: tileSize,
+                    height: tileSize,
+                    speed: speed,
+                    health: health,
+                    type: type,
+                    color: color
+                });
+            }
+        }
+        
+        // Move enemies
+        function moveEnemies() {
+            for (let enemy of enemies) {
+                // Move towards player
+                const dx = player.x - enemy.x;
+                const dy = player.y - enemy.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance > 0) {
+                    const newX = enemy.x + (dx / distance) * enemy.speed;
+                    const newY = enemy.y + (dy / distance) * enemy.speed;
+                    
+                    // Check for wall collisions
+                    if (!checkWallCollision(newX, enemy.y, enemy.width, enemy.height)) {
+                        enemy.x = newX;
+                    }
+                    if (!checkWallCollision(enemy.x, newY, enemy.width, enemy.height)) {
+                        enemy.y = newY;
+                    }
+                }
+                
+                // Check for collision with player
+                if (enemy.x < player.x + player.width &&
+                    enemy.x + enemy.width > player.x &&
+                    enemy.y < player.y + player.height &&
+                    enemy.y + enemy.height > player.y) {
+                    
+                    player.health -= 1; // Continuous damage
+                    
+                    // Game over if health depleted
+                    if (player.health <= 0) {
+                        gameOver = true;
+                        document.getElementById('finalScore').textContent = score;
+                        gameOverScreen.style.display = 'flex';
+                    }
+                }
+            }
+        }
+        
+        // Spawn food
+        function spawnFood() {
+            const now = Date.now();
+            
+            if (now - lastFoodSpawn > foodSpawnRate && foods.length < 3) {
+                lastFoodSpawn = now;
+                
+                let x, y;
+                let validPosition = false;
+                
+                // Find a valid position for the food
+                while (!validPosition) {
+                    x = Math.floor(Math.random() * (canvas.width - 2 * tileSize)) + tileSize;
+                    y = Math.floor(Math.random() * (canvas.height - 2 * tileSize)) + tileSize;
+                    
+                    // Check if the position is valid (not in a wall)
+                    if (!checkWallCollision(x, y, tileSize / 2, tileSize / 2)) {
+                        validPosition = true;
+                    }
+                }
+                
+                foods.push({
+                    x: x,
+                    y: y,
+                    width: tileSize / 2,
+                    height: tileSize / 2,
+                    type: Math.random() < 0.7 ? 'health' : 'power',
+                    color: Math.random() < 0.7 ? '#ff9ff3' : '#feca57'
+                });
+            }
+        }
+        
+        // Check for food collection
+        function collectFood() {
+            for (let i = foods.length - 1; i >= 0; i--) {
+                const food = foods[i];
+                
+                if (player.x < food.x + food.width &&
+                    player.x + player.width > food.x &&
+                    player.y < food.y + food.height &&
+                    player.y + player.height > food.y) {
+                    
+                    if (food.type === 'health') {
+                        player.health = Math.min(player.maxHealth, player.health + 20);
+                    } else {
+                        player.attackPower += 2;
+                    }
+                    
+                    foods.splice(i, 1);
+                    score += 5;
+                }
+            }
+        }
+        
+        // Draw map
+        function drawMap() {
+            for (let y = 0; y < map.length; y++) {
+                for (let x = 0; x < map[y].length; x++) {
+                    if (map[y][x] === 1) {
+                        // Wall
+                        ctx.fillStyle = '#4b4b4b';
+                        ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+                    } else if (map[y][x] === 2) {
+                        // Door
+                        ctx.fillStyle = '#ffd32a';
+                        ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+                    }
+                }
+            }
+        }
+        
+        // Draw player
+        function drawPlayer() {
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Draw direction indicator
+            ctx.fillStyle = '#ffffff';
+            switch(player.direction) {
+                case 'up':
+                    ctx.fillRect(player.x + 10, player.y + 5, 12, 8);
+                    break;
+                case 'down':
+                    ctx.fillRect(player.x + 10, player.y + 20, 12, 8);
+                    break;
+                case 'left':
+                    ctx.fillRect(player.x + 5, player.y + 10, 8, 12);
+                    break;
+                case 'right':
+                    ctx.fillRect(player.x + 20, player.y + 10, 8, 12);
+                    break;
+            }
+        }
+        
+        // Draw projectiles
+        function drawProjectiles() {
+            for (let proj of player.projectiles) {
+                ctx.fillStyle = proj.color;
+                ctx.fillRect(proj.x, proj.y, proj.width, proj.height);
+            }
+        }
+        
+        // Draw enemies
+        function drawEnemies() {
+            for (let enemy of enemies) {
+                ctx.fillStyle = enemy.color;
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                
+                // Draw health bar
+                const healthPercent = enemy.health / (enemy.type === 'ghost' ? 20 : enemy.type === 'demon' ? 30 : 15);
+                ctx.fillStyle = '#ff0000';
+                ctx.fillRect(enemy.x, enemy.y - 5, enemy.width, 3);
+                ctx.fillStyle = '#00ff00';
+                ctx.fillRect(enemy.x, enemy.y - 5, enemy.width * healthPercent, 3);
+            }
+        }
+        
+        // Draw food
+        function drawFood() {
+            for (let food of foods) {
+                ctx.fillStyle = food.color;
+                ctx.fillRect(food.x, food.y, food.width, food.height);
+            }
+        }
+        
+        // Draw UI
+        function drawUI() {
+            uiCtx.clearRect(0, 0, uiCanvas.width, uiCanvas.height);
+            
+            // Health bar
+            uiCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            uiCtx.fillRect(10, 10, 200, 30);
+            
+            const healthPercent = player.health / player.maxHealth;
+            uiCtx.fillStyle = '#ff0000';
+            uiCtx.fillRect(15, 15, 190, 20);
+            uiCtx.fillStyle = '#00ff00';
+            uiCtx.fillRect(15, 15, 190 * healthPercent, 20);
+            
+            uiCtx.fillStyle = '#ffffff';
+            uiCtx.font = '14px Arial';
+            uiCtx.fillText(`Health: ${Math.floor(player.health)}/${player.maxHealth}`, 20, 30);
+            
+            // Score and level
+            uiCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            uiCtx.fillRect(canvas.width - 150, 10, 140, 60);
+            
+            uiCtx.fillStyle = '#ffffff';
+            uiCtx.font = '16px Arial';
+            uiCtx.fillText(`Score: ${score}`, canvas.width - 140, 30);
+            uiCtx.fillText(`Level: ${level}`, canvas.width - 140, 55);
+            
+            // Character info
+            uiCtx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            uiCtx.fillRect(10, canvas.height - 70, 180, 60);
+            
+            uiCtx.fillStyle = player.color;
+            uiCtx.fillRect(20, canvas.height - 60, 20, 20);
+            
+            uiCtx.fillStyle = '#ffffff';
+            uiCtx.font = '14px Arial';
+            uiCtx.fillText(`${player.type.charAt(0).toUpperCase() + player.type.slice(1)}`, 50, canvas.height - 45);
+            uiCtx.fillText(`Attack: ${player.attackPower}`, 50, canvas.height - 25);
+        }
+        
+        // Game loop
+        function gameLoop() {
+            if (!gameStarted || gameOver) return;
+            
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Update game state
+            movePlayer();
+            updateProjectiles();
+            spawnEnemy();
+            moveEnemies();
+            spawnFood();
+            collectFood();
+            
+            // Draw everything
+            drawMap();
+            drawFood();
+            drawPlayer();
+            drawProjectiles();
+            drawEnemies();
+            drawUI();
+            
+            // Continue the game loop
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Restart game
+        function restartGame() {
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+            player.health = player.maxHealth;
+            enemies = [];
+            foods = [];
+            player.projectiles = [];
+            score = 0;
+            level = 1;
+            gameOver = false;
+            gameOverScreen.style.display = 'none';
+            generateMap();
+            gameLoop();
+        }
+        
+        // Event listeners
+        window.addEventListener('keydown', (e) => {
+            if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = true;
+            }
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            if (keys.hasOwnProperty(e.key)) {
+                keys[e.key] = false;
+            }
+        });
+    </script>
+</body>
+</html>
