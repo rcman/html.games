@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platform Shooter</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: Arial, sans-serif;
+        }
+        
+        #game-container {
+            position: relative;
+        }
+        
+        canvas {
+            border: 2px solid #fff;
+            background-color: #87CEEB;
+            display: block;
+        }
+        
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 16px;
+            text-shadow: 1px 1px 2px black;
+        }
+        
+        #game-over, #level-complete {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+        
+        button {
+            margin-top: 15px;
+            padding: 8px 16px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="480"></canvas>
+        <div id="hud">
+            Health: <span id="health">100</span> | Score: <span id="score">0</span> | Level: <span id="level">1</span>
+        </div>
+        <div id="game-over">
+            <h2>Game Over</h2>
+            <p>Your final score: <span id="final-score">0</span></p>
+            <button id="restart-button">Play Again</button>
+        </div>
+        <div id="level-complete">
+            <h2>Level Complete!</h2>
+            <p>Score: <span id="level-score">0</span></p>
+            <button id="next-level-button">Next Level</button>
+        </div>
+    </div>
+
+    <script>
+        // Game Variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game state
+        let gameState = {
+            running: true,
+            level: 1,
+            score: 0,
+            scrollOffset: 0,
+            maxScrollOffset: 5000,
+            gravity: 0.5,
+            friction: 0.9
+        };
+        
+        // Player
+        const player = {
+            x: 100,
+            y: 200,
+            width: 30,
+            height: 50,
+            velocityX: 0,
+            velocityY: 0,
+            speed: 4,
+            jumpForce: -12,
+            health: 100,
+            isJumping: false,
+            facingRight: true,
+            shootCooldown: 0,
+            color: '#FF5722'
+        };
+        
+        // Projectiles array
+        let projectiles = [];
+        
+        // Enemies array
+        let enemies = [];
+        
+        // Platforms array
+        let platforms = [];
+        
+        // Controls
+        const keys = {
+            right: false,
+            left: false,
+            up: false,
+            shoot: false
+        };
+        
+        // Event listeners
+        window.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowRight':
+                    keys.right = true;
+                    player.facingRight = true;
+                    break;
+                case 'ArrowLeft':
+                    keys.left = true;
+                    player.facingRight = false;
+                    break;
+                case 'ArrowUp':
+                case ' ':
+                    keys.up = true;
+                    break;
+                case 'z':
+                case 'Z':
+                    keys.shoot = true;
+                    break;
+            }
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            switch(e.key) {
+                case 'ArrowRight':
+                    keys.right = false;
+                    break;
+                case 'ArrowLeft':
+                    keys.left = false;
+                    break;
+                case 'ArrowUp':
+                case ' ':
+                    keys.up = false;
+                    break;
+                case 'z':
+                case 'Z':
+                    keys.shoot = false;
+                    break;
+            }
+        });
+        
+        // Event listeners for buttons
+        document.getElementById('restart-button').addEventListener('click', restartGame);
+        document.getElementById('next-level-button').addEventListener('click', nextLevel);
+        
+        // Generate platforms based on level
+        function generateLevel() {
+            platforms = [];
+            enemies = [];
+            
+            // Base platform
+            platforms.push({
+                x: 0,
+                y: canvas.height - 40,
+                width: 1000,
+                height: 40,
+                color: '#4CAF50'
+            });
+            
+            // Generate platforms based on level
+            const platformCount = 20 + gameState.level * 5;
+            const maxGap = 150 - gameState.level * 5;
+            
+            let lastX = 150;
+            
+            for (let i = 0; i < platformCount; i++) {
+                const width = Math.random() * 150 + 50;
+                const x = lastX + Math.random() * maxGap + 50;
+                const y = Math.random() * (canvas.height - 200) + 120;
+                
+                platforms.push({
+                    x,
+                    y,
+                    width,
+                    height: 15,
+                    color: '#795548'
+                });
+                
+                // Add enemy with 40% chance
+                if (Math.random() < 0.4) {
+                    enemies.push({
+                        x: x + width / 2,
+                        y: y - 30,
+                        width: 30,
+                        height: 30,
+                        velocityX: Math.random() * 2 - 1,
+                        health: 20 + gameState.level * 5,
+                        color: '#E91E63',
+                        shootCooldown: 0,
+                        shootRate: 120 - gameState.level * 10
+                    });
+                }
+                
+                lastX = x + width;
+            }
+            
+            // Set max scroll based on last platform
+            gameState.maxScrollOffset = lastX + 500;
+            
+            // Reset player
+            player.x = 100;
+            player.y = 200;
+            player.velocityX = 0;
+            player.velocityY = 0;
+            player.health = 100;
+            
+            // Reset game state
+            gameState.scrollOffset = 0;
+            projectiles = [];
+            
+            // Update HUD
+            updateHUD();
+        }
+        
+        // Player shooting function
+        function playerShoot() {
+            if (player.shootCooldown <= 0) {
+                const direction = player.facingRight ? 1 : -1;
+                projectiles.push({
+                    x: player.x + player.width / 2,
+                    y: player.y + player.height / 2,
+                    radius: 5,
+                    color: '#FFEB3B',
+                    velocityX: direction * 10,
+                    fromPlayer: true
+                });
+                player.shootCooldown = 15;
+            }
+        }
+        
+        // Enemy shooting function
+        function enemyShoot(enemy) {
+            if (enemy.shootCooldown <= 0) {
+                const dx = player.x - enemy.x;
+                const dy = player.y - enemy.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                projectiles.push({
+                    x: enemy.x + enemy.width / 2,
+                    y: enemy.y + enemy.height / 2,
+                    radius: 5,
+                    color: '#F44336',
+                    velocityX: (dx / distance) * 5,
+                    velocityY: (dy / distance) * 5,
+                    fromPlayer: false
+                });
+                enemy.shootCooldown = enemy.shootRate;
+            }
+        }
+        
+        // Collision detection
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.width &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.height &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+        
+        // Circle-rectangle collision
+        function checkCircleRectCollision(circle, rect) {
+            const distX = Math.abs(circle.x - rect.x - rect.width / 2);
+            const distY = Math.abs(circle.y - rect.y - rect.height / 2);
+            
+            if (distX > (rect.width / 2 + circle.radius)) return false;
+            if (distY > (rect.height / 2 + circle.radius)) return false;
+            
+            if (distX <= (rect.width / 2)) return true;
+            if (distY <= (rect.height / 2)) return true;
+            
+            const dx = distX - rect.width / 2;
+            const dy = distY - rect.height / 2;
+            return (dx * dx + dy * dy <= (circle.radius * circle.radius));
+        }
+        
+        // Update HUD
+        function updateHUD() {
+            document.getElementById('health').textContent = player.health;
+            document.getElementById('score').textContent = gameState.score;
+            document.getElementById('level').textContent = gameState.level;
+        }
+        
+        // Game over function
+        function gameOver() {
+            gameState.running = false;
+            document.getElementById('final-score').textContent = gameState.score;
+            document.getElementById('game-over').style.display = 'block';
+        }
+        
+        // Level complete function
+        function levelComplete() {
+            gameState.running = false;
+            document.getElementById('level-score').textContent = gameState.score;
+            document.getElementById('level-complete').style.display = 'block';
+        }
+        
+        // Restart game
+        function restartGame() {
+            gameState.running = true;
+            gameState.level = 1;
+            gameState.score = 0;
+            document.getElementById('game-over').style.display = 'none';
+            generateLevel();
+        }
+        
+        // Next level
+        function nextLevel() {
+            gameState.running = true;
+            gameState.level++;
+            document.getElementById('level-complete').style.display = 'none';
+            generateLevel();
+        }
+        
+        // Update game
+        function update() {
+            if (!gameState.running) return;
+            
+            // Player movement
+            if (keys.right) {
+                player.velocityX = player.speed;
+            } else if (keys.left) {
+                player.velocityX = -player.speed;
+            } else {
+                player.velocityX *= gameState.friction;
+            }
+            
+            // Jumping
+            if (keys.up && !player.isJumping) {
+                player.velocityY = player.jumpForce;
+                player.isJumping = true;
+            }
+            
+            // Shooting
+            if (keys.shoot) {
+                playerShoot();
+            }
+            
+            // Update player
+            player.velocityY += gameState.gravity;
+            
+            // Reduce cooldowns
+            if (player.shootCooldown > 0) {
+                player.shootCooldown--;
+            }
+            
+            // Horizontal movement
+            player.x += player.velocityX;
+            
+            // Check platform collisions after horizontal movement
+            let onGround = false;
+            for (let platform of platforms) {
+                if (checkCollision(player, {
+                    x: platform.x - gameState.scrollOffset,
+                    y: platform.y,
+                    width: platform.width,
+                    height: platform.height
+                })) {
+                    // Collision on sides
+                    if (player.y + player.height > platform.y + 10) {
+                        if (player.velocityX > 0) {
+                            player.x = platform.x - gameState.scrollOffset - player.width;
+                        } else if (player.velocityX < 0) {
+                            player.x = platform.x - gameState.scrollOffset + platform.width;
+                        }
+                    }
+                }
+            }
+            
+            // Vertical movement
+            player.y += player.velocityY;
+            
+            // Check platform collisions after vertical movement
+            for (let platform of platforms) {
+                if (checkCollision(player, {
+                    x: platform.x - gameState.scrollOffset,
+                    y: platform.y,
+                    width: platform.width,
+                    height: platform.height
+                })) {
+                    // Landing on top of platform
+                    if (player.y + player.height - platform.y < 20 && player.velocityY > 0) {
+                        onGround = true;
+                        player.isJumping = false;
+                        player.velocityY = 0;
+                        player.y = platform.y - player.height;
+                    }
+                    // Hitting bottom of platform
+                    else if (platform.y + platform.height - player.y < 20 && player.velocityY < 0) {
+                        player.velocityY = 0;
+                        player.y = platform.y + platform.height;
+                    }
+                }
+            }
+            
+            if (!onGround) {
+                player.isJumping = true;
+            }
+            
+            // Scrolling
+            if (player.x > canvas.width / 2 && player.velocityX > 0) {
+                gameState.scrollOffset += player.velocityX;
+                player.x = canvas.width / 2;
+            }
+            
+            // Boundary check
+            if (player.x < 0) {
+                player.x = 0;
+            }
+            if (player.x + player.width > canvas.width) {
+                player.x = canvas.width - player.width;
+            }
+            if (player.y < 0) {
+                player.y = 0;
+                player.velocityY = 0;
+            }
+            if (player.y + player.height > canvas.height) {
+                player.y = canvas.height - player.height;
+                player.velocityY = 0;
+                player.isJumping = false;
+            }
+            
+            // Update enemies
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                
+                // Move enemy
+                enemy.x += enemy.velocityX;
+                
+                // Enemy shooting
+                enemy.shootCooldown--;
+                if (Math.abs((enemy.x - gameState.scrollOffset) - player.x) < 300) {
+                    enemyShoot(enemy);
+                }
+                
+                // Check boundaries if enemies can move
+                const platformBelow = platforms.find(p => 
+                    enemy.x >= p.x && 
+                    enemy.x + enemy.width <= p.x + p.width && 
+                    Math.abs(enemy.y + enemy.height - p.y) < 5
+                );
+                
+                if (platformBelow) {
+                    if (enemy.x <= platformBelow.x || enemy.x + enemy.width >= platformBelow.x + platformBelow.width) {
+                        enemy.velocityX *= -1;
+                    }
+                }
+                
+                // Check if enemy is dead
+                if (enemy.health <= 0) {
+                    gameState.score += 100 * gameState.level;
+                    enemies.splice(i, 1);
+                    updateHUD();
+                }
+            }
+            
+            // Update projectiles
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const proj = projectiles[i];
+                
+                proj.x += proj.velocityX;
+                if (proj.velocityY !== undefined) {
+                    proj.y += proj.velocityY;
+                }
+                
+                // Check if projectile is out of bounds
+                if (proj.x < -20 || proj.x > canvas.width + gameState.scrollOffset + 20 || 
+                    proj.y < -20 || proj.y > canvas.height + 20) {
+                    projectiles.splice(i, 1);
+                    continue;
+                }
+                
+                // Check collision with platforms
+                for (let platform of platforms) {
+                    if (checkCircleRectCollision(proj, {
+                        x: platform.x - gameState.scrollOffset,
+                        y: platform.y,
+                        width: platform.width,
+                        height: platform.height
+                    })) {
+                        projectiles.splice(i, 1);
+                        break;
+                    }
+                }
+                
+                // If projectile was removed, skip the rest
+                if (projectiles[i] !== proj) continue;
+                
+                // Check collision with player (enemy projectiles only)
+                if (!proj.fromPlayer && checkCircleRectCollision(proj, player)) {
+                    player.health -= 10;
+                    projectiles.splice(i, 1);
+                    updateHUD();
+                    
+                    if (player.health <= 0) {
+                        gameOver();
+                    }
+                    
+                    continue;
+                }
+                
+                // Check collision with enemies (player projectiles only)
+                if (proj.fromPlayer) {
+                    for (let j = 0; j < enemies.length; j++) {
+                        const enemy = enemies[j];
+                        
+                        if (checkCircleRectCollision({
+                            x: proj.x,
+                            y: proj.y,
+                            radius: proj.radius
+                        }, {
+                            x: enemy.x - gameState.scrollOffset,
+                            y: enemy.y,
+                            width: enemy.width,
+                            height: enemy.height
+                        })) {
+                            enemy.health -= 10;
+                            projectiles.splice(i, 1);
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Check if level is complete
+            if (gameState.scrollOffset >= gameState.maxScrollOffset - 100) {
+                levelComplete();
+            }
+        }
+        
+        // Draw game
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw platforms
+            for (let platform of platforms) {
+                ctx.fillStyle = platform.color;
+                ctx.fillRect(
+                    platform.x - gameState.scrollOffset, 
+                    platform.y, 
+                    platform.width, 
+                    platform.height
+                );
+            }
+            
+            // Draw player
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Draw player eyes (visual indicator of facing direction)
+            ctx.fillStyle = 'white';
+            if (player.facingRight) {
+                ctx.fillRect(player.x + player.width - 10, player.y + 10, 5, 5);
+            } else {
+                ctx.fillRect(player.x + 5, player.y + 10, 5, 5);
+            }
+            
+            // Draw enemies
+            for (let enemy of enemies) {
+                ctx.fillStyle = enemy.color;
+                ctx.fillRect(
+                    enemy.x - gameState.scrollOffset, 
+                    enemy.y, 
+                    enemy.width, 
+                    enemy.height
+                );
+                
+                // Draw enemy health bar
+                const maxHealth = 20 + gameState.level * 5;
+                const healthPercent = enemy.health / maxHealth;
+                
+                ctx.fillStyle = 'darkred';
+                ctx.fillRect(
+                    enemy.x - gameState.scrollOffset, 
+                    enemy.y - 10, 
+                    enemy.width, 
+                    5
+                );
+                
+                ctx.fillStyle = 'red';
+                ctx.fillRect(
+                    enemy.x - gameState.scrollOffset, 
+                    enemy.y - 10, 
+                    enemy.width * healthPercent, 
+                    5
+                );
+            }
+            
+            // Draw projectiles
+            for (let proj of projectiles) {
+                ctx.beginPath();
+                ctx.arc(
+                    proj.x - (proj.fromPlayer ? 0 : gameState.scrollOffset), 
+                    proj.y, 
+                    proj.radius, 
+                    0, 
+                    Math.PI * 2
+                );
+                ctx.fillStyle = proj.color;
+                ctx.fill();
+                ctx.closePath();
+            }
+        }
+        
+        // Game loop
+        function gameLoop() {
+            if (gameState.running) {
+                update();
+            }
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start the game
+        generateLevel();
+        gameLoop();
+    </script>
+</body>
+</html>
