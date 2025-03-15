@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Helicopter Rescue</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #333;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background-color: #87CEEB;
+            overflow: hidden;
+            border: 4px solid #000;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            outline: none; /* Remove default focus outline */
+        }
+        
+        #game-container.focused {
+            border: 4px solid #FF0000; /* Red border when focused */
+        }
+        
+        #focus-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            font-size: 18px;
+            text-align: center;
+            z-index: 150;
+            display: none;
+        }
+        
+        #score-display {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 18px;
+            z-index: 100;
+        }
+        
+        #lives-display {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            background-color: rgba(0, 0, 0, 0.5);
+            padding: 5px 10px;
+            border-radius: 5px;
+            font-size: 18px;
+            z-index: 100;
+        }
+        
+        #helicopter {
+            position: absolute;
+            width: 80px;
+            height: 40px;
+            background-color: #1a1a1a;
+            border-radius: 10px;
+            z-index: 10;
+        }
+        
+        .rotor {
+            position: absolute;
+            width: 80px;
+            height: 6px;
+            background-color: #444;
+            top: -10px;
+            left: 0;
+            border-radius: 3px;
+            transform-origin: center;
+        }
+        
+        .tail {
+            position: absolute;
+            width: 30px;
+            height: 10px;
+            background-color: #333;
+            right: -25px;
+            top: 15px;
+        }
+        
+        .tail-rotor {
+            position: absolute;
+            width: 4px;
+            height: 20px;
+            background-color: #444;
+            right: -30px;
+            top: 10px;
+        }
+        
+        #ground {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 100px;
+            background-color: #8B4513;
+        }
+        
+        .building {
+            position: absolute;
+            bottom: 100px;
+            width: 100px;
+            height: 150px;
+            background-color: #555;
+            border: 2px solid #333;
+        }
+        
+        .person {
+            position: absolute;
+            width: 10px;
+            height: 20px;
+            background-color: #FF6347;
+            border-radius: 5px;
+            bottom: 100px;
+            z-index: 5;
+        }
+        
+        .hostage-count {
+            position: absolute;
+            color: white;
+            font-size: 14px;
+            bottom: 125px;
+        }
+        
+        .enemy {
+            position: absolute;
+            width: 30px;
+            height: 20px;
+            background-color: #8B0000;
+            bottom: 100px;
+            z-index: 5;
+        }
+        
+        .bullet {
+            position: absolute;
+            width: 5px;
+            height: 5px;
+            background-color: #FFD700;
+            border-radius: 50%;
+            z-index: 5;
+        }
+        
+        #base {
+            position: absolute;
+            bottom: 100px;
+            left: 50px;
+            width: 120px;
+            height: 50px;
+            background-color: #4682B4;
+            border: 2px solid #333;
+            z-index: 5;
+        }
+
+        .cloud {
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 50px;
+        }
+        
+        #game-over, #level-complete {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-size: 40px;
+            z-index: 200;
+            display: none;
+        }
+        
+        button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            z-index: 300;
+        }
+        
+        #start-screen h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #FFD700;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+        }
+        
+        #start-screen p {
+            font-size: 18px;
+            margin-bottom: 30px;
+            max-width: 600px;
+            text-align: center;
+            line-height: 1.5;
+        }
+        
+        #controls {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            width: 80%;
+            text-align: center;
+        }
+        
+        #controls h2 {
+            margin-top: 0;
+            color: #FFD700;
+        }
+        
+        .explosion {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: radial-gradient(circle, #ff4500, #ff8c00, #ffd700);
+            z-index: 20;
+            animation: explode 0.5s forwards;
+        }
+        
+        @keyframes explode {
+            0% { transform: scale(0.5); opacity: 1; }
+            100% { transform: scale(2); opacity: 0; }
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container" tabindex="0">
+        <div id="score-display">Score: 0</div>
+        <div id="lives-display">Lives: 3</div>
+        <div id="helicopter">
+            <div class="rotor"></div>
+            <div class="tail"></div>
+            <div class="tail-rotor"></div>
+        </div>
+        <div id="ground"></div>
+        <div id="base"></div>
+        
+        <div id="focus-message">Click here to focus and use keyboard controls</div>
+        
+        <div id="game-over">
+            <div>GAME OVER</div>
+            <button id="restart-button">Play Again</button>
+        </div>
+        
+        <div id="level-complete">
+            <div>LEVEL COMPLETE!</div>
+            <div id="final-score" style="font-size: 24px; margin-top: 10px;"></div>
+            <button id="next-level-button">Next Level</button>
+        </div>
+        
+        <div id="start-screen">
+            <h1>Helicopter Rescue</h1>
+            <p>Pilot your helicopter to rescue hostages and return them safely to your base. Watch out for enemy tanks!</p>
+            
+            <div id="controls">
+                <h2>Controls</h2>
+                <p>
+                    F1 : Start Game<br>
+                    ← → : Move helicopter left/right<br>
+                    ↑ ↓ : Move helicopter up/down<br>
+                    SPACE : Fire weapons<br>
+                    Z : Change helicopter direction
+                </p>
+            </div>
+            
+            <button id="start-button">Start Game</button>
+        </div>
+    </div>
+
+    <script>
+        // Game variables
+        let gameRunning = false;
+        let score = 0;
+        let lives = 3;
+        let level = 1;
+        let helicopter = document.getElementById('helicopter');
+        let gameContainer = document.getElementById('game-container');
+        let ground = document.getElementById('ground');
+        let base = document.getElementById('base');
+        let scoreDisplay = document.getElementById('score-display');
+        let livesDisplay = document.getElementById('lives-display');
+        let gameOverScreen = document.getElementById('game-over');
+        let levelCompleteScreen = document.getElementById('level-complete');
+        let startScreen = document.getElementById('start-screen');
+        let finalScoreDisplay = document.getElementById('final-score');
+        
+        // Audio elements
+        let helicopterSound = new Audio();
+        helicopterSound.src = 'data:audio/wav;base64,UklGRl9CAABXQVZFZm10IBAAAAABAAEARKwAAESsAAABAAgAZGF0YStCAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8A////AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAAA//8AAAABAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wAAAAEA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP///////wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAA//8A//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP///////wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8A////AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAAA//8AAAABAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wAAAAEA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP///////wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAA//8A//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP///////wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8A////AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAAA//8AAAABAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wAAAAEA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP///////wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAA//8A//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP///////wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8A////AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAAA//8AAAABAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wAAAAEA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP///////wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAA//8A//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP///////wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8A/////wAAAAD//wEA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP///////wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAP//AAAAAQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wD/////AAAAAP//AQD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA////////AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAA//8AAAABAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8A/////wAAAAD//wEA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP///////wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAP//AAAAAQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wD/////AAAAAP//AQD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA////////AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAA//8AAAABAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8A/////wAAAAD//wEA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP///////wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAP//AAAAAQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wD/////AAAAAP//AQD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAAAAAAA////////AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAA//8AAAABAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAA//8AAAAA//8BAAAAAAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAP//AAAAAP//AQAAAAAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEAAAD//wAAAAD//wEA';
+        
+        let explosionSound = new Audio();
+        explosionSound.src = 'data:audio/wav;base64,UklGRigEAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQEAACBhYqFbF1paIKin5mRgHBlYWBlbnqDjZihq7K2usTDuK6knpaOioJ6b2FaXWRye4iSpK2vsa+nmpCLioJ5aFpQREE+QElZZHeElqOnq66sp6CYlZeVjoV0aF9XUE9PWGFvfIuYpauzuby5sqeekIyKhX93aV1MENGMAAATVQUBAAAAAAAAABYNO0+AoMDR3+Pl2r+ce0UjDAkMFCEwRFttf4uNkJKVmpGIgHx9gYaSo7XG0dnNr4dmRCgTCAUHDBksPlVwjJ+xvMbP2NO8lHBQMBsFAggOHzFFXnaLmKGsusHGxr+1q5+XkpGWn6u2ws3a5Ou7jmI7HQYAAAAPJDR/oNHn8PTr28CtlntXN...';
+        
+        let shootSound = new Audio();
+        shootSound.src = 'data:audio/wav;base64,UklGRiQDAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQADAAB+hoeDb2ZXTEhJUWBlbXJ0cGxoZmhveYOIhoJ8d3R0eYCHjZCPjoyNlJyko6GgnZybmaCanqOlpaWkoqGhkIJ3aWBZV1tkbXN0cW1qaHF8hoyOjYuMj5KXm52bmJeYm5yeoKGhoJ+enZqWlJOUmpybnJqYlpaYl5aUkpCRk5OSkpRrcnh8...';
+        
+        let rescueSound = new Audio();
+        rescueSound.src = 'data:audio/wav;base64,UklGRigCAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQCAABqa15XVlVRSUI8ODQxMC40Nzk8PD07OS84OTsvLi8wMjY6PkFDRUlPV15iY2ZpbG5ybWxpZmFeW1lYWFdXWFlba3B2fIGGjJOdqLS/zNjm9f////nx6uPa0Me7sKedk4mAd29nX1dPSEE7NjIvLSsqKikpKy0vMDQ1..';
+        
+        // Helicopter state
+        let helicopterX = 100;
+        let helicopterY = 250;
+        let helicopterDirection = 1; // 1 for right, -1 for left
+        let helicopterSpeed = 5;
+        let helicopterVerticalSpeed = 3;
+        let maxHeight = 500;
+        let bullets = [];
+        let bulletSpeed = 8;
+        
+        // Game objects
+        let buildings = [];
+        let people = [];
+        let enemies = [];
+        let rescued = 0;
+        let rescuedPeople = [];
+        let clouds = [];
+        let enemyBullets = [];
+        let enemyShootInterval = 3000; // milliseconds
+        let lastEnemyShoot = 0;
+        
+        // Key state tracking
+        let keys = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            ArrowUp: false,
+            ArrowDown: false,
+            Space: false,
+            KeyZ: false
+        };
+        
+        // Animation frames
+        let rotorAngle = 0;
+        let animationFrame;
+        
+        // Initialize game
+        function initGame() {
+            // Reset game variables
+            score = 0;
+            lives = 3;
+            level = 1;
+            rescued = 0;
+            rescuedPeople = [];
+            bullets = [];
+            enemyBullets = [];
+            
+            // Update displays
+            scoreDisplay.textContent = 'Score: ' + score;
+            livesDisplay.textContent = 'Lives: ' + lives;
+            
+            // Position helicopter
+            helicopterX = 100;
+            helicopterY = 250;
+            helicopterDirection = 1;
+            updateHelicopterPosition();
+            
+            // Generate level objects
+            generateBuildings();
+            generatePeople();
+            generateEnemies();
+            generateClouds();
+            
+            // Clear screens
+            gameOverScreen.style.display = 'none';
+            levelCompleteScreen.style.display = 'none';
+            
+            // Start game loop
+            if (!gameRunning) {
+                gameRunning = true;
+                gameLoop();
+            }
+            
+            // Start helicopter sound
+            helicopterSound.loop = true;
+            helicopterSound.volume = 0.3;
+            helicopterSound.play();
+        }
+        
+        // Generate game objects
+        function generateBuildings() {
+            buildings = [];
+            let numBuildings = 3 + Math.floor(level * 0.5);
+            
+            for (let i = 0; i < numBuildings; i++) {
+                let buildingWidth = 80 + Math.random() * 40;
+                let buildingHeight = 80 + Math.random() * 100;
+                let buildingX = 200 + i * 200 + Math.random() * 100;
+                
+                let building = document.createElement('div');
+                building.className = 'building';
+                building.style.width = buildingWidth + 'px';
+                building.style.height = buildingHeight + 'px';
+                building.style.left = buildingX + 'px';
+                
+                gameContainer.appendChild(building);
+                buildings.push({
+                    element: building,
+                    x: buildingX,
+                    y: ground.offsetTop - buildingHeight,
+                    width: buildingWidth,
+                    height: buildingHeight
+                });
+            }
+        }
+        
+        function generatePeople() {
+            people = [];
+            let numPeople = 5 + level * 2;
+            
+            for (let i = 0; i < numPeople; i++) {
+                let personX = 250 + Math.random() * 1500;
+                
+                let person = document.createElement('div');
+                person.className = 'person';
+                person.style.left = personX + 'px';
+                
+                gameContainer.appendChild(person);
+                people.push({
+                    element: person,
+                    x: personX,
+                    y: ground.offsetTop - person.offsetHeight,
+                    width: 10,
+                    height: 20,
+                    rescued: false,
+                    boarding: false,
+                    onHelicopter: false,
+                    movingToBase: false
+                });
+            }
+            
+            // Add hostage counter
+            let hostageCount = document.createElement('div');
+            hostageCount.className = 'hostage-count';
+            hostageCount.style.left = '10px';
+            hostageCount.textContent = 'Hostages: 0/' + numPeople;
+            gameContainer.appendChild(hostageCount);
+        }
+        
+        function generateEnemies() {
+            enemies = [];
+            let numEnemies = level * 2;
+            
+            for (let i = 0; i < numEnemies; i++) {
+                let enemyX = 300 + Math.random() * 1500;
+                
+                let enemy = document.createElement('div');
+                enemy.className = 'enemy';
+                enemy.style.left = enemyX + 'px';
+                
+                gameContainer.appendChild(enemy);
+                enemies.push({
+                    element: enemy,
+                    x: enemyX,
+                    y: ground.offsetTop - enemy.offsetHeight,
+                    width: 30,
+                    height: 20,
+                    direction: Math.random() > 0.5 ? 1 : -1,
+                    speed: 1 + Math.random()
+                });
+            }
+        }
+        
+        function generateClouds() {
+            clouds = [];
+            let numClouds = 5;
+            
+            for (let i = 0; i < numClouds; i++) {
+                let cloudX = Math.random() * gameContainer.offsetWidth;
+                let cloudY = 50 + Math.random() * 150;
+                let cloudWidth = 70 + Math.random() * 50;
+                let cloudHeight = 30 + Math.random() * 20;
+                
+                let cloud = document.createElement('div');
+                cloud.className = 'cloud';
+                cloud.style.left = cloudX + 'px';
+                cloud.style.top = cloudY + 'px';
+                cloud.style.width = cloudWidth + 'px';
+                cloud.style.height = cloudHeight + 'px';
+                
+                gameContainer.appendChild(cloud);
+                clouds.push({
+                    element: cloud,
+                    x: cloudX,
+                    y: cloudY,
+                    width: cloudWidth,
+                    height: cloudHeight,
+                    speed: 0.5 + Math.random()
+                });
+            }
+        }
+        
+        // Game loop
+        function gameLoop() {
+            if (!gameRunning) return;
+            
+            // Move helicopter based on keys
+            if (keys.ArrowLeft) {
+                helicopterX -= helicopterSpeed;
+                if (helicopterDirection === 1 && keys.KeyZ) {
+                    helicopterDirection = -1;
+                    helicopter.style.transform = 'scaleX(-1)';
+                }
+            }
+            if (keys.ArrowRight) {
+                helicopterX += helicopterSpeed;
+                if (helicopterDirection === -1 && keys.KeyZ) {
+                    helicopterDirection = 1;
+                    helicopter.style.transform = 'scaleX(1)';
+                }
+            }
+            if (keys.ArrowUp) {
+                helicopterY -= helicopterVerticalSpeed;
+            }
+            if (keys.ArrowDown) {
+                helicopterY += helicopterVerticalSpeed;
+            }
+            
+            // Keep helicopter within bounds
+            if (helicopterX < 0) helicopterX = 0;
+            if (helicopterX > gameContainer.offsetWidth - helicopter.offsetWidth) {
+                helicopterX = gameContainer.offsetWidth - helicopter.offsetWidth;
+            }
+            if (helicopterY < 0) helicopterY = 0;
+            if (helicopterY > maxHeight) helicopterY = maxHeight;
+            
+            // Update helicopter position
+            updateHelicopterPosition();
+            
+            // Animate rotor
+            animateRotor();
+            
+            // Handle shooting
+            if (keys.Space && bullets.length < 5) {
+                shoot();
+            }
+            
+            // Move bullets
+            moveBullets();
+            
+            // Move enemy bullets
+            moveEnemyBullets();
+            
+            // Enemy shooting logic
+            let now = Date.now();
+            if (now - lastEnemyShoot > enemyShootInterval) {
+                enemyShoot();
+                lastEnemyShoot = now;
+            }
+            
+            // Move enemies
+            moveEnemies();
+            
+            // Move clouds
+            moveClouds();
+            
+            // Move people
+            movePeople();
+            
+            // Check collisions
+            checkCollisions();
+            
+            // Check level completion
+            checkLevelCompletion();
+            
+            // Request next frame
+            animationFrame = requestAnimationFrame(gameLoop);
+        }
+        
+        function updateHelicopterPosition() {
+            helicopter.style.left = helicopterX + 'px';
+            helicopter.style.top = helicopterY + 'px';
+        }
+        
+        function animateRotor() {
+            rotorAngle = (rotorAngle + 15) % 360;
+            let rotor = helicopter.querySelector('.rotor');
+            rotor.style.transform = 'rotate(' + rotorAngle + 'deg)';
+        }
+        
+        function shoot() {
+            let bulletX = helicopterX + (helicopterDirection === 1 ? helicopter.offsetWidth : 0);
+            let bulletY = helicopterY + helicopter.offsetHeight / 2;
+            
+            let bullet = document.createElement('div');
+            bullet.className = 'bullet';
+            bullet.style.left = bulletX + 'px';
+            bullet.style.top = bulletY + 'px';
+            
+            gameContainer.appendChild(bullet);
+            bullets.push({
+                element: bullet,
+                x: bulletX,
+                y: bulletY,
+                direction: helicopterDirection
+            });
+            
+            shootSound.currentTime = 0;
+            shootSound.play();
+        }
+        
+        function enemyShoot() {
+            // Find enemies that can see the helicopter
+            let shootingEnemies = enemies.filter(enemy => {
+                let distance = Math.abs(enemy.x - helicopterX);
+                return distance < 300; // Shooting range
+            });
+            
+            if (shootingEnemies.length > 0) {
+                // Randomly select one enemy to shoot
+                let shooter = shootingEnemies[Math.floor(Math.random() * shootingEnemies.length)];
+                
+                let bulletX = shooter.x + shooter.width / 2;
+                let bulletY = shooter.y;
+                
+                let bullet = document.createElement('div');
+                bullet.className = 'bullet';
+                bullet.style.backgroundColor = '#ff0000'; // Red bullets for enemies
+                bullet.style.left = bulletX + 'px';
+                bullet.style.top = bulletY + 'px';
+                
+                gameContainer.appendChild(bullet);
+                
+                // Calculate direction toward helicopter
+                let dx = helicopterX - shooter.x;
+                let dy = helicopterY - shooter.y;
+                let dist = Math.sqrt(dx * dx + dy * dy);
+                let dirX = dx / dist;
+                let dirY = dy / dist;
+                
+                enemyBullets.push({
+                    element: bullet,
+                    x: bulletX,
+                    y: bulletY,
+                    dirX: dirX,
+                    dirY: dirY,
+                    speed: 3
+                });
+            }
+        }
+        
+        function moveBullets() {
+            for (let i = 0; i < bullets.length; i++) {
+                let bullet = bullets[i];
+                bullet.x += bulletSpeed * bullet.direction;
+                bullet.element.style.left = bullet.x + 'px';
+                
+                // Remove bullets that go off screen
+                if (bullet.x < 0 || bullet.x > gameContainer.offsetWidth) {
+                    bullet.element.remove();
+                    bullets.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+        
+        function moveEnemyBullets() {
+            for (let i = 0; i < enemyBullets.length; i++) {
+                let bullet = enemyBullets[i];
+                bullet.x += bullet.dirX * bullet.speed;
+                bullet.y += bullet.dirY * bullet.speed;
+                bullet.element.style.left = bullet.x + 'px';
+                bullet.element.style.top = bullet.y + 'px';
+                
+                // Remove bullets that go off screen
+                if (bullet.x < 0 || bullet.x > gameContainer.offsetWidth || 
+                    bullet.y < 0 || bullet.y > gameContainer.offsetHeight) {
+                    bullet.element.remove();
+                    enemyBullets.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+        
+        function moveEnemies() {
+            for (let enemy of enemies) {
+                enemy.x += enemy.speed * enemy.direction;
+                
+                // Reverse direction at screen edges
+                if (enemy.x < 0 || enemy.x > gameContainer.offsetWidth - enemy.width) {
+                    enemy.direction *= -1;
+                }
+                
+                enemy.element.style.left = enemy.x + 'px';
+            }
+        }
+        
+        function moveClouds() {
+            for (let cloud of clouds) {
+                cloud.x -= cloud.speed;
+                
+                // Loop clouds from right to left
+                if (cloud.x + cloud.width < 0) {
+                    cloud.x = gameContainer.offsetWidth;
+                }
+                
+                cloud.element.style.left = cloud.x + 'px';
+            }
+        }
+        
+        function movePeople() {
+            for (let person of people) {
+                if (person.boarding) {
+                    // Move towards helicopter when boarding
+                    let targetX = helicopterX + helicopter.offsetWidth / 2 - 5;
+                    let dx = targetX - person.x;
+                    person.x += Math.sign(dx) * 1;
+                    
+                    if (Math.abs(dx) < 5) {
+                        // Board the helicopter
+                        person.onHelicopter = true;
+                        person.boarding = false;
+                        person.element.style.display = 'none';
+                        rescuedPeople.push(person);
+                    }
+                } else if (person.movingToBase) {
+                    // Move towards base when dropped off
+                    let targetX = base.offsetLeft + base.offsetWidth / 2;
+                    let dx = targetX - person.x;
+                    person.x += Math.sign(dx) * 1;
+                    
+                    if (Math.abs(dx) < 5 && person.y >= ground.offsetTop - person.height) {
+                        // Reached the base
+                        person.rescued = true;
+                        person.movingToBase = false;
+                        person.element.style.display = 'none';
+                        rescued++;
+                        
+                        // Update score
+                        score += 100;
+                        scoreDisplay.textContent = 'Score: ' + score;
+                        
+                        // Update hostage counter
+                        let hostageCount = document.querySelector('.hostage-count');
+                        hostageCount.textContent = 'Hostages: ' + rescued + '/' + people.length;
+                        
+                        // Play rescue sound
+                        rescueSound.currentTime = 0;
+                        rescueSound.play();
+                    }
+                }
+                
+                person.element.style.left = person.x + 'px';
+                person.element.style.top = person.y + 'px';
+            }
+        }
+        
+        function checkCollisions() {
+            // Get helicopter hitbox
+            let helicopterHitbox = {
+                x: helicopterX,
+                y: helicopterY,
+                width: helicopter.offsetWidth,
+                height: helicopter.offsetHeight
+            };
+            
+            // Check collisions with people (pickup)
+            for (let person of people) {
+                if (!person.rescued && !person.boarding && !person.onHelicopter) {
+                    if (isNearby(helicopterHitbox, person, 20) && helicopterY > person.y - 50) {
+                        person.boarding = true;
+                    }
+                }
+            }
+            
+            // Check if helicopter is over base to drop off people
+            let overBase = isColliding(helicopterHitbox, {
+                x: base.offsetLeft,
+                y: base.offsetTop,
+                width: base.offsetWidth,
+                height: base.offsetHeight
+            });
+            
+            if (overBase && rescuedPeople.length > 0) {
+                for (let i = 0; i < rescuedPeople.length; i++) {
+                    let person = rescuedPeople[i];
+                    person.onHelicopter = false;
+                    person.movingToBase = true;
+                    person.element.style.display = 'block';
+                    person.x = helicopterX + helicopter.offsetWidth / 2;
+                    person.y = helicopterY + helicopter.offsetHeight;
+                    
+                    rescuedPeople.splice(i, 1);
+                    i--;
+                }
+            }
+            
+            // Check collisions with bullets and enemies
+            for (let i = 0; i < bullets.length; i++) {
+                let bullet = bullets[i];
+                let bulletHitbox = {
+                    x: bullet.x,
+                    y: bullet.y,
+                    width: 5,
+                    height: 5
+                };
+                
+                for (let j = 0; j < enemies.length; j++) {
+                    let enemy = enemies[j];
+                    let enemyHitbox = {
+                        x: enemy.x,
+                        y: enemy.y,
+                        width: enemy.width,
+                        height: enemy.height
+                    };
+                    
+                    if (isColliding(bulletHitbox, enemyHitbox)) {
+                        // Enemy hit by bullet
+                        createExplosion(enemy.x, enemy.y);
+                        enemy.element.remove();
+                        enemies.splice(j, 1);
+                        j--;
+                        
+                        bullet.element.remove();
+                        bullets.splice(i, 1);
+                        i--;
+                        
+                        // Update score
+                        score += 50;
+                        scoreDisplay.textContent = 'Score: ' + score;
+                        break;
+                    }
+                }
+            }
+            
+            // Check collisions with enemy bullets and helicopter
+            for (let i = 0; i < enemyBullets.length; i++) {
+                let bullet = enemyBullets[i];
+                let bulletHitbox = {
+                    x: bullet.x,
+                    y: bullet.y,
+                    width: 5,
+                    height: 5
+                };
+                
+                if (isColliding(bulletHitbox, helicopterHitbox)) {
+                    // Helicopter hit by enemy bullet
+                    createExplosion(helicopterX, helicopterY);
+                    
+                    bullet.element.remove();
+                    enemyBullets.splice(i, 1);
+                    i--;
+                    
+                    // Lose a life
+                    lives--;
+                    livesDisplay.textContent = 'Lives: ' + lives;
+                    
+                    if (lives <= 0) {
+                        gameOver();
+                    }
+                }
+            }
+            
+            // Check collisions with enemies and helicopter
+            for (let enemy of enemies) {
+                let enemyHitbox = {
+                    x: enemy.x,
+                    y: enemy.y,
+                    width: enemy.width,
+                    height: enemy.height
+                };
+                
+                if (isColliding(helicopterHitbox, enemyHitbox)) {
+                    // Collision with enemy
+                    createExplosion(helicopterX, helicopterY);
+                    
+                    // Lose a life
+                    lives--;
+                    livesDisplay.textContent = 'Lives: ' + lives;
+                    
+                    // Move helicopter away
+                    helicopterX = 100;
+                    helicopterY = 250;
+                    updateHelicopterPosition();
+                    
+                    if (lives <= 0) {
+                        gameOver();
+                    }
+                    
+                    break;
+                }
+            }
+        }
+        
+        function isColliding(rect1, rect2) {
+            return rect1.x < rect2.x + rect2.width &&
+                   rect1.x + rect1.width > rect2.x &&
+                   rect1.y < rect2.y + rect2.height &&
+                   rect1.y + rect1.height > rect2.y;
+        }
+        
+        function isNearby(rect1, rect2, distance) {
+            // Check if two rectangles are within a certain distance of each other
+            let centerX1 = rect1.x + rect1.width / 2;
+            let centerY1 = rect1.y + rect1.height / 2;
+            let centerX2 = rect2.x + rect2.width / 2;
+            let centerY2 = rect2.y + rect2.height / 2;
+            
+            let dx = centerX1 - centerX2;
+            let dy = centerY1 - centerY2;
+            let dist = Math.sqrt(dx * dx + dy * dy);
+            
+            return dist < distance;
+        }
+        
+        function createExplosion(x, y) {
+            let explosion = document.createElement('div');
+            explosion.className = 'explosion';
+            explosion.style.left = x + 'px';
+            explosion.style.top = y + 'px';
+            
+            gameContainer.appendChild(explosion);
+            
+            // Play explosion sound
+            explosionSound.currentTime = 0;
+            explosionSound.play();
+            
+            // Remove explosion after animation completes
+            setTimeout(() => {
+                explosion.remove();
+            }, 500);
+        }
+        
+        function checkLevelCompletion() {
+            // Level is complete when at least 70% of people are rescued
+            let requiredRescues = Math.ceil(people.length * 0.7);
+            
+            if (rescued >= requiredRescues) {
+                levelComplete();
+            }
+        }
+        
+        function gameOver() {
+            gameRunning = false;
+            cancelAnimationFrame(animationFrame);
+            helicopterSound.pause();
+            
+            // Show game over screen
+            gameOverScreen.style.display = 'flex';
+        }
+        
+        function levelComplete() {
+            gameRunning = false;
+            cancelAnimationFrame(animationFrame);
+            helicopterSound.pause();
+            
+            // Update final score
+            finalScoreDisplay.textContent = 'Score: ' + score;
+            
+            // Show level complete screen
+            levelCompleteScreen.style.display = 'flex';
+        }
+        
+        function nextLevel() {
+            // Increase level
+            level++;
+            
+            // Clean up old elements
+            cleanupElements();
+            
+            // Start next level
+            initGame();
+        }
+        
+        function cleanupElements() {
+            // Remove all game elements except core elements
+            document.querySelectorAll('.building, .person, .enemy, .bullet, .cloud, .explosion, .hostage-count').forEach(element => {
+                element.remove();
+            });
+        }

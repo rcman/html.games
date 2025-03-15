@@ -1,0 +1,888 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rick's Adventure - Platform Game</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+            color: white;
+            text-align: center;
+        }
+        canvas {
+            display: block;
+            margin: 20px auto;
+            background-color: #000;
+            image-rendering: pixelated;
+        }
+        .controls {
+            margin: 10px auto;
+            max-width: 600px;
+            padding: 10px;
+            background-color: #222;
+            border-radius: 5px;
+        }
+        .game-title {
+            font-size: 24px;
+            margin: 20px 0 10px;
+            color: #ff9900;
+            text-shadow: 2px 2px 0px #000;
+        }
+        .game-stats {
+            display: flex;
+            justify-content: space-between;
+            max-width: 600px;
+            margin: 0 auto 10px;
+            padding: 10px;
+            background-color: #222;
+            border-radius: 5px;
+        }
+        .stats-item {
+            margin: 0 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-title">RICK'S ADVENTURE</div>
+    
+    <div class="game-stats">
+        <div class="stats-item">LIVES: <span id="lives">3</span></div>
+        <div class="stats-item">SCORE: <span id="score">0</span></div>
+        <div class="stats-item">BULLETS: <span id="bullets">6</span></div>
+        <div class="stats-item">DYNAMITE: <span id="dynamite">3</span></div>
+    </div>
+    
+    <canvas id="gameCanvas" width="640" height="480"></canvas>
+    
+    <div class="controls">
+        <p>ARROW KEYS: Move | Z: Jump | X: Shoot | C: Place Dynamite | R: Restart</p>
+    </div>
+
+    <script>
+        // Game constants
+        const TILE_SIZE = 32;
+        const GRAVITY = 0.5;
+        const PLAYER_SPEED = 3;
+        const JUMP_FORCE = 10;
+        
+        // Game state
+        let canvas, ctx;
+        let player = {
+            x: 100,
+            y: 100,
+            width: 24,
+            height: 32,
+            velocityX: 0,
+            velocityY: 0,
+            isJumping: false,
+            direction: 1, // 1 = right, -1 = left
+            lives: 3,
+            score: 0,
+            bullets: 6,
+            dynamite: 3,
+            isAlive: true,
+            color: '#ff9900'
+        };
+        
+        let bullets = [];
+        let dynamites = [];
+        let explosions = [];
+        let traps = [];
+        let enemies = [];
+        let treasures = [];
+        let platforms = [];
+        let spikes = [];
+        let exit = null;
+        let level = 1;
+        
+        // Input handling
+        const keys = {};
+        
+        // Game initialization
+        window.onload = function() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+            
+            // Set up event listeners
+            window.addEventListener('keydown', function(e) {
+                keys[e.key] = true;
+                
+                // Shoot bullet
+                if (e.key === 'z' && !player.isJumping && player.isAlive) {
+                    jump();
+                }
+                
+                if (e.key === 'x' && player.bullets > 0 && player.isAlive) {
+                    shootBullet();
+                }
+                
+                if (e.key === 'c' && player.dynamite > 0 && player.isAlive) {
+                    placeDynamite();
+                }
+                
+                if (e.key === 'r') {
+                    resetGame();
+                }
+            });
+            
+            window.addEventListener('keyup', function(e) {
+                keys[e.key] = false;
+            });
+            
+            // Set up the level
+            setupLevel(level);
+            
+            // Start the game loop
+            gameLoop();
+        };
+        
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function update() {
+            if (!player.isAlive) return;
+            
+            // Player movement
+            player.velocityX = 0;
+            
+            if (keys['ArrowLeft']) {
+                player.velocityX = -PLAYER_SPEED;
+                player.direction = -1;
+            }
+            
+            if (keys['ArrowRight']) {
+                player.velocityX = PLAYER_SPEED;
+                player.direction = 1;
+            }
+            
+            // Apply gravity
+            player.velocityY += GRAVITY;
+            
+            // Update player position
+            player.x += player.velocityX;
+            player.y += player.velocityY;
+            
+            // Check for collisions with platforms
+            handlePlatformCollisions();
+            
+            // Check for collisions with traps
+            checkTrapCollisions();
+            
+            // Check for collisions with spikes
+            checkSpikeCollisions();
+            
+            // Check for collisions with enemies
+            checkEnemyCollisions();
+            
+            // Check for treasure collection
+            checkTreasureCollection();
+            
+            // Check if player reached the exit
+            checkExitReached();
+            
+            // Keep player within canvas bounds
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+            if (player.y < 0) player.y = 0;
+            if (player.y + player.height > canvas.height) {
+                playerDie("Fell off the map!");
+            }
+            
+            // Update bullets
+            updateBullets();
+            
+            // Update dynamites
+            updateDynamites();
+            
+            // Update explosions
+            updateExplosions();
+            
+            // Update enemies
+            updateEnemies();
+            
+            // Update UI
+            document.getElementById('lives').textContent = player.lives;
+            document.getElementById('score').textContent = player.score;
+            document.getElementById('bullets').textContent = player.bullets;
+            document.getElementById('dynamite').textContent = player.dynamite;
+        }
+        
+        function render() {
+            // Clear canvas
+            ctx.fillStyle = '#352879'; // Amiga-like blue background
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw platforms
+            ctx.fillStyle = '#8B4513';
+            platforms.forEach(platform => {
+                ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+                
+                // Draw platform detail
+                ctx.fillStyle = '#A0522D';
+                ctx.fillRect(platform.x, platform.y, platform.width, 5);
+                ctx.fillStyle = '#8B4513';
+            });
+            
+            // Draw traps
+            ctx.fillStyle = '#FF0000';
+            traps.forEach(trap => {
+                ctx.fillRect(trap.x, trap.y, trap.width, trap.height);
+            });
+            
+            // Draw spikes
+            ctx.fillStyle = '#AAAAAA';
+            spikes.forEach(spike => {
+                drawSpike(spike.x, spike.y);
+            });
+            
+            // Draw treasures
+            ctx.fillStyle = '#FFFF00';
+            treasures.forEach(treasure => {
+                drawTreasure(treasure.x, treasure.y);
+            });
+            
+            // Draw exit
+            if (exit) {
+                ctx.fillStyle = '#00FF00';
+                ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
+                
+                // Draw door details
+                ctx.fillStyle = '#008800';
+                ctx.fillRect(exit.x + 5, exit.y + 5, 5, 5);
+                ctx.fillStyle = '#00FF00';
+            }
+            
+            // Draw bullets
+            ctx.fillStyle = '#FFFFFF';
+            bullets.forEach(bullet => {
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            });
+            
+            // Draw dynamites
+            ctx.fillStyle = '#FF4500';
+            dynamites.forEach(dynamite => {
+                drawDynamite(dynamite.x, dynamite.y);
+            });
+            
+            // Draw explosions
+            explosions.forEach(explosion => {
+                drawExplosion(explosion.x, explosion.y, explosion.radius);
+            });
+            
+            // Draw enemies
+            ctx.fillStyle = '#FF00FF';
+            enemies.forEach(enemy => {
+                drawEnemy(enemy.x, enemy.y, enemy.width, enemy.height, enemy.direction);
+            });
+            
+            // Draw player
+            if (player.isAlive) {
+                drawPlayer();
+            }
+            
+            // Draw level indicator
+            ctx.fillStyle = 'white';
+            ctx.font = '16px Courier New';
+            ctx.fillText('LEVEL ' + level, 20, 30);
+        }
+        
+        function drawPlayer() {
+            // Draw player body
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Draw player hat
+            ctx.fillStyle = '#964B00';
+            ctx.fillRect(player.x, player.y, player.width, 5);
+            ctx.fillRect(player.x - 2, player.y + 5, 5, 3);
+            
+            // Draw player eyes based on direction
+            ctx.fillStyle = 'white';
+            if (player.direction === 1) {
+                ctx.fillRect(player.x + 15, player.y + 10, 4, 4);
+            } else {
+                ctx.fillRect(player.x + 5, player.y + 10, 4, 4);
+            }
+            
+            // Draw player arms
+            ctx.fillStyle = player.color;
+            if (player.direction === 1) {
+                ctx.fillRect(player.x + player.width, player.y + 15, 5, 5);
+            } else {
+                ctx.fillRect(player.x - 5, player.y + 15, 5, 5);
+            }
+        }
+        
+        function drawEnemy(x, y, width, height, direction) {
+            // Draw enemy body
+            ctx.fillStyle = '#FF00FF';
+            ctx.fillRect(x, y, width, height);
+            
+            // Draw enemy eyes based on direction
+            ctx.fillStyle = 'white';
+            if (direction === 1) {
+                ctx.fillRect(x + 15, y + 10, 4, 4);
+            } else {
+                ctx.fillRect(x + 5, y + 10, 4, 4);
+            }
+            
+            // Draw enemy details
+            ctx.fillStyle = '#cc00cc';
+            ctx.fillRect(x, y + 5, width, 2);
+        }
+        
+        function drawSpike(x, y) {
+            // Draw a triangle spike
+            ctx.beginPath();
+            ctx.moveTo(x, y + TILE_SIZE);
+            ctx.lineTo(x + TILE_SIZE / 2, y);
+            ctx.lineTo(x + TILE_SIZE, y + TILE_SIZE);
+            ctx.closePath();
+            ctx.fill();
+        }
+        
+        function drawTreasure(x, y) {
+            // Draw treasure chest
+            ctx.fillStyle = '#DAA520'; // Gold
+            ctx.fillRect(x, y, TILE_SIZE, TILE_SIZE);
+            
+            // Draw details
+            ctx.fillStyle = '#FFD700'; // Yellow gold
+            ctx.fillRect(x + 5, y + 5, TILE_SIZE - 10, TILE_SIZE - 10);
+            
+            // Draw lock
+            ctx.fillStyle = '#8B4513'; // Brown
+            ctx.fillRect(x + TILE_SIZE/2 - 2, y + TILE_SIZE/2 - 2, 4, 4);
+        }
+        
+        function drawDynamite(x, y) {
+            // Draw dynamite stick
+            ctx.fillStyle = '#FF4500';
+            ctx.fillRect(x, y, 5, 15);
+            
+            // Draw fuse
+            ctx.fillStyle = '#FFFF00';
+            ctx.beginPath();
+            ctx.moveTo(x + 2, y);
+            ctx.lineTo(x + 10, y - 5);
+            ctx.lineTo(x + 8, y - 8);
+            ctx.stroke();
+        }
+        
+        function drawExplosion(x, y, radius) {
+            // Draw explosion circle
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 165, 0, 0.8)';
+            ctx.fill();
+            
+            // Draw inner explosion circle
+            ctx.beginPath();
+            ctx.arc(x, y, radius * 0.7, 0, Math.PI * 2);
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.8)';
+            ctx.fill();
+        }
+        
+        function jump() {
+            if (!player.isJumping) {
+                player.velocityY = -JUMP_FORCE;
+                player.isJumping = true;
+            }
+        }
+        
+        function shootBullet() {
+            const bullet = {
+                x: player.direction === 1 ? player.x + player.width : player.x,
+                y: player.y + player.height / 2,
+                width: 8,
+                height: 4,
+                velocity: player.direction * 10
+            };
+            
+            bullets.push(bullet);
+            player.bullets--;
+        }
+        
+        function placeDynamite() {
+            const dynamite = {
+                x: player.x + player.width / 2,
+                y: player.y + player.height,
+                timer: 100,
+                exploded: false
+            };
+            
+            dynamites.push(dynamite);
+            player.dynamite--;
+        }
+        
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].x += bullets[i].velocity;
+                
+                // Check if bullet is out of bounds
+                if (bullets[i].x < 0 || bullets[i].x > canvas.width) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check if bullet hit an enemy
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    if (checkCollision(bullets[i], enemies[j])) {
+                        // Remove enemy and bullet
+                        enemies.splice(j, 1);
+                        bullets.splice(i, 1);
+                        player.score += 100;
+                        break;
+                    }
+                }
+            }
+        }
+        
+        function updateDynamites() {
+            for (let i = dynamites.length - 1; i >= 0; i--) {
+                dynamites[i].timer--;
+                
+                // Check if dynamite should explode
+                if (dynamites[i].timer <= 0 && !dynamites[i].exploded) {
+                    // Create explosion
+                    const explosion = {
+                        x: dynamites[i].x,
+                        y: dynamites[i].y,
+                        radius: 40,
+                        timer: 20
+                    };
+                    
+                    explosions.push(explosion);
+                    dynamites[i].exploded = true;
+                    
+                    // Check if explosion hit enemies
+                    enemies.forEach((enemy, index) => {
+                        const dx = enemy.x + enemy.width / 2 - explosion.x;
+                        const dy = enemy.y + enemy.height / 2 - explosion.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (distance < explosion.radius + enemy.width / 2) {
+                            enemies.splice(index, 1);
+                            player.score += 100;
+                        }
+                    });
+                    
+                    // Check if explosion hit traps
+                    traps.forEach((trap, index) => {
+                        const dx = trap.x + trap.width / 2 - explosion.x;
+                        const dy = trap.y + trap.height / 2 - explosion.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (distance < explosion.radius + trap.width / 2) {
+                            traps.splice(index, 1);
+                            player.score += 50;
+                        }
+                    });
+                    
+                    // Check if explosion hit player
+                    const dx = player.x + player.width / 2 - explosion.x;
+                    const dy = player.y + player.height / 2 - explosion.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < explosion.radius + player.width / 2) {
+                        playerDie("Caught in explosion!");
+                    }
+                }
+                
+                // Remove exploded dynamites after explosion
+                if (dynamites[i].exploded && dynamites[i].timer <= -20) {
+                    dynamites.splice(i, 1);
+                }
+            }
+        }
+        
+        function updateExplosions() {
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                explosions[i].timer--;
+                
+                // Remove explosion if timer is done
+                if (explosions[i].timer <= 0) {
+                    explosions.splice(i, 1);
+                }
+            }
+        }
+        
+        function updateEnemies() {
+            enemies.forEach(enemy => {
+                // Simple enemy AI - move back and forth
+                enemy.x += enemy.velocity;
+                
+                // Reverse direction at edges or obstacles
+                if (enemy.x <= enemy.minX || enemy.x + enemy.width >= enemy.maxX) {
+                    enemy.velocity *= -1;
+                    enemy.direction *= -1;
+                }
+                
+                // Apply gravity
+                enemy.velocityY += GRAVITY;
+                enemy.y += enemy.velocityY;
+                
+                // Simple platform collision for enemies
+                platforms.forEach(platform => {
+                    if (checkCollision(enemy, platform) && enemy.y + enemy.height <= platform.y + enemy.velocityY) {
+                        enemy.y = platform.y - enemy.height;
+                        enemy.velocityY = 0;
+                    }
+                });
+            });
+        }
+        
+        function handlePlatformCollisions() {
+            let onPlatform = false;
+            
+            platforms.forEach(platform => {
+                // Check for collision with platform
+                if (checkCollision(player, platform)) {
+                    const overlapX = Math.min(player.x + player.width, platform.x + platform.width) - Math.max(player.x, platform.x);
+                    const overlapY = Math.min(player.y + player.height, platform.y + platform.height) - Math.max(player.y, platform.y);
+                    
+                    // Horizontal collision (sides)
+                    if (overlapX < overlapY) {
+                        if (player.x < platform.x) {
+                            player.x = platform.x - player.width;
+                        } else {
+                            player.x = platform.x + platform.width;
+                        }
+                        player.velocityX = 0;
+                    }
+                    // Vertical collision (top/bottom)
+                    else {
+                        if (player.y < platform.y) {
+                            player.y = platform.y - player.height;
+                            player.velocityY = 0;
+                            player.isJumping = false;
+                            onPlatform = true;
+                        } else {
+                            player.y = platform.y + platform.height;
+                            player.velocityY = 0;
+                        }
+                    }
+                }
+            });
+            
+            // If not on any platform, player is jumping/falling
+            if (!onPlatform && player.velocityY !== 0) {
+                player.isJumping = true;
+            }
+        }
+        
+        function checkTrapCollisions() {
+            traps.forEach(trap => {
+                if (checkCollision(player, trap)) {
+                    playerDie("Triggered a trap!");
+                }
+            });
+        }
+        
+        function checkSpikeCollisions() {
+            spikes.forEach(spike => {
+                if (checkCollision(player, spike)) {
+                    playerDie("Impaled on spikes!");
+                }
+            });
+        }
+        
+        function checkEnemyCollisions() {
+            enemies.forEach(enemy => {
+                if (checkCollision(player, enemy)) {
+                    playerDie("Caught by an enemy!");
+                }
+            });
+        }
+        
+        function checkTreasureCollection() {
+            for (let i = treasures.length - 1; i >= 0; i--) {
+                if (checkCollision(player, treasures[i])) {
+                    // Collect treasure
+                    treasures.splice(i, 1);
+                    player.score += 200;
+                    
+                    // Random bonus
+                    const bonus = Math.floor(Math.random() * 3);
+                    if (bonus === 0) player.bullets += 2;
+                    if (bonus === 1) player.dynamite += 1;
+                    if (bonus === 2) player.lives += 1;
+                }
+            }
+        }
+        
+        function checkExitReached() {
+            if (exit && checkCollision(player, exit) && treasures.length === 0) {
+                // Level completed
+                level++;
+                setupLevel(level);
+                player.score += 500;
+                player.bullets = Math.min(player.bullets + 3, 10);
+                player.dynamite = Math.min(player.dynamite + 2, 5);
+            }
+        }
+        
+        function playerDie(reason) {
+            player.lives--;
+            player.isAlive = false;
+            player.color = '#555555';
+            
+            // Display death message
+            ctx.fillStyle = 'white';
+            ctx.font = '20px Courier New';
+            ctx.fillText(reason, canvas.width / 2 - 100, canvas.height / 2);
+            ctx.fillText('Lives left: ' + player.lives, canvas.width / 2 - 100, canvas.height / 2 + 30);
+            ctx.fillText('Press R to restart', canvas.width / 2 - 100, canvas.height / 2 + 60);
+            
+            // Check if game over
+            if (player.lives <= 0) {
+                ctx.fillStyle = 'red';
+                ctx.font = '30px Courier New';
+                ctx.fillText('GAME OVER', canvas.width / 2 - 100, canvas.height / 2 + 100);
+            }
+            
+            // Reset player after a delay
+            if (player.lives > 0) {
+                setTimeout(() => {
+                    resetPlayerPosition();
+                    player.isAlive = true;
+                    player.color = '#ff9900';
+                }, 2000);
+            }
+        }
+        
+        function resetPlayerPosition() {
+            player.x = 100;
+            player.y = 100;
+            player.velocityX = 0;
+            player.velocityY = 0;
+            player.isJumping = false;
+        }
+        
+        function resetGame() {
+            player = {
+                x: 100,
+                y: 100,
+                width: 24,
+                height: 32,
+                velocityX: 0,
+                velocityY: 0,
+                isJumping: false,
+                direction: 1,
+                lives: 3,
+                score: 0,
+                bullets: 6,
+                dynamite: 3,
+                isAlive: true,
+                color: '#ff9900'
+            };
+            
+            bullets = [];
+            dynamites = [];
+            explosions = [];
+            
+            level = 1;
+            setupLevel(level);
+        }
+        
+        function setupLevel(levelNum) {
+            // Clear previous level elements
+            platforms = [];
+            traps = [];
+            enemies = [];
+            treasures = [];
+            spikes = [];
+            exit = null;
+            
+            // Reset player position
+            resetPlayerPosition();
+            
+            // Create platforms based on level
+            if (levelNum === 1) {
+                // Temple level
+                createTempleLevel();
+            } else if (levelNum === 2) {
+                // Cave level
+                createCaveLevel();
+            } else if (levelNum === 3) {
+                // Pyramid level
+                createPyramidLevel();
+            } else {
+                // If player beat all levels, create a victory level
+                createVictoryLevel();
+            }
+        }
+        
+        function createTempleLevel() {
+            // Ground
+            platforms.push({x: 0, y: 450, width: canvas.width, height: 30});
+            
+            // Platforms
+            platforms.push({x: 150, y: 380, width: 100, height: 20});
+            platforms.push({x: 320, y: 350, width: 100, height: 20});
+            platforms.push({x: 450, y: 300, width: 100, height: 20});
+            platforms.push({x: 200, y: 250, width: 100, height: 20});
+            platforms.push({x: 50, y: 200, width: 100, height: 20});
+            platforms.push({x: 320, y: 200, width: 100, height: 20});
+            
+            // Traps
+            traps.push({x: 400, y: 445, width: 30, height: 5});
+            traps.push({x: 250, y: 445, width: 30, height: 5});
+            
+            // Spikes
+            spikes.push({x: 500, y: 418, width: TILE_SIZE, height: TILE_SIZE});
+            
+            // Enemies
+            enemies.push({
+                x: 200, y: 418, width: 24, height: 32,
+                velocity: 1, velocityY: 0, direction: 1,
+                minX: 150, maxX: 300
+            });
+            
+            enemies.push({
+                x: 350, y: 318, width: 24, height: 32,
+                velocity: 1.5, velocityY: 0, direction: 1,
+                minX: 320, maxX: 420
+            });
+            
+            // Treasures
+            treasures.push({x: 100, y: 418, width: TILE_SIZE, height: TILE_SIZE});
+            treasures.push({x: 350, y: 218, width: TILE_SIZE, height: TILE_SIZE});
+            treasures.push({x: 500, y: 268, width: TILE_SIZE, height: TILE_SIZE});
+            
+            // Exit
+            exit = {x: 550, y: 168, width: 40, height: 32};
+        }
+        
+        function createCaveLevel() {
+            // Ground with gaps
+            platforms.push({x: 0, y: 450, width: 200, height: 30});
+            platforms.push({x: 250, y: 450, width: 200, height: 30});
+            platforms.push({x: 500, y: 450, width: 140, height: 30});
+            
+            // Cave platforms
+            platforms.push({x: 100, y: 350, width: 80, height: 20});
+            platforms.push({x: 250, y: 300, width: 80, height: 20});
+            platforms.push({x: 400, y: 250, width: 80, height: 20});
+            platforms.push({x: 200, y: 200, width: 80, height: 20});
+            platforms.push({x: 50, y: 150, width: 80, height: 20});
+            
+            // More spikes in cave level
+            spikes.push({x: 200, y: 418, width: TILE_SIZE, height: TILE_SIZE});
+            spikes.push({x: 450, y: 418, width: TILE_SIZE, height: TILE_SIZE});
+            spikes.push({x: 180, y: 318, width: TILE_SIZE, height: TILE_SIZE});
+            
+            // Faster enemies
+            enemies.push({
+                x: 300, y: 418, width: 24, height: 32,
+                velocity: 2, velocityY: 0, direction: 1,
+                minX: 250, maxX: 450
+            });
+            
+            enemies.push({
+                x: 420, y: 218, width: 24, height: 32,
+                velocity: 2, velocityY: 0, direction: 1,
+                minX: 400, maxX: 480
+            });
+            
+            // More traps
+            traps.push({x: 300, y: 445, width: 30, height: 5});
+            traps.push({x: 350, y: 445, width: 30, height: 5});
+            traps.push({x: 120, y: 345, width: 30, height: 5});
+            
+            // Treasures
+            treasures.push({x: 150, y: 418, width: TILE_SIZE, height: TILE_SIZE});
+            treasures.push({x: 280, y: 268, width: TILE_SIZE, height: TILE_SIZE});
+            treasures.push({x: 430, y: 218, width: TILE_SIZE, height: TILE_SIZE});
+            treasures.push({x: 80, y: 118, width: TILE_SIZE, height: TILE_SIZE});
+            
+            // Exit
+            exit = {x: 550, y: 418, width: 40, height: 32};
+        }
+        
+        function createPyramidLevel() {
+            // Pyramid floor
+            platforms.push({x: 0, y: 450, width: canvas.width, height: 30});
+            
+            // Pyramid structure
+            for (let i = 0; i < 8; i++) {
+                const width = 500 - i * 60;
+                platforms.push({x: (canvas.width - width) / 2, y: 400 - i * 50, width: width, height: 30});
+            }
+            
+            // Spike traps
+            for (let i = 0; i < 5; i++) {
+                spikes.push({x: 100 + i * 100, y: 418, width: TILE_SIZE, height: TILE_SIZE});
+            }
+            
+            // More enemies
+            enemies.push({
+                x: 200, y: 418, width: 24, height: 32,
+                velocity: 2.5, velocityY: 0, direction: 1,
+                minX: 100, maxX: 500
+            });
+            
+            enemies.push({
+                x: 300, y: 368, width: 24, height: 32,
+                velocity: 2, velocityY: 0, direction: -1,
+                minX: 200, maxX: 400
+            });
+            
+            enemies.push({
+                x: 250, y: 318, width: 24, height: 32,
+                velocity: 1.5, velocityY: 0, direction: 1,
+                minX: 200, maxX: 400
+            });
+            
+            // Lots of traps
+            traps.push({x: 150, y: 445, width: 30, height: 5});
+            traps.push({x: 300, y: 445, width: 30, height: 5});
+            traps.push({x: 450, y: 445, width: 30, height: 5});
+            traps.push({x: 250, y: 395, width: 30, height: 5});
+            traps.push({x: 350, y: 395, width: 30, height: 5});
+            
+            // Hidden treasures with high value
+            treasures.push({x: 100, y: 418, width: TILE_SIZE, height: TILE_SIZE});
+            treasures.push({x: 500, y: 418, width: TILE_SIZE, height: TILE_SIZE});
+            treasures.push({x: 320, y: 218, width: TILE_SIZE, height: TILE_SIZE});
+            treasures.push({x: 320, y: 118, width: TILE_SIZE, height: TILE_SIZE});
+            
+            // Final exit at the top of the pyramid
+            exit = {x: 300, y: 68, width: 40, height: 32};
+        }
+        
+        function createVictoryLevel() {
+            // Simple victory platform
+            platforms.push({x: 100, y: 350, width: 440, height: 30});
+            
+            // Victory text
+            ctx.fillStyle = 'gold';
+            ctx.font = '30px Courier New';
+            ctx.fillText('CONGRATULATIONS!', canvas.width / 2 - 150, 150);
+            ctx.fillText('You completed all levels!', canvas.width / 2 - 180, 200);
+            ctx.fillText('Final Score: ' + player.score, canvas.width / 2 - 100, 250);
+            ctx.fillText('Press R to play again', canvas.width / 2 - 150, 300);
+            
+            // Add some treasures for celebration
+            for (let i = 0; i < 8; i++) {
+                treasures.push({x: 120 + i * 60, y: 318, width: TILE_SIZE, height: TILE_SIZE});
+            }
+        }
+        
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.width &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.height &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+    </script>
+</body>
+</html>

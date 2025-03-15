@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pole Position Clone</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #333;
+            overflow: hidden;
+            font-family: Arial, sans-serif;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            overflow: hidden;
+        }
+        
+        #sky {
+            position: absolute;
+            width: 100%;
+            height: 40%;
+            background: linear-gradient(to top, #87CEEB, #1E90FF);
+        }
+        
+        #ground {
+            position: absolute;
+            top: 40%;
+            width: 100%;
+            height: 60%;
+            background-color: #7CFC00;
+        }
+        
+        #road {
+            position: absolute;
+            top: 40%;
+            left: 50%;
+            transform: translateX(-50%);
+            height: 60%;
+            perspective: 500px;
+            overflow: hidden;
+        }
+        
+        .road-segment {
+            position: absolute;
+            width: 100%;
+            height: 30px;
+            background-color: #333;
+            transform-origin: center;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .left-lane-marker, .right-lane-marker {
+            height: 100%;
+            width: 15px;
+            background-color: white;
+        }
+        
+        .center-line {
+            height: 70%;
+            width: 10px;
+            background-color: white;
+            align-self: center;
+        }
+        
+        #player-car {
+            position: absolute;
+            width: 60px;
+            height: 100px;
+            bottom: 50px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 100;
+        }
+        
+        .car-body {
+            width: 100%;
+            height: 70%;
+            background-color: red;
+            border-radius: 8px 8px 0 0;
+            position: relative;
+        }
+        
+        .windshield {
+            width: 80%;
+            height: 40%;
+            background-color: #87CEFA;
+            position: absolute;
+            top: 10%;
+            left: 10%;
+            border-radius: 4px;
+        }
+        
+        .wheel {
+            width: 15px;
+            height: 30px;
+            background-color: black;
+            position: absolute;
+            bottom: -30px;
+            border-radius: 4px;
+        }
+        
+        .left-wheel {
+            left: 5px;
+        }
+        
+        .right-wheel {
+            right: 5px;
+        }
+        
+        .opponent-car {
+            position: absolute;
+            width: 50px;
+            height: 80px;
+            background-color: blue;
+            border-radius: 5px;
+            z-index: 10;
+        }
+        
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: white;
+            font-size: 24px;
+            z-index: 1000;
+        }
+        
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 48px;
+            text-align: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            padding: 20px;
+            border-radius: 10px;
+            display: none;
+            z-index: 2000;
+        }
+        
+        #restart-btn {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin-top: 20px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 3000;
+        }
+        
+        #start-screen h1 {
+            color: white;
+            font-size: 48px;
+            margin-bottom: 30px;
+        }
+        
+        #start-btn {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 24px;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        
+        .instructions {
+            color: white;
+            text-align: center;
+            margin-top: 20px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="sky"></div>
+        <div id="ground"></div>
+        <div id="road"></div>
+        
+        <div id="player-car">
+            <div class="car-body">
+                <div class="windshield"></div>
+            </div>
+            <div class="wheel left-wheel"></div>
+            <div class="wheel right-wheel"></div>
+        </div>
+        
+        <div id="hud">
+            <div>Speed: <span id="speed">0</span> mph</div>
+            <div>Score: <span id="score">0</span></div>
+        </div>
+        
+        <div id="game-over">
+            <h2>GAME OVER</h2>
+            <p>Your Score: <span id="final-score">0</span></p>
+            <button id="restart-btn">Play Again</button>
+        </div>
+        
+        <div id="start-screen">
+            <h1>POLE POSITION</h1>
+            <button id="start-btn">Start Race</button>
+            <div class="instructions">
+                <p>Use left and right arrow keys to steer</p>
+                <p>Up arrow to accelerate, Down arrow to brake</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game variables
+        let gameActive = false;
+        let speed = 0;
+        let position = 0;
+        let score = 0;
+        let playerX = 0; // -1 to 1 range for player position
+        let roadWidth = 400;
+        let segmentHeight = 30;
+        let cameraHeight = 100;
+        let drawDistance = 300;
+        let segments = [];
+        let opponents = [];
+        let keys = {
+            'ArrowLeft': false,
+            'ArrowRight': false,
+            'ArrowUp': false,
+            'ArrowDown': false
+        };
+
+        // Game elements
+        const gameContainer = document.getElementById('game-container');
+        const roadElement = document.getElementById('road');
+        const playerCar = document.getElementById('player-car');
+        const speedDisplay = document.getElementById('speed');
+        const scoreDisplay = document.getElementById('score');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const gameOverScreen = document.getElementById('game-over');
+        const startScreen = document.getElementById('start-screen');
+        const startBtn = document.getElementById('start-btn');
+        const restartBtn = document.getElementById('restart-btn');
+
+        // Initialize the game
+        function init() {
+            // Create road segments
+            createRoad();
+            
+            // Set up event listeners
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || 
+                    e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                    keys[e.key] = true;
+                    // Prevent default to avoid page scrolling
+                    e.preventDefault();
+                }
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || 
+                    e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+                    keys[e.key] = false;
+                    e.preventDefault();
+                }
+            });
+            
+            startBtn.addEventListener('click', startGame);
+            restartBtn.addEventListener('click', restartGame);
+            
+            // Log to check if init is running
+            console.log("Game initialized");
+            
+            // Initial render
+            render();
+        }
+
+        // Create road segments
+        function createRoad() {
+            segments = [];
+            for (let i = 0; i < drawDistance; i++) {
+                segments.push({
+                    index: i,
+                    y: i * segmentHeight,
+                    curve: 0
+                });
+            }
+            
+            // Add some curves to the road
+            addRoadCurve(20, 50, 2);
+            addRoadCurve(70, 100, -3);
+            addRoadCurve(150, 200, 4);
+            addRoadCurve(220, 270, -2);
+        }
+
+        // Add a curve to a section of the road
+        function addRoadCurve(startIdx, endIdx, curve) {
+            for (let i = startIdx; i < endIdx; i++) {
+                if (segments[i]) {
+                    segments[i].curve = curve;
+                }
+            }
+        }
+
+        // Start the game
+        function startGame() {
+            gameActive = true;
+            speed = 0;
+            score = 0;
+            playerX = 0;
+            position = 0;
+            opponents = [];
+            startScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            
+            // Create opponent cars
+            createOpponents();
+            
+            // Start the game loop
+            gameLoop();
+        }
+
+        // Create opponent cars
+        function createOpponents() {
+            for (let i = 0; i < 10; i++) {
+                opponents.push({
+                    position: position + 20 + Math.random() * 200,
+                    offset: Math.random() > 0.5 ? 0.5 : -0.5,
+                    element: null
+                });
+            }
+        }
+
+        // Restart the game
+        function restartGame() {
+            // Clean up any opponent elements
+            opponents.forEach(opponent => {
+                if (opponent.element && opponent.element.parentNode) {
+                    opponent.element.parentNode.removeChild(opponent.element);
+                }
+            });
+            
+            // Clear existing road segments
+            while (roadElement.firstChild) {
+                roadElement.removeChild(roadElement.firstChild);
+            }
+            
+            startGame();
+        }
+
+        // Main game loop
+        function gameLoop() {
+            if (!gameActive) return;
+            
+            // Update game state
+            update();
+            
+            // Render the updated state
+            render();
+            
+            // Schedule the next frame
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Update game state
+        function update() {
+            // Handle player input
+            if (keys['ArrowUp'] && speed < 200) {
+                speed += 1;
+            } else if (keys['ArrowDown'] && speed > 0) {
+                speed -= 2;
+            } else if (speed > 0) {
+                speed -= 0.5;
+            } else if (speed < 0) {
+                speed = 0;
+            }
+            
+            // Allow steering even at zero speed for better control
+            if (keys['ArrowLeft']) {
+                playerX = Math.max(-1, playerX - 0.05);
+            }
+            
+            if (keys['ArrowRight']) {
+                playerX = Math.min(1, playerX + 0.05);
+            }
+            
+            // Update position based on speed
+            position += speed * 0.05;
+            
+            // Calculate base segment
+            const baseSegmentIndex = Math.floor(position / segmentHeight) % segments.length;
+            
+            // Apply road curve to player position
+            if (segments[baseSegmentIndex]) {
+                playerX += segments[baseSegmentIndex].curve * 0.001 * speed;
+                
+                // Keep player on the road
+                playerX = Math.max(-1, Math.min(1, playerX));
+            }
+            
+            // Update score
+            score += Math.floor(speed * 0.1);
+            scoreDisplay.textContent = score;
+            speedDisplay.textContent = Math.floor(speed);
+            
+            // Check for collisions with opponent cars
+            checkCollisions();
+        }
+
+        // Check for collisions with opponent cars
+        function checkCollisions() {
+            opponents.forEach(opponent => {
+                // If opponent is near player position
+                const distance = opponent.position - position;
+                if (distance >= 0 && distance < 10) {
+                    // Check horizontal position for collision
+                    const opponentX = opponent.offset;
+                    const playerWidth = 0.2; // Relative width of player car
+                    
+                    if (Math.abs(playerX - opponentX) < playerWidth) {
+                        gameOver();
+                    }
+                }
+            });
+        }
+
+        // End the game
+        function gameOver() {
+            gameActive = false;
+            finalScoreDisplay.textContent = score;
+            gameOverScreen.style.display = 'block';
+        }
+
+        // Render the game
+        function render() {
+            // Clear existing road segments
+            while (roadElement.firstChild) {
+                roadElement.removeChild(roadElement.firstChild);
+            }
+            
+            // Adjust road width based on screen size
+            roadWidth = Math.min(window.innerWidth * 0.7, 800);
+            roadElement.style.width = `${roadWidth}px`;
+            
+            // Render visible road segments
+            const baseSegmentIndex = Math.floor(position / segmentHeight) % segments.length;
+            
+            // Draw road segments
+            for (let i = 0; i < 20; i++) {
+                const segmentIndex = (baseSegmentIndex + i) % segments.length;
+                const segment = segments[segmentIndex];
+                
+                // Create segment element
+                const segmentElement = document.createElement('div');
+                segmentElement.className = 'road-segment';
+                
+                // Apply 3D perspective
+                const perspectiveScale = 1 - (i / 20);
+                const width = roadWidth * perspectiveScale;
+                const height = segmentHeight * perspectiveScale;
+                const top = 50 + (i * height * 0.8); // Adjust for proper perspective
+                const segmentCurve = segment.curve * i * 0.2;
+                
+                segmentElement.style.width = `${width}px`;
+                segmentElement.style.height = `${height}px`;
+                segmentElement.style.top = `${top}%`;
+                segmentElement.style.transform = `translateX(${segmentCurve}px) translateZ(${-i * 50}px) rotateX(${80 - i * 3}deg)`;
+                
+                // Add lane markers
+                const leftMarker = document.createElement('div');
+                leftMarker.className = 'left-lane-marker';
+                
+                const rightMarker = document.createElement('div');
+                rightMarker.className = 'right-lane-marker';
+                
+                const centerLine = document.createElement('div');
+                centerLine.className = 'center-line';
+                
+                segmentElement.appendChild(leftMarker);
+                segmentElement.appendChild(centerLine);
+                segmentElement.appendChild(rightMarker);
+                
+                roadElement.appendChild(segmentElement);
+                
+                // Check if there's an opponent car in this segment
+                opponents.forEach(opponent => {
+                    const opponentSegment = Math.floor(opponent.position / segmentHeight) % segments.length;
+                    
+                    if (opponentSegment === segmentIndex) {
+                        // Remove old element if it exists
+                        if (opponent.element && opponent.element.parentNode) {
+                            opponent.element.parentNode.removeChild(opponent.element);
+                        }
+                        
+                        // Create opponent car element
+                        const opponentElement = document.createElement('div');
+                        opponentElement.className = 'opponent-car';
+                        
+                        // Position opponent car
+                        const offsetX = opponent.offset * width * 0.4;
+                        opponentElement.style.width = `${width * 0.12}px`;
+                        opponentElement.style.height = `${height * 2}px`;
+                        opponentElement.style.left = `${(width / 2) + offsetX}px`;
+                        opponentElement.style.top = `${top - height}%`;
+                        
+                        segmentElement.appendChild(opponentElement);
+                        opponent.element = opponentElement;
+                    }
+                });
+            }
+            
+            // Position player car
+            const playerOffset = playerX * (roadWidth * 0.4);
+            playerCar.style.transform = `translateX(calc(-50% + ${playerOffset}px))`;
+            
+            // Update opponent positions
+            opponents.forEach(opponent => {
+                if (opponent.position < position - 10) {
+                    // Move opponent ahead of player
+                    opponent.position = position + 100 + Math.random() * 200;
+                    opponent.offset = (Math.random() * 2 - 1) * 0.8;
+                }
+            });
+        }
+
+        // Handle window resize
+        window.addEventListener('resize', render);
+
+        // Initialize the game when the page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

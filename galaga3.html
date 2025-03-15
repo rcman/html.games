@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galaga</title>
+    <style>
+        canvas {
+            border: 1px solid black;
+            background: black;
+        }
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            background: #222;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="480" height="640"></canvas>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Game State
+        let playerShips = [{ x: canvas.width / 2, y: canvas.height - 50 }];
+        const playerSpeed = 5;
+        let playerDx = 0;
+        let lives = 3;
+        let score = 0;
+        let level = 1;
+        let gameOver = false;
+        let isBonusStage = false;
+
+        const playerBullets = [];
+        const enemyBullets = [];
+        const tractorBeams = [];
+        const bulletSpeed = 7;
+        const enemyBulletSpeed = 3;
+        const tractorBeamSpeed = 2;
+
+        const enemies = [];
+        const enemyTypes = {
+            bee: { color: 'yellow', points: 50 },
+            butterfly: { color: 'blue', points: 100 },
+            boss: { color: 'green', points: 150 }
+        };
+        const enemyWidth = 30;
+        const enemyHeight = 20;
+
+        // Formation Grid
+        const formationRows = 5;
+        const formationCols = 8;
+        const formationStartX = 50;
+        const formationStartY = 50;
+        const formationSpacing = 40;
+        const formationPositions = [];
+        for (let row = 0; row < formationRows; row++) {
+            for (let col = 0; col < formationCols; col++) {
+                formationPositions.push({
+                    x: formationStartX + col * formationSpacing,
+                    y: formationStartY + row * formationSpacing
+                });
+            }
+        }
+
+        // Input Handling
+        let rightPressed = false;
+        let leftPressed = false;
+        let spacePressed = false;
+
+        document.addEventListener('keydown', keyDownHandler);
+        document.addEventListener('keyup', keyUpHandler);
+
+        function keyDownHandler(e) {
+            if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = true;
+            if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = true;
+            if (e.key === ' ') spacePressed = true;
+        }
+
+        function keyUpHandler(e) {
+            if (e.key === 'Right' || e.key === 'ArrowRight') rightPressed = false;
+            if (e.key === 'Left' || e.key === 'ArrowLeft') leftPressed = false;
+            if (e.key === ' ') spacePressed = false;
+        }
+
+        // Drawing Functions
+        function drawPlayerShip(ship) {
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.moveTo(ship.x, ship.y - 10);
+            ctx.lineTo(ship.x - 15, ship.y + 10);
+            ctx.lineTo(ship.x + 15, ship.y + 10);
+            ctx.fill();
+        }
+
+        function drawBullet(bullet) {
+            ctx.fillStyle = 'red';
+            ctx.fillRect(bullet.x - 2, bullet.y - 5, 4, 10);
+        }
+
+        function drawTractorBeam(beam) {
+            ctx.strokeStyle = 'cyan';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(beam.x, beam.y);
+            ctx.lineTo(beam.x, beam.y + 20);
+            ctx.stroke();
+        }
+
+        function drawEnemy(enemy) {
+            ctx.fillStyle = enemyTypes[enemy.type].color;
+            ctx.beginPath();
+            ctx.arc(enemy.x, enemy.y, enemyWidth / 2, 0, Math.PI * 2);
+            ctx.fill();
+            if (enemy.capturedShip) {
+                drawPlayerShip({ x: enemy.x, y: enemy.y + 25 });
+            }
+        }
+
+        function drawUI() {
+            ctx.fillStyle = 'white';
+            ctx.font = '16px Arial';
+            ctx.fillText(`Score: ${score}`, 10, 20);
+            ctx.fillText(`Lives: ${lives}`, canvas.width - 80, 20);
+            ctx.fillText(`Level: ${level}${isBonusStage ? ' (Challenging Stage)' : ''}`, 10, 40);
+            if (gameOver) {
+                ctx.font = '32px Arial';
+                ctx.fillText('GAME OVER', canvas.width / 2 - 80, canvas.height / 2);
+            }
+        }
+
+        // Game Logic
+        function createLevel() {
+            enemies.length = 0;
+            isBonusStage = (level % 3 === 0);
+            const enemyCount = Math.min(level * 5 + 5, formationPositions.length);
+            const pattern = (level - 1) % 3; // 0, 1, 2 repeating
+            for (let i = 0; i < enemyCount; i++) {
+                const type = isBonusStage
+                    ? Object.keys(enemyTypes)[Math.floor(Math.random() * 2)]
+                    : Object.keys(enemyTypes)[Math.floor(Math.random() * 3)];
+                const pos = formationPositions[i];
+                let startX, startY = -enemyHeight;
+                if (pattern === 0) startX = i % 2 === 0 ? -enemyWidth : canvas.width + enemyWidth; // Both sides
+                else if (pattern === 1) startX = -enemyWidth; // Left side
+                else startX = canvas.width + enemyWidth; // Right side
+                enemies.push({
+                    type,
+                    x: startX,
+                    y: startY,
+                    targetX: pos.x,
+                    targetY: pos.y,
+                    state: 'entering',
+                    t: 0,
+                    speed: 2 + level * 0.1,
+                    shootTimer: Math.random() * 100,
+                    capturedShip: null,
+                    diveType: null,
+                    diveProgress: 0
+                });
+            }
+        }
+
+        function updatePlayer() {
+            if (rightPressed) playerDx = playerSpeed;
+            else if (leftPressed) playerDx = -playerSpeed;
+            else playerDx = 0;
+
+            playerShips.forEach(ship => {
+                ship.x += playerDx;
+                if (ship.x < 15) ship.x = 15;
+                if (ship.x > canvas.width - 15) ship.x = canvas.width - 15;
+            });
+            if (playerShips.length === 2) {
+                playerShips[1].x = playerShips[0].x + 40;
+            }
+        }
+
+        function updatePlayerBullets() {
+            if (spacePressed && playerBullets.length < playerShips.length * 2) {
+                playerShips.forEach(ship => {
+                    playerBullets.push({ x: ship.x, y: ship.y - 15 });
+                });
+                spacePressed = false;
+            }
+            for (let i = playerBullets.length - 1; i >= 0; i--) {
+                playerBullets[i].y -= bulletSpeed;
+                if (playerBullets[i].y < 0) playerBullets.splice(i, 1);
+            }
+        }
+
+        function updateEnemies() {
+            const formationShift = Math.sin(Date.now() * 0.001) * 5; // Throbbing effect
+            enemies.forEach(enemy => {
+                if (enemy.state === 'entering') {
+                    enemy.t += 0.05;
+                    const pattern = (level - 1) % 3;
+                    if (pattern === 0) {
+                        enemy.x += (enemy.targetX - enemy.x) * 0.05 + 50 * Math.sin(enemy.t);
+                    } else if (pattern === 1) {
+                        enemy.x += (enemy.targetX - enemy.x) * 0.05 + 30 * Math.cos(enemy.t);
+                    } else {
+                        enemy.x += (enemy.targetX - enemy.x) * 0.05 - 30 * Math.cos(enemy.t);
+                    }
+                    enemy.y += enemy.speed;
+                    if (Math.abs(enemy.y - enemy.targetY) < 5 && Math.abs(enemy.x - enemy.targetX) < 5) {
+                        enemy.x = enemy.targetX;
+                        enemy.y = enemy.targetY;
+                        enemy.state = isBonusStage ? 'bonus' : 'inFormation';
+                    }
+                } else if (enemy.state === 'inFormation') {
+                    enemy.x = enemy.targetX + formationShift;
+                    enemy.shootTimer--;
+                    if (enemy.shootTimer <= 0 && !isBonusStage) {
+                        if (enemy.type === 'boss' && !enemy.capturedShip && Math.random() < 0.01) {
+                            tractorBeams.push({ x: enemy.x, y: enemy.y + enemyHeight / 2 });
+                        } else if (Math.random() < 0.02) {
+                            enemyBullets.push({ x: enemy.x, y: enemy.y + enemyHeight / 2 });
+                        }
+                        enemy.shootTimer = 100 + Math.random() * 50;
+                    }
+                    if (Math.random() < 0.005 * level) {
+                        enemy.state = 'attacking';
+                        enemy.diveType = enemy.type === 'boss' && enemy.capturedShip ? 'captured'
+                            : enemy.type === 'boss' ? 'boss' : Math.random() < 0.3 ? 'twoWay' : 'standard';
+                        enemy.diveProgress = 0;
+                    }
+                } else if (enemy.state === 'attacking') {
+                    enemy.diveProgress += 0.05;
+                    if (enemy.diveType === 'standard') {
+                        enemy.y += enemy.speed;
+                        enemy.x += Math.sin(enemy.diveProgress) * 50;
+                        if (enemy.y > canvas.height) resetEnemy(enemy);
+                    } else if (enemy.diveType === 'twoWay') {
+                        enemy.y += enemy.speed;
+                        enemy.x += (enemy.targetX < canvas.width / 2 ? -1 : 1) * Math.cos(enemy.diveProgress) * 50;
+                        if (enemy.y > canvas.height) resetEnemy(enemy);
+                    } else if (enemy.diveType === 'boss') {
+                        enemy.y += enemy.speed;
+                        if (enemy.y > canvas.height / 2) {
+                            enemy.y = canvas.height / 2;
+                            enemy.state = 'inFormation';
+                        }
+                    } else if (enemy.diveType === 'captured') {
+                        enemy.y += enemy.speed;
+                        enemy.x += Math.sin(enemy.diveProgress) * 50;
+                        if (enemy.y > canvas.height) resetEnemy(enemy);
+                    }
+                } else if (enemy.state === 'bonus') {
+                    enemy.t += 0.05;
+                    enemy.x = enemy.targetX + Math.cos(enemy.t) * 100;
+                    enemy.y = enemy.targetY + Math.sin(enemy.t) * 50;
+                    if (enemy.t > Math.PI * 2) enemy.y += enemy.speed;
+                    if (enemy.y > canvas.height) enemies.splice(enemies.indexOf(enemy), 1);
+                }
+            });
+        }
+
+        function resetEnemy(enemy) {
+            enemy.state = 'entering';
+            enemy.x = Math.random() < 0.5 ? -enemyWidth : canvas.width + enemyWidth;
+            enemy.y = -enemyHeight;
+            enemy.t = 0;
+        }
+
+        function updateProjectiles() {
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                enemyBullets[i].y += enemyBulletSpeed;
+                if (enemyBullets[i].y > canvas.height) enemyBullets.splice(i, 1);
+            }
+            for (let i = tractorBeams.length - 1; i >= 0; i--) {
+                tractorBeams[i].y += tractorBeamSpeed;
+                if (tractorBeams[i].y > canvas.height) tractorBeams.splice(i, 1);
+            }
+        }
+
+        function checkCollisions() {
+            for (let i = playerBullets.length - 1; i >= 0; i--) {
+                const bullet = playerBullets[i];
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    const dx = bullet.x - enemy.x;
+                    const dy = bullet.y - enemy.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < enemyWidth / 2 + 2) {
+                        if (enemy.capturedShip) {
+                            const cs = enemy.capturedShip;
+                            if (bullet.x > cs.x - 10 && bullet.x < cs.x + 10 && bullet.y > cs.y - 10 && bullet.y < cs.y + 10) {
+                                enemy.capturedShip = null;
+                            } else {
+                                enemy.capturedShip = null;
+                                if (playerShips.length < 2) {
+                                    playerShips.push({ x: enemy.x, y: enemy.y + 25 });
+                                } else {
+                                    score += 1000;
+                                }
+                            }
+                        }
+                        enemies.splice(j, 1);
+                        playerBullets.splice(i, 1);
+                        score += enemyTypes[enemy.type].points;
+                        break;
+                    }
+                }
+            }
+
+            for (let i = enemyBullets.length - 1; i >= 0; i--) {
+                const bullet = enemyBullets[i];
+                for (let j = playerShips.length - 1; j >= 0; j--) {
+                    const ship = playerShips[j];
+                    if (bullet.x > ship.x - 15 && bullet.x < ship.x + 15 && bullet.y > ship.y - 10 && bullet.y < ship.y + 10) {
+                        playerShips.splice(j, 1);
+                        enemyBullets.splice(i, 1);
+                        if (playerShips.length === 0) handlePlayerDeath();
+                        break;
+                    }
+                }
+            }
+
+            for (let i = tractorBeams.length - 1; i >= 0; i--) {
+                const beam = tractorBeams[i];
+                for (let j = playerShips.length - 1; j >= 0; j--) {
+                    const ship = playerShips[j];
+                    if (beam.x > ship.x - 15 && beam.x < ship.x + 15 && beam.y > ship.y - 10 && beam.y < ship.y + 10) {
+                        const captured = playerShips.splice(j, 1)[0];
+                        tractorBeams.splice(i, 1);
+                        for (let k = 0; k < enemies.length; k++) {
+                            if (enemies[k].type === 'boss' && !enemies[k].capturedShip) {
+                                enemies[k].capturedShip = { x: captured.x, y: captured.y };
+                                break;
+                            }
+                        }
+                        if (playerShips.length === 0) handlePlayerDeath();
+                        break;
+                    }
+                }
+            }
+        }
+
+        function handlePlayerDeath() {
+            lives--;
+            if (lives > 0) {
+                setTimeout(() => {
+                    playerShips.push({ x: canvas.width / 2, y: canvas.height - 50 });
+                }, 1000);
+            } else {
+                gameOver = true;
+            }
+        }
+
+        function checkLevelComplete() {
+            if (enemies.length === 0) {
+                level++;
+                createLevel();
+            }
+        }
+
+        // Game Loop
+        function gameLoop() {
+            if (gameOver) return;
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            updatePlayer();
+            updatePlayerBullets();
+            updateEnemies();
+            updateProjectiles();
+            checkCollisions();
+            checkLevelComplete();
+
+            playerShips.forEach(drawPlayerShip);
+            playerBullets.forEach(drawBullet);
+            enemyBullets.forEach(drawBullet);
+            tractorBeams.forEach(drawTractorBeam);
+            enemies.forEach(drawEnemy);
+            drawUI();
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start Game
+        createLevel();
+        gameLoop();
+    </script>
+</body>
+</html>
