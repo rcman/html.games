@@ -56,6 +56,66 @@
             background-color: rgba(0,0,0,0.7);
             padding: 20px;
             border-radius: 10px;
+            z-index: 10;
+        }
+        #restart-button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #ff0;
+            color: #000;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 18px;
+        }
+        #smoke-button {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            padding: 10px 20px;
+            background-color: #0af;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #level-display {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            font-size: 18px;
+        }
+        #lives-display {
+            position: absolute;
+            top: 40px;
+            left: 10px;
+            color: white;
+            font-size: 18px;
+        }
+        #instruction {
+            position: absolute;
+            bottom: 40px;
+            left: 10px;
+            color: #aaa;
+            font-size: 14px;
+        }
+    </style>100%;
+            background-color: #ff0;
+            width: 100%;
+        }
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 36px;
+            text-align: center;
+            display: none;
+            background-color: rgba(0,0,0,0.7);
+            padding: 20px;
+            border-radius: 10px;
         }
         #restart-button {
             margin-top: 20px;
@@ -191,13 +251,22 @@
                 for (let x = 0; x < width; x++) {
                     // 0 = path, 1 = wall
                     // Create outer walls and some random internal walls
-                    if (x === 0 || y === 0 || x === width - 1 || y === height - 1 || (Math.random() < 0.2)) {
+                    if (x === 0 || y === 0 || x === width - 1 || y === height - 1 || (Math.random() < 0.15)) {
                         row.push(1);
                     } else {
                         row.push(0);
                     }
                 }
                 maze.push(row);
+            }
+            
+            // Make sure starting area is clear (3x3 area from position 1,1)
+            for (let y = 1; y < 4; y++) {
+                for (let x = 1; x < 4; x++) {
+                    if (y < maze.length && x < maze[0].length) {
+                        maze[y][x] = 0;
+                    }
+                }
             }
             
             // Create some random pathways to ensure maze is traversable
@@ -213,9 +282,9 @@
             // Generate maze
             generateMaze();
             
-            // Create player
-            const playerX = GRID_SIZE * 2;
-            const playerY = GRID_SIZE * 2;
+            // Create player - position adjusted to be clearly inside an empty cell
+            const playerX = GRID_SIZE * 1.5;
+            const playerY = GRID_SIZE * 1.5;
             player = {
                 x: playerX,
                 y: playerY,
@@ -262,11 +331,24 @@
         // Create a new enemy at a random position
         function createEnemy() {
             let x, y;
-            // Find an empty spot
+            // Find an empty spot away from the player
             do {
-                x = Math.floor(Math.random() * (canvas.width - GRID_SIZE * 2)) + GRID_SIZE;
-                y = Math.floor(Math.random() * (canvas.height - GRID_SIZE * 2)) + GRID_SIZE;
-            } while (checkCollision(x, y, ENEMY_SIZE, ENEMY_SIZE, player.x, player.y, GRID_SIZE * 3, GRID_SIZE * 3));
+                x = Math.floor(Math.random() * (canvas.width - GRID_SIZE * 4)) + GRID_SIZE * 2;
+                y = Math.floor(Math.random() * (canvas.height - GRID_SIZE * 4)) + GRID_SIZE * 2;
+                
+                // Make sure we're not placing on a wall or rock
+                const gridX = Math.floor(x / GRID_SIZE);
+                const gridY = Math.floor(y / GRID_SIZE);
+                var validPosition = gridX >= 0 && gridX < maze[0].length && 
+                                    gridY >= 0 && gridY < maze.length && 
+                                    maze[gridY][gridX] === 0;
+                
+                // Keep away from player starting area
+                validPosition = validPosition && 
+                               (Math.abs(x - player.x) > GRID_SIZE * 3 || 
+                                Math.abs(y - player.y) > GRID_SIZE * 3);
+                
+            } while (!validPosition);
             
             return {
                 x: x,
@@ -472,19 +554,33 @@
 
         // Check collision with walls
         function checkWallCollision(x, y, width, height) {
-            // Convert pixel position to grid
-            const gridStartX = Math.floor((x - width / 2) / GRID_SIZE);
-            const gridEndX = Math.floor((x + width / 2) / GRID_SIZE);
-            const gridStartY = Math.floor((y - height / 2) / GRID_SIZE);
-            const gridEndY = Math.floor((y + height / 2) / GRID_SIZE);
+            // Use more precise collision detection
+            const margin = 4; // Small margin to make movement smoother
             
-            // Check collision with walls
-            for (let row = gridStartY; row <= gridEndY; row++) {
-                for (let col = gridStartX; col <= gridEndX; col++) {
+            // Get the corners of the player's bounding box with the margin
+            const left = x - width/2 + margin;
+            const right = x + width/2 - margin;
+            const top = y - height/2 + margin;
+            const bottom = y + height/2 - margin;
+            
+            // Convert corners to grid coordinates
+            const gridLeft = Math.floor(left / GRID_SIZE);
+            const gridRight = Math.floor(right / GRID_SIZE);
+            const gridTop = Math.floor(top / GRID_SIZE);
+            const gridBottom = Math.floor(bottom / GRID_SIZE);
+            
+            // Check each grid cell the player might occupy
+            for (let row = gridTop; row <= gridBottom; row++) {
+                for (let col = gridLeft; col <= gridRight; col++) {
+                    // Make sure we're within the maze bounds
                     if (row >= 0 && row < maze.length && col >= 0 && col < maze[0].length) {
+                        // Check if this grid cell is a wall
                         if (maze[row][col] === 1) {
                             return true;
                         }
+                    } else {
+                        // Outside maze bounds is considered a collision
+                        return true;
                     }
                 }
             }
@@ -494,9 +590,22 @@
 
         // Check collision with rocks
         function checkRockCollision(x, y, width, height) {
+            const margin = 4; // Small margin to make movement smoother
+            
             for (const rock of rocks) {
-                if (checkCollision(x - width / 2, y - height / 2, width, height, 
-                                 rock.x - rock.width / 2, rock.y - rock.width / 2, rock.width, rock.height)) {
+                // Calculate the actual width/height to use for collision
+                const effectivePlayerWidth = width - margin * 2;
+                const effectivePlayerHeight = height - margin * 2;
+                
+                if (checkCollision(
+                        x - effectivePlayerWidth / 2, 
+                        y - effectivePlayerHeight / 2, 
+                        effectivePlayerWidth, 
+                        effectivePlayerHeight, 
+                        rock.x - rock.width / 2, 
+                        rock.y - rock.width / 2, 
+                        rock.width, 
+                        rock.height)) {
                     return true;
                 }
             }
@@ -588,9 +697,58 @@
                 const newX = enemy.x + dx;
                 const newY = enemy.y + dy;
                 
-                // Check collision with walls and rocks
-                const canMove = !checkWallCollision(newX, newY, enemy.width, enemy.height) &&
-                               !checkRockCollision(newX, newY, enemy.width, enemy.height);
+                // Use modified collision checks with margin
+                const margin = 4; // Small margin to make movement smoother
+                const effectiveWidth = enemy.width - margin * 2;
+                const effectiveHeight = enemy.height - margin * 2;
+                
+                // Check collision with walls - using the same logic as for player but with a margin
+                let canMove = true;
+                
+                // Convert to grid coordinates with margin
+                const left = newX - effectiveWidth/2;
+                const right = newX + effectiveWidth/2;
+                const top = newY - effectiveHeight/2;
+                const bottom = newY + effectiveHeight/2;
+                
+                const gridLeft = Math.floor(left / GRID_SIZE);
+                const gridRight = Math.floor(right / GRID_SIZE);
+                const gridTop = Math.floor(top / GRID_SIZE);
+                const gridBottom = Math.floor(bottom / GRID_SIZE);
+                
+                // Check for wall collision
+                checkLoop: 
+                for (let row = gridTop; row <= gridBottom; row++) {
+                    for (let col = gridLeft; col <= gridRight; col++) {
+                        if (row >= 0 && row < maze.length && col >= 0 && col < maze[0].length) {
+                            if (maze[row][col] === 1) {
+                                canMove = false;
+                                break checkLoop;
+                            }
+                        } else {
+                            canMove = false;
+                            break checkLoop;
+                        }
+                    }
+                }
+                
+                // Check for rock collision
+                if (canMove) {
+                    for (const rock of rocks) {
+                        if (checkCollision(
+                            newX - effectiveWidth/2, 
+                            newY - effectiveHeight/2, 
+                            effectiveWidth, 
+                            effectiveHeight,
+                            rock.x - rock.width/2, 
+                            rock.y - rock.height/2, 
+                            rock.width, 
+                            rock.height)) {
+                            canMove = false;
+                            break;
+                        }
+                    }
+                }
                 
                 // Move enemy if possible or change direction
                 if (canMove) {
@@ -640,10 +798,20 @@
                 gameOver = true;
                 document.getElementById('game-over').style.display = 'block';
             } else {
-                // Reset position
-                player.x = GRID_SIZE * 2;
-                player.y = GRID_SIZE * 2;
+                // Reset position to a safe spot
+                player.x = GRID_SIZE * 1.5;
+                player.y = GRID_SIZE * 1.5;
                 player.fuel = 100;
+                
+                // Clear smoke
+                player.smokeClouds = [];
+                smokeActive = false;
+                smokeAvailable = true;
+                
+                // Reset smoke button
+                if (smokeTimeout) clearTimeout(smokeTimeout);
+                if (smokeCooldownTimeout) clearTimeout(smokeCooldownTimeout);
+                document.getElementById('smoke-button').style.backgroundColor = '#0af';
             }
         }
 
