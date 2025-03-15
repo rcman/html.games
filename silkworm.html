@@ -31,22 +31,6 @@
             left: 0;
         }
         
-        #background-canvas {
-            z-index: 1;
-        }
-        
-        #foreground-canvas {
-            z-index: 2;
-        }
-        
-        #game-canvas {
-            z-index: 3;
-        }
-        
-        #ui-canvas {
-            z-index: 4;
-        }
-        
         #start-screen {
             position: absolute;
             top: 0;
@@ -115,10 +99,7 @@
 </head>
 <body>
     <div id="game-container">
-        <canvas id="background-canvas" width="800" height="600"></canvas>
-        <canvas id="foreground-canvas" width="800" height="600"></canvas>
         <canvas id="game-canvas" width="800" height="600"></canvas>
-        <canvas id="ui-canvas" width="800" height="600"></canvas>
         
         <div id="start-screen">
             <h1 id="game-title">SILKWORM</h1>
@@ -161,130 +142,35 @@
         let powerups = [];
         let backgroundOffset1 = 0;
         let backgroundOffset2 = 0;
-        let foregroundOffset = 0;
         
         // Get canvas and context
-        const backgroundCanvas = document.getElementById('background-canvas');
-        const backgroundCtx = backgroundCanvas.getContext('2d');
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
         
-        const foregroundCanvas = document.getElementById('foreground-canvas');
-        const foregroundCtx = foregroundCanvas.getContext('2d');
+        // Colors for simple rendering
+        const COLORS = {
+            sky: '#87CEEB',
+            ground: '#8B4513',
+            mountains: '#654321',
+            clouds: '#FFFFFF',
+            road: '#555555',
+            roadLines: '#FFFFFF',
+            helicopter: '#FF0000',
+            jeep: '#00FF00',
+            bullet: '#FFFF00',
+            enemyGround: '#FF00FF',
+            enemyAir: '#00FFFF',
+            powerupWeapon: '#FF0000',
+            powerupLife: '#00FF00',
+            explosion: '#FFA500'
+        };
         
-        const gameCanvas = document.getElementById('game-canvas');
-        const gameCtx = gameCanvas.getContext('2d');
-        
-        const uiCanvas = document.getElementById('ui-canvas');
-        const uiCtx = uiCanvas.getContext('2d');
-        
-        // Game assets
-        const sprites = {};
-        let assetsLoaded = 0;
-        const requiredAssets = 7;
-        
-        // Load assets
-        function loadSprite(name, src) {
-            sprites[name] = new Image();
-            sprites[name].onload = function() {
-                assetsLoaded++;
-                if (assetsLoaded === requiredAssets) {
-                    initBackgrounds();
-                }
-            };
-            sprites[name].src = src;
-        }
-        
-        // Create placeholder images
-        loadSprite('helicopter', '/api/placeholder/64/32');
-        loadSprite('jeep', '/api/placeholder/64/32');
-        loadSprite('enemy1', '/api/placeholder/48/32');
-        loadSprite('enemy2', '/api/placeholder/48/48');
-        loadSprite('background', '/api/placeholder/800/1200');
-        loadSprite('foreground', '/api/placeholder/800/600');
-        loadSprite('explosion', '/api/placeholder/64/64');
-        
-        // Initialize background patterns
-        function initBackgrounds() {
-            // Create background pattern (mountains and clouds)
-            const bgPattern = backgroundCtx.createLinearGradient(0, 0, 0, GAME_HEIGHT);
-            bgPattern.addColorStop(0, '#87CEEB');   // Sky blue
-            bgPattern.addColorStop(0.7, '#B0E0E6');
-            bgPattern.addColorStop(1, '#D2B48C');   // Sand color
-            
-            backgroundCtx.fillStyle = bgPattern;
-            backgroundCtx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-            
-            // Create distant mountains
-            backgroundCtx.fillStyle = '#8B4513';
-            for (let i = 0; i < 10; i++) {
-                drawMountain(backgroundCtx, i * 100, 400, 100, 200);
-            }
-            
-            // Create clouds
-            backgroundCtx.fillStyle = 'rgba(255, 255, 255, 0.8)';
-            for (let i = 0; i < 8; i++) {
-                drawCloud(backgroundCtx, i * 120, 50 + Math.random() * 100);
-            }
-            
-            // Create a copy of the background for scrolling
-            sprites.background.src = backgroundCanvas.toDataURL();
-            
-            // Create foreground pattern (ground details)
-            foregroundCtx.fillStyle = '#D2B48C';  // Sand color
-            foregroundCtx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-            
-            // Draw terrain details
-            for (let i = 0; i < 20; i++) {
-                foregroundCtx.fillStyle = `rgba(139, 69, 19, ${Math.random() * 0.3 + 0.1})`;
-                foregroundCtx.beginPath();
-                foregroundCtx.arc(Math.random() * GAME_WIDTH, GAME_HEIGHT - Math.random() * 100, 
-                    Math.random() * 20 + 5, 0, Math.PI * 2);
-                foregroundCtx.fill();
-            }
-            
-            // Create road
-            foregroundCtx.fillStyle = '#555';
-            foregroundCtx.fillRect(0, GAME_HEIGHT - 100, GAME_WIDTH, 50);
-            
-            // Road markings
-            foregroundCtx.fillStyle = '#FFF';
-            for (let i = 0; i < 20; i++) {
-                foregroundCtx.fillRect(i * 50, GAME_HEIGHT - 75, 30, 5);
-            }
-            
-            // Create a copy of the foreground for scrolling
-            sprites.foreground.src = foregroundCanvas.toDataURL();
-            
-            // Clear the canvases to prepare for game rendering
-            backgroundCtx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-            foregroundCtx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-        }
-        
-        // Draw a simple mountain
-        function drawMountain(ctx, x, y, width, height) {
-            ctx.beginPath();
-            ctx.moveTo(x, y);
-            ctx.lineTo(x + width/2, y - height);
-            ctx.lineTo(x + width, y);
-            ctx.closePath();
-            ctx.fill();
-        }
-        
-        // Draw a simple cloud
-        function drawCloud(ctx, x, y) {
-            ctx.beginPath();
-            ctx.arc(x, y, 20, 0, Math.PI * 2);
-            ctx.arc(x + 15, y - 10, 15, 0, Math.PI * 2);
-            ctx.arc(x + 25, y, 20, 0, Math.PI * 2);
-            ctx.arc(x + 15, y + 10, 15, 0, Math.PI * 2);
-            ctx.fill();
-        }
-        
-        // Player class
+        // Simple Player class
         class Player {
             constructor(type) {
                 this.type = type;
-                this.width = 64;
-                this.height = 32;
+                this.width = 40;
+                this.height = 20;
                 this.x = 100;
                 this.y = type === 'helicopter' ? 200 : GAME_HEIGHT - 150;
                 this.speedX = 0;
@@ -303,7 +189,7 @@
                 this.x = Math.max(0, Math.min(GAME_WIDTH - this.width, this.x));
                 
                 if (this.type === 'helicopter') {
-                    this.y = Math.max(0, Math.min(GAME_HEIGHT - 200, this.y));
+                    this.y = Math.max(50, Math.min(GAME_HEIGHT - 200, this.y));
                 } else {
                     this.y = Math.max(GAME_HEIGHT - 150, Math.min(GAME_HEIGHT - 100, this.y));
                 }
@@ -318,10 +204,16 @@
                     return; // Flash when invulnerable
                 }
                 
+                ctx.fillStyle = this.type === 'helicopter' ? COLORS.helicopter : COLORS.jeep;
+                
                 if (this.type === 'helicopter') {
-                    gameCtx.drawImage(sprites.helicopter, this.x, this.y, this.width, this.height);
+                    // Simple helicopter shape
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                    ctx.fillRect(this.x + this.width / 2 - 5, this.y - 5, 10, 5);
                 } else {
-                    gameCtx.drawImage(sprites.jeep, this.x, this.y, this.width, this.height);
+                    // Simple jeep shape
+                    ctx.fillRect(this.x, this.y, this.width, this.height);
+                    ctx.fillRect(this.x + 5, this.y - 5, this.width - 10, 5);
                 }
             }
             
@@ -382,13 +274,13 @@
         // Enemy class constructor function
         function createEnemy() {
             const type = Math.random() < 0.5 ? 'ground' : 'air';
-            const y = type === 'ground' ? GAME_HEIGHT - 130 : Math.random() * (GAME_HEIGHT - 200);
+            const y = type === 'ground' ? GAME_HEIGHT - 130 : 100 + Math.random() * (GAME_HEIGHT - 300);
             
             return {
                 x: GAME_WIDTH,
                 y: y,
-                width: 48,
-                height: type === 'ground' ? 32 : 48,
+                width: 30,
+                height: 20,
                 type: type,
                 health: 2,
                 speed: ENEMY_SPEED
@@ -400,9 +292,9 @@
             const type = Math.random() < 0.7 ? 'weapon' : 'life';
             return {
                 x: GAME_WIDTH,
-                y: Math.random() * (GAME_HEIGHT - 200),
-                width: 30,
-                height: 30,
+                y: 100 + Math.random() * (GAME_HEIGHT - 300),
+                width: 20,
+                height: 20,
                 type: type
             };
         }
@@ -477,7 +369,7 @@
                                 width: enemies[i].width,
                                 height: enemies[i].height,
                                 frame: 0,
-                                maxFrame: 10
+                                maxFrame: 15
                             });
                             
                             // Remove enemy and add score
@@ -499,7 +391,7 @@
                         width: enemies[i].width,
                         height: enemies[i].height,
                         frame: 0,
-                        maxFrame: 10
+                        maxFrame: 15
                     });
                     
                     enemies.splice(i, 1);
@@ -548,30 +440,53 @@
             
             // Update scrolling backgrounds
             backgroundOffset1 = (backgroundOffset1 + SCROLL_SPEED * 0.5) % GAME_WIDTH;
-            backgroundOffset2 = (backgroundOffset2 + SCROLL_SPEED * 0.7) % GAME_WIDTH;
-            foregroundOffset = (foregroundOffset + SCROLL_SPEED) % GAME_WIDTH;
+            backgroundOffset2 = (backgroundOffset2 + SCROLL_SPEED * 0.8) % GAME_WIDTH;
         }
         
         // Draw game elements
         function draw() {
-            // Clear canvases
-            backgroundCtx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-            foregroundCtx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-            gameCtx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
-            uiCtx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            // Clear canvas
+            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
             
-            // Draw background layers (dual playfield effect)
-            backgroundCtx.drawImage(sprites.background, backgroundOffset1, 0, GAME_WIDTH, GAME_HEIGHT, 0, 0, GAME_WIDTH, GAME_HEIGHT);
-            backgroundCtx.drawImage(sprites.background, -GAME_WIDTH + backgroundOffset1, 0, GAME_WIDTH, GAME_HEIGHT, 0, 0, GAME_WIDTH, GAME_HEIGHT);
+            // Draw sky background
+            ctx.fillStyle = COLORS.sky;
+            ctx.fillRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
             
-            backgroundCtx.globalAlpha = 0.5;
-            backgroundCtx.drawImage(sprites.background, backgroundOffset2, 0, GAME_WIDTH, GAME_HEIGHT, 0, 0, GAME_WIDTH, GAME_HEIGHT);
-            backgroundCtx.drawImage(sprites.background, -GAME_WIDTH + backgroundOffset2, 0, GAME_WIDTH, GAME_HEIGHT, 0, 0, GAME_WIDTH, GAME_HEIGHT);
-            backgroundCtx.globalAlpha = 1;
+            // Draw clouds (background layer 1)
+            ctx.fillStyle = COLORS.clouds;
+            for (let i = 0; i < 5; i++) {
+                const cloudX = (i * 200 + backgroundOffset1) % GAME_WIDTH - 100;
+                drawCloud(cloudX, 100);
+            }
             
-            // Draw foreground layer
-            foregroundCtx.drawImage(sprites.foreground, foregroundOffset, 0, GAME_WIDTH, GAME_HEIGHT, 0, 0, GAME_WIDTH, GAME_HEIGHT);
-            foregroundCtx.drawImage(sprites.foreground, -GAME_WIDTH + foregroundOffset, 0, GAME_WIDTH, GAME_HEIGHT, 0, 0, GAME_WIDTH, GAME_HEIGHT);
+            // Draw distant mountains (background layer 1)
+            ctx.fillStyle = COLORS.mountains;
+            for (let i = 0; i < 4; i++) {
+                const mountainX = (i * 250 + backgroundOffset1) % GAME_WIDTH - 50;
+                drawMountain(mountainX, GAME_HEIGHT - 200, 150, 100);
+            }
+            
+            // Draw closer mountains (background layer 2)
+            ctx.fillStyle = COLORS.mountains;
+            for (let i = 0; i < 3; i++) {
+                const mountainX = (i * 350 + backgroundOffset2) % GAME_WIDTH - 100;
+                drawMountain(mountainX, GAME_HEIGHT - 150, 200, 150);
+            }
+            
+            // Draw ground
+            ctx.fillStyle = COLORS.ground;
+            ctx.fillRect(0, GAME_HEIGHT - 100, GAME_WIDTH, 100);
+            
+            // Draw road
+            ctx.fillStyle = COLORS.road;
+            ctx.fillRect(0, GAME_HEIGHT - 90, GAME_WIDTH, 40);
+            
+            // Draw road markings
+            ctx.fillStyle = COLORS.roadLines;
+            for (let i = 0; i < 20; i++) {
+                const lineX = (i * 50 + backgroundOffset2 * 2) % GAME_WIDTH;
+                ctx.fillRect(lineX, GAME_HEIGHT - 70, 30, 5);
+            }
             
             // Draw player
             if (player) {
@@ -579,70 +494,98 @@
             }
             
             // Draw bullets
-            gameCtx.fillStyle = '#ffff00';
+            ctx.fillStyle = COLORS.bullet;
             for (const bullet of bullets) {
-                gameCtx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
             }
             
             // Draw enemies
             for (const enemy of enemies) {
+                ctx.fillStyle = enemy.type === 'ground' ? COLORS.enemyGround : COLORS.enemyAir;
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                
+                // Draw simple enemy details
                 if (enemy.type === 'ground') {
-                    gameCtx.drawImage(sprites.enemy1, enemy.x, enemy.y, enemy.width, enemy.height);
+                    // Tank-like shape
+                    ctx.fillRect(enemy.x - 5, enemy.y + 5, 5, 10);
                 } else {
-                    gameCtx.drawImage(sprites.enemy2, enemy.x, enemy.y, enemy.width, enemy.height);
+                    // Helicopter-like shape
+                    ctx.fillRect(enemy.x + enemy.width / 2 - 5, enemy.y - 5, 10, 5);
                 }
             }
             
             // Draw powerups
             for (const powerup of powerups) {
-                gameCtx.fillStyle = powerup.type === 'weapon' ? '#ff0000' : '#00ff00';
-                gameCtx.beginPath();
-                gameCtx.arc(powerup.x + powerup.width/2, powerup.y + powerup.height/2, powerup.width/2, 0, Math.PI * 2);
-                gameCtx.fill();
+                ctx.fillStyle = powerup.type === 'weapon' ? COLORS.powerupWeapon : COLORS.powerupLife;
+                ctx.beginPath();
+                ctx.arc(powerup.x + powerup.width/2, powerup.y + powerup.height/2, powerup.width/2, 0, Math.PI * 2);
+                ctx.fill();
                 
-                gameCtx.fillStyle = '#ffffff';
-                gameCtx.font = '20px Arial';
-                gameCtx.textAlign = 'center';
-                gameCtx.textBaseline = 'middle';
-                gameCtx.fillText(powerup.type === 'weapon' ? 'W' : 'L', powerup.x + powerup.width/2, powerup.y + powerup.height/2);
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '15px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(powerup.type === 'weapon' ? 'W' : 'L', powerup.x + powerup.width/2, powerup.y + powerup.height/2);
             }
             
             // Draw explosions
             for (const explosion of explosions) {
                 const alpha = 1 - explosion.frame / explosion.maxFrame;
-                const size = explosion.width * (1 + explosion.frame / 5);
+                const size = explosion.width * (1 + explosion.frame / 3);
                 
-                gameCtx.globalAlpha = alpha;
-                gameCtx.drawImage(
-                    sprites.explosion, 
-                    explosion.x - size/2 + explosion.width/2, 
-                    explosion.y - size/2 + explosion.height/2, 
-                    size, 
-                    size
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = COLORS.explosion;
+                ctx.beginPath();
+                ctx.arc(
+                    explosion.x + explosion.width/2,
+                    explosion.y + explosion.height/2,
+                    size/2,
+                    0,
+                    Math.PI * 2
                 );
-                gameCtx.globalAlpha = 1;
+                ctx.fill();
+                ctx.globalAlpha = 1;
             }
             
             // Draw UI
-            uiCtx.fillStyle = '#ffffff';
-            uiCtx.font = '20px Arial';
-            uiCtx.textAlign = 'left';
-            uiCtx.fillText(`Score: ${score}`, 20, 30);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Score: ${score}`, 20, 30);
             
             // Draw lives
-            uiCtx.fillText('Lives:', 20, 60);
+            ctx.fillText('Lives:', 20, 60);
             for (let i = 0; i < lives; i++) {
-                uiCtx.fillStyle = '#ff0000';
-                uiCtx.fillRect(90 + i * 30, 45, 20, 20);
+                ctx.fillStyle = '#FF0000';
+                ctx.fillRect(90 + i * 30, 45, 20, 20);
             }
             
             // Draw power level
-            uiCtx.fillStyle = '#ffffff';
-            uiCtx.fillText('Power:', 20, 90);
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillText('Power:', 20, 90);
             for (let i = 0; i < player.powerLevel; i++) {
-                uiCtx.fillStyle = '#ffff00';
-                uiCtx.fillRect(90 + i * 30, 75, 20, 20);
+                ctx.fillStyle = '#FFFF00';
+                ctx.fillRect(90 + i * 30, 75, 20, 20);
             }
+        }
+        
+        // Helper functions for drawing
+        function drawMountain(x, y, width, height) {
+            ctx.beginPath();
+            ctx.moveTo(x, y);
+            ctx.lineTo(x + width/2, y - height);
+            ctx.lineTo(x + width, y);
+            ctx.closePath();
+            ctx.fill();
+        }
+        
+        function drawCloud(x, y) {
+            ctx.beginPath();
+            ctx.arc(x, y, 20, 0, Math.PI * 2);
+            ctx.arc(x + 15, y - 10, 15, 0, Math.PI * 2);
+            ctx.arc(x + 25, y, 20, 0, Math.PI * 2);
+            ctx.arc(x + 15, y + 10, 15, 0, Math.PI * 2);
+            ctx.fill();
         }
         
         // Collision detection
@@ -666,6 +609,11 @@
                 } else if (playerType === 'jeep' && e.key === 'f') {
                     player.fire();
                 }
+            }
+            
+            // Prevent scrolling with arrow keys
+            if(['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) {
+                e.preventDefault();
             }
         });
         
