@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Safari Helicopter: Seek and Destroy</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #333;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+        }
+        
+        #game-canvas {
+            background-color: #8BC34A;
+            border: 2px solid #4CAF50;
+        }
+        
+        #ui-container {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 18px;
+            text-shadow: 2px 2px 2px rgba(0, 0, 0, 0.5);
+        }
+        
+        #start-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #FFC107;
+            text-shadow: 3px 3px 5px rgba(0, 0, 0, 0.8);
+        }
+        
+        p {
+            font-size: 18px;
+            margin-bottom: 30px;
+            max-width: 500px;
+        }
+        
+        button {
+            background-color: #FF5722;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 20px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #E64A19;
+        }
+        
+        #game-over-screen {
+            display: none;
+        }
+        
+        #final-score {
+            font-size: 36px;
+            color: #FFC107;
+            margin: 10px 0 30px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas" width="800" height="600"></canvas>
+        
+        <div id="ui-container">
+            <div id="score">Score: 0</div>
+            <div id="fuel">Fuel: 100%</div>
+            <div id="timer">Time: 120</div>
+        </div>
+        
+        <div id="start-screen">
+            <h1>Safari Helicopter: Seek and Destroy</h1>
+            <p>Control your helicopter with WASD or arrow keys. Hunt animals to score points before time runs out. Collect fuel cans to keep flying!</p>
+            <button id="start-button">Start Game</button>
+        </div>
+        
+        <div id="game-over-screen">
+            <h1>Game Over</h1>
+            <p>Your final score:</p>
+            <div id="final-score">0</div>
+            <button id="restart-button">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Game variables
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('start-screen');
+        const gameOverScreen = document.getElementById('game-over-screen');
+        const startButton = document.getElementById('start-button');
+        const restartButton = document.getElementById('restart-button');
+        const scoreDisplay = document.getElementById('score');
+        const fuelDisplay = document.getElementById('fuel');
+        const timerDisplay = document.getElementById('timer');
+        const finalScoreDisplay = document.getElementById('final-score');
+        
+        let gameActive = false;
+        let score = 0;
+        let fuel = 100;
+        let gameTime = 120; // 2 minutes
+        let gameLoop;
+        let timerInterval;
+        
+        // Game objects
+        let helicopter = {
+            x: 400,
+            y: 300,
+            width: 60,
+            height: 30,
+            speed: 5,
+            direction: 0, // 0: right, 1: down, 2: left, 3: up
+            moving: {
+                up: false,
+                down: false,
+                left: false,
+                right: false
+            },
+            fuelConsumption: 0.05
+        };
+        
+        let animals = [];
+        let fuelCans = [];
+        let bullets = [];
+        let explosions = [];
+        let trees = [];
+        
+        // Animal types
+        const animalTypes = [
+            { name: 'elephant', width: 40, height: 30, speed: 0.5, points: 20, color: '#795548' },
+            { name: 'lion', width: 30, height: 25, speed: 1.2, points: 15, color: '#FF9800' },
+            { name: 'zebra', width: 35, height: 25, speed: 2.0, points: 10, color: '#E0E0E0' },
+            { name: 'giraffe', width: 25, height: 45, speed: 0.7, points: 25, color: '#FFC107' }
+        ];
+        
+        // Initialize the game
+        function initGame() {
+            // Reset game state
+            score = 0;
+            fuel = 100;
+            gameTime = 120;
+            
+            // Reset helicopter position
+            helicopter.x = 400;
+            helicopter.y = 300;
+            helicopter.direction = 0;
+            
+            // Clear all arrays
+            animals = [];
+            fuelCans = [];
+            bullets = [];
+            explosions = [];
+            trees = [];
+            
+            // Generate initial trees (obstacles)
+            for (let i = 0; i < 20; i++) {
+                generateTree();
+            }
+            
+            // Generate initial animals
+            for (let i = 0; i < 8; i++) {
+                generateAnimal();
+            }
+            
+            // Generate initial fuel cans
+            for (let i = 0; i < 3; i++) {
+                generateFuelCan();
+            }
+            
+            // Update UI
+            scoreDisplay.textContent = 'Score: ' + score;
+            fuelDisplay.textContent = 'Fuel: ' + Math.floor(fuel) + '%';
+            timerDisplay.textContent = 'Time: ' + gameTime;
+            
+            // Start game loop
+            if (gameLoop) clearInterval(gameLoop);
+            gameLoop = setInterval(update, 1000 / 60); // 60 FPS
+            
+            // Start timer
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                gameTime--;
+                timerDisplay.textContent = 'Time: ' + gameTime;
+                
+                if (gameTime <= 0) {
+                    endGame();
+                }
+            }, 1000);
+            
+            // Hide start screen
+            startScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            
+            // Set game as active
+            gameActive = true;
+        }
+        
+        // Generate a random animal
+        function generateAnimal() {
+            const animalType = animalTypes[Math.floor(Math.random() * animalTypes.length)];
+            let x, y;
+            let validPosition = false;
+            
+            while (!validPosition) {
+                x = Math.random() * (canvas.width - animalType.width);
+                y = Math.random() * (canvas.height - animalType.height);
+                
+                // Make sure animals don't spawn too close to the helicopter
+                if (Math.abs(x - helicopter.x) > 100 || Math.abs(y - helicopter.y) > 100) {
+                    validPosition = true;
+                }
+            }
+            
+            animals.push({
+                x: x,
+                y: y,
+                width: animalType.width,
+                height: animalType.height,
+                type: animalType.name,
+                speed: animalType.speed,
+                points: animalType.points,
+                color: animalType.color,
+                direction: Math.random() * Math.PI * 2,
+                directionChangeTimer: 0
+            });
+        }
+        
+        // Generate a random fuel can
+        function generateFuelCan() {
+            fuelCans.push({
+                x: Math.random() * (canvas.width - 20),
+                y: Math.random() * (canvas.height - 20),
+                width: 20,
+                height: 20
+            });
+        }
+        
+        // Generate a random tree
+        function generateTree() {
+            const size = 20 + Math.random() * 30;
+            trees.push({
+                x: Math.random() * (canvas.width - size),
+                y: Math.random() * (canvas.height - size),
+                radius: size / 2,
+                color: '#2E7D32'
+            });
+        }
+        
+        // Create an explosion
+        function createExplosion(x, y) {
+            explosions.push({
+                x: x,
+                y: y,
+                radius: 5,
+                maxRadius: 30,
+                opacity: 1,
+                growing: true
+            });
+        }
+        
+        // Create a bullet
+        function fireBullet() {
+            let bulletX, bulletY, bulletDirection;
+            
+            switch (helicopter.direction) {
+                case 0: // right
+                    bulletX = helicopter.x + helicopter.width;
+                    bulletY = helicopter.y + helicopter.height / 2;
+                    bulletDirection = 0;
+                    break;
+                case 1: // down
+                    bulletX = helicopter.x + helicopter.width / 2;
+                    bulletY = helicopter.y + helicopter.height;
+                    bulletDirection = Math.PI / 2;
+                    break;
+                case 2: // left
+                    bulletX = helicopter.x;
+                    bulletY = helicopter.y + helicopter.height / 2;
+                    bulletDirection = Math.PI;
+                    break;
+                case 3: // up
+                    bulletX = helicopter.x + helicopter.width / 2;
+                    bulletY = helicopter.y;
+                    bulletDirection = -Math.PI / 2;
+                    break;
+            }
+            
+            bullets.push({
+                x: bulletX,
+                y: bulletY,
+                speed: 10,
+                direction: bulletDirection,
+                active: true
+            });
+        }
+        
+        // Game update function
+        function update() {
+            if (!gameActive) return;
+            
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw terrain (grassland with some variations)
+            drawTerrain();
+            
+            // Update helicopter position
+            updateHelicopter();
+            
+            // Update animals
+            updateAnimals();
+            
+            // Update fuel cans
+            updateFuelCans();
+            
+            // Update and draw trees
+            updateTrees();
+            
+            // Update bullets
+            updateBullets();
+            
+            // Update explosions
+            updateExplosions();
+            
+            // Draw helicopter
+            drawHelicopter();
+            
+            // Check fuel level
+            if (fuel <= 0) {
+                endGame();
+            }
+        }
+        
+        // Draw the terrain
+        function drawTerrain() {
+            // Draw base grass
+            ctx.fillStyle = '#8BC34A';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw random darker grass patches
+            ctx.fillStyle = '#689F38';
+            for (let i = 0; i < 20; i++) {
+                const x = Math.random() * canvas.width;
+                const y = Math.random() * canvas.height;
+                const size = 30 + Math.random() * 50;
+                ctx.beginPath();
+                ctx.ellipse(x, y, size, size / 2, 0, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // Update helicopter position and fuel
+        function updateHelicopter() {
+            // Move helicopter based on input
+            if (helicopter.moving.up) {
+                helicopter.y -= helicopter.speed;
+                helicopter.direction = 3;
+            }
+            if (helicopter.moving.down) {
+                helicopter.y += helicopter.speed;
+                helicopter.direction = 1;
+            }
+            if (helicopter.moving.left) {
+                helicopter.x -= helicopter.speed;
+                helicopter.direction = 2;
+            }
+            if (helicopter.moving.right) {
+                helicopter.x += helicopter.speed;
+                helicopter.direction = 0;
+            }
+            
+            // Keep helicopter within canvas bounds
+            if (helicopter.x < 0) helicopter.x = 0;
+            if (helicopter.x > canvas.width - helicopter.width) helicopter.x = canvas.width - helicopter.width;
+            if (helicopter.y < 0) helicopter.y = 0;
+            if (helicopter.y > canvas.height - helicopter.height) helicopter.y = canvas.height - helicopter.height;
+            
+            // Consume fuel if moving
+            if (helicopter.moving.up || helicopter.moving.down || helicopter.moving.left || helicopter.moving.right) {
+                fuel -= helicopter.fuelConsumption;
+                fuel = Math.max(0, fuel);
+                fuelDisplay.textContent = 'Fuel: ' + Math.floor(fuel) + '%';
+            }
+        }
+        
+        // Update animal positions
+        function updateAnimals() {
+            for (let i = animals.length - 1; i >= 0; i--) {
+                const animal = animals[i];
+                
+                // Update direction change timer
+                animal.directionChangeTimer -= 1/60;
+                
+                // Randomly change direction
+                if (animal.directionChangeTimer <= 0) {
+                    animal.direction += (Math.random() - 0.5) * Math.PI / 2;
+                    animal.directionChangeTimer = 2 + Math.random() * 3; // 2-5 seconds
+                }
+                
+                // Move animal in its direction
+                animal.x += Math.cos(animal.direction) * animal.speed;
+                animal.y += Math.sin(animal.direction) * animal.speed;
+                
+                // Keep animals within canvas bounds
+                if (animal.x < 0 || animal.x > canvas.width - animal.width) {
+                    animal.direction = Math.PI - animal.direction;
+                    animal.x = Math.max(0, Math.min(canvas.width - animal.width, animal.x));
+                }
+                if (animal.y < 0 || animal.y > canvas.height - animal.height) {
+                    animal.direction = -animal.direction;
+                    animal.y = Math.max(0, Math.min(canvas.height - animal.height, animal.y));
+                }
+                
+                // Draw animal
+                ctx.fillStyle = animal.color;
+                ctx.fillRect(animal.x, animal.y, animal.width, animal.height);
+                
+                // Add eyes
+                ctx.fillStyle = 'black';
+                let eyeX, eyeY;
+                
+                if (Math.cos(animal.direction) > 0) {
+                    // Facing right
+                    eyeX = animal.x + animal.width * 0.8;
+                } else {
+                    // Facing left
+                    eyeX = animal.x + animal.width * 0.2;
+                }
+                
+                eyeY = animal.y + animal.height * 0.3;
+                ctx.beginPath();
+                ctx.arc(eyeX, eyeY, 2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // Update fuel cans
+        function updateFuelCans() {
+            for (let i = fuelCans.length - 1; i >= 0; i--) {
+                const fuelCan = fuelCans[i];
+                
+                // Draw fuel can
+                ctx.fillStyle = 'red';
+                ctx.fillRect(fuelCan.x, fuelCan.y, fuelCan.width, fuelCan.height);
+                
+                // Add details to fuel can
+                ctx.strokeStyle = 'white';
+                ctx.beginPath();
+                ctx.moveTo(fuelCan.x + 5, fuelCan.y + 5);
+                ctx.lineTo(fuelCan.x + fuelCan.width - 5, fuelCan.y + 5);
+                ctx.lineTo(fuelCan.x + fuelCan.width - 5, fuelCan.y + fuelCan.height - 5);
+                ctx.lineTo(fuelCan.x + 5, fuelCan.y + fuelCan.height - 5);
+                ctx.lineTo(fuelCan.x + 5, fuelCan.y + 5);
+                ctx.stroke();
+                
+                // Check collision with helicopter
+                if (checkCollision(helicopter, fuelCan)) {
+                    // Collect fuel can
+                    fuelCans.splice(i, 1);
+                    fuel = Math.min(100, fuel + 25);
+                    fuelDisplay.textContent = 'Fuel: ' + Math.floor(fuel) + '%';
+                    
+                    // Generate a new fuel can
+                    generateFuelCan();
+                }
+            }
+        }
+        
+        // Update and draw trees
+        function updateTrees() {
+            for (let i = 0; i < trees.length; i++) {
+                const tree = trees[i];
+                
+                // Draw tree trunk
+                ctx.fillStyle = '#795548';
+                ctx.fillRect(tree.x + tree.radius - 5, tree.y + tree.radius, 10, tree.radius);
+                
+                // Draw tree foliage
+                ctx.fillStyle = tree.color;
+                ctx.beginPath();
+                ctx.arc(tree.x + tree.radius, tree.y + tree.radius, tree.radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Check collision with helicopter
+                const helicopterCenterX = helicopter.x + helicopter.width / 2;
+                const helicopterCenterY = helicopter.y + helicopter.height / 2;
+                const treeCenterX = tree.x + tree.radius;
+                const treeCenterY = tree.y + tree.radius;
+                
+                const dx = helicopterCenterX - treeCenterX;
+                const dy = helicopterCenterY - treeCenterY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance < helicopter.width / 2 + tree.radius) {
+                    // Push helicopter away from tree
+                    const angle = Math.atan2(dy, dx);
+                    helicopter.x += Math.cos(angle) * 2;
+                    helicopter.y += Math.sin(angle) * 2;
+                    
+                    // Keep helicopter within canvas bounds
+                    helicopter.x = Math.max(0, Math.min(canvas.width - helicopter.width, helicopter.x));
+                    helicopter.y = Math.max(0, Math.min(canvas.height - helicopter.height, helicopter.y));
+                }
+            }
+        }
+        
+        // Update and draw bullets
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                
+                // Move bullet
+                bullet.x += Math.cos(bullet.direction) * bullet.speed;
+                bullet.y += Math.sin(bullet.direction) * bullet.speed;
+                
+                // Remove bullets that go off screen
+                if (bullet.x < 0 || bullet.x > canvas.width || bullet.y < 0 || bullet.y > canvas.height) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check collision with animals
+                for (let j = animals.length - 1; j >= 0; j--) {
+                    const animal = animals[j];
+                    
+                    if (pointInRect(bullet.x, bullet.y, animal)) {
+                        // Hit an animal
+                        createExplosion(animal.x + animal.width / 2, animal.y + animal.height / 2);
+                        
+                        // Add points
+                        score += animal.points;
+                        scoreDisplay.textContent = 'Score: ' + score;
+                        
+                        // Remove animal and bullet
+                        animals.splice(j, 1);
+                        bullets.splice(i, 1);
+                        
+                        // Generate a new animal
+                        setTimeout(generateAnimal, 2000);
+                        
+                        break;
+                    }
+                }
+                
+                // Draw bullet if it's still active
+                if (i < bullets.length) {
+                    ctx.fillStyle = 'yellow';
+                    ctx.beginPath();
+                    ctx.arc(bullet.x, bullet.y, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+        }
+        
+        // Update and draw explosions
+        function updateExplosions() {
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                const explosion = explosions[i];
+                
+                if (explosion.growing) {
+                    explosion.radius += 2;
+                    if (explosion.radius >= explosion.maxRadius) {
+                        explosion.growing = false;
+                    }
+                } else {
+                    explosion.opacity -= 0.05;
+                    if (explosion.opacity <= 0) {
+                        explosions.splice(i, 1);
+                        continue;
+                    }
+                }
+                
+                // Draw explosion
+                ctx.fillStyle = `rgba(255, 100, 0, ${explosion.opacity})`;
+                ctx.beginPath();
+                ctx.arc(explosion.x, explosion.y, explosion.radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = `rgba(255, 255, 0, ${explosion.opacity * 0.8})`;
+                ctx.beginPath();
+                ctx.arc(explosion.x, explosion.y, explosion.radius * 0.7, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // Draw helicopter
+        function drawHelicopter() {
+            // Draw helicopter body based on direction
+            ctx.fillStyle = '#212121';
+            
+            switch (helicopter.direction) {
+                case 0: // right
+                    // Body
+                    ctx.fillRect(helicopter.x, helicopter.y + 10, helicopter.width - 10, helicopter.height - 20);
+                    // Tail
+                    ctx.fillRect(helicopter.x - 15, helicopter.y + 15, 25, 5);
+                    // Nose
+                    ctx.beginPath();
+                    ctx.moveTo(helicopter.x + helicopter.width - 10, helicopter.y + 10);
+                    ctx.lineTo(helicopter.x + helicopter.width, helicopter.y + helicopter.height / 2);
+                    ctx.lineTo(helicopter.x + helicopter.width - 10, helicopter.y + helicopter.height - 10);
+                    ctx.fill();
+                    // Rotor blade
+                    ctx.strokeStyle = '#757575';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(helicopter.x + 15, helicopter.y);
+                    ctx.lineTo(helicopter.x + 45, helicopter.y);
+                    ctx.stroke();
+                    break;
+                    
+                case 1: // down
+                    // Body
+                    ctx.fillRect(helicopter.x + 10, helicopter.y, helicopter.width - 20, helicopter.height - 10);
+                    // Tail
+                    ctx.fillRect(helicopter.x + 15, helicopter.y - 15, 5, 25);
+                    // Nose
+                    ctx.beginPath();
+                    ctx.moveTo(helicopter.x + 10, helicopter.y + helicopter.height - 10);
+                    ctx.lineTo(helicopter.x + helicopter.width / 2, helicopter.y + helicopter.height);
+                    ctx.lineTo(helicopter.x + helicopter.width - 10, helicopter.y + helicopter.height - 10);
+                    ctx.fill();
+                    // Rotor blade
+                    ctx.strokeStyle = '#757575';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(helicopter.x, helicopter.y + 15);
+                    ctx.lineTo(helicopter.x + helicopter.width, helicopter.y + 15);
+                    ctx.stroke();
+                    break;
+                    
+                case 2: // left
+                    // Body
+                    ctx.fillRect(helicopter.x + 10, helicopter.y + 10, helicopter.width - 10, helicopter.height - 20);
+                    // Tail
+                    ctx.fillRect(helicopter.x + helicopter.width - 10, helicopter.y + 15, 25, 5);
+                    // Nose
+                    ctx.beginPath();
+                    ctx.moveTo(helicopter.x + 10, helicopter.y + 10);
+                    ctx.lineTo(helicopter.x, helicopter.y + helicopter.height / 2);
+                    ctx.lineTo(helicopter.x + 10, helicopter.y + helicopter.height - 10);
+                    ctx.fill();
+                    // Rotor blade
+                    ctx.strokeStyle = '#757575';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(helicopter.x + 15, helicopter.y);
+                    ctx.lineTo(helicopter.x + 45, helicopter.y);
+                    ctx.stroke();
+                    break;
+                    
+                case 3: // up
+                    // Body
+                    ctx.fillRect(helicopter.x + 10, helicopter.y + 10, helicopter.width - 20, helicopter.height - 10);
+                    // Tail
+                    ctx.fillRect(helicopter.x + 15, helicopter.y + helicopter.height - 10, 5, 25);
+                    // Nose
+                    ctx.beginPath();
+                    ctx.moveTo(helicopter.x + 10, helicopter.y + 10);
+                    ctx.lineTo(helicopter.x + helicopter.width / 2, helicopter.y);
+                    ctx.lineTo(helicopter.x + helicopter.width - 10, helicopter.y + 10);
+                    ctx.fill();
+                    // Rotor blade
+                    ctx.strokeStyle = '#757575';
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(helicopter.x, helicopter.y + 15);
+                    ctx.lineTo(helicopter.x + helicopter.width, helicopter.y + 15);
+                    ctx.stroke();
+                    break;
+            }
+            
+            // Draw cockpit glass
+            ctx.fillStyle = '#64B5F6';
+            switch (helicopter.direction) {
+                case 0: // right
+                    ctx.fillRect(helicopter.x + helicopter.width - 25, helicopter.y + 5, 10, 10);
+                    break;
+                case 1: // down
+                    ctx.fillRect(helicopter.x + 5, helicopter.y + helicopter.height - 25, 10, 10);
+                    break;
+                case 2: // left
+                    ctx.fillRect(helicopter.x + 15, helicopter.y + 5, 10, 10);
+                    break;
+                case 3: // up
+                    ctx.fillRect(helicopter.x + 5, helicopter.y + 15, 10, 10);
+                    break;
+            }
+        }
+        
+        // Check if a point is inside a rectangle
+        function pointInRect(x, y, rect) {
+            return x >= rect.x && x <= rect.x + rect.width &&
+                   y >= rect.y && y <= rect.y + rect.height;
+        }
+        
+        // Check collision between two objects
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.width &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.height &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+        
+        // End the game
+        function endGame() {
+            gameActive = false;
+            clearInterval(gameLoop);
+            clearInterval(timerInterval);
+            
+            // Show game over screen
+            finalScoreDisplay.textContent = score;
+            gameOverScreen.style.display = 'flex';
+        }
+        
+        // Event listeners
+        document.addEventListener('keydown', (e) => {
+            if (!gameActive) return;
+            
+            switch (e.key) {
+                case 'ArrowUp':
+                case 'w':
+                case 'W':
+                    helicopter.moving.up = true;
+                    break;
+                case 'ArrowDown':
+                case 's':
+                case 'S':
+                    helicopter.moving.down = true;
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                case 'A':
+                    helicopter.moving.left = true;
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                case 'D':
+                    helicopter.moving.right = true;
+                    break;
+                case ' ':
+                    // Fire bullet
+                    fireBullet();
+                    break;
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            switch (e.key) {
+                case 'ArrowUp':
+                case 'w':
+                case 'W':
+                    helicopter.moving.up = false;
+                    break;
+                case 'ArrowDown':
+                case 's':
+                case 'S':
+                    helicopter.moving.down = false;
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                case 'A':
+                    helicopter.moving.left = false;
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                case 'D':
+                    helicopter.moving.right = false;
+                    break;
+            }
+        });
+        
+        // Start and restart buttons
+        startButton.addEventListener('click', initGame);
+        restartButton.addEventListener('click', initGame);
+    </script>
+</body>
+</html>
