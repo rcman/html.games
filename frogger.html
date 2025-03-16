@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frogger Clone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #222;
+            font-family: Arial, sans-serif;
+        }
+        
+        #game-container {
+            position: relative;
+        }
+        
+        canvas {
+            border: 2px solid #444;
+            background-color: #000;
+        }
+        
+        #score-display {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 20px;
+        }
+        
+        #lives-display {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            font-size: 20px;
+        }
+        
+        #game-over {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 36px;
+            text-align: center;
+            display: none;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 10px 20px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 10px 0;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas" width="480" height="520"></canvas>
+        <div id="score-display">Score: 0</div>
+        <div id="lives-display">Lives: 3</div>
+        <div id="game-over">
+            <p>Game Over!</p>
+            <p>Final Score: <span id="final-score">0</span></p>
+            <button id="restart-button">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Game constants
+        const GRID_SIZE = 40;
+        const CANVAS_WIDTH = 480;
+        const CANVAS_HEIGHT = 520;
+        const FROG_SIZE = 30;
+        const OBSTACLE_HEIGHT = 30;
+        
+        // Game variables
+        let score = 0;
+        let lives = 3;
+        let gameOver = false;
+        let animationId;
+        let homesOccupied = [false, false, false, false, false];
+        
+        // Get DOM elements
+        const canvas = document.getElementById('game-canvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score-display');
+        const livesDisplay = document.getElementById('lives-display');
+        const gameOverDisplay = document.getElementById('game-over');
+        const finalScoreDisplay = document.getElementById('final-score');
+        const restartButton = document.getElementById('restart-button');
+        
+        // Frog object
+        const frog = {
+            x: CANVAS_WIDTH / 2 - FROG_SIZE / 2,
+            y: CANVAS_HEIGHT - GRID_SIZE/2 - FROG_SIZE/2, // Centered in the starting zone
+            width: FROG_SIZE,
+            height: FROG_SIZE,
+            speed: GRID_SIZE,
+            color: '#0F0',
+            draw: function() {
+                ctx.fillStyle = this.color;
+                
+                // Draw frog body
+                ctx.beginPath();
+                ctx.arc(this.x + this.width/2, this.y + this.height/2, this.width/2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw eyes
+                ctx.fillStyle = 'black';
+                ctx.beginPath();
+                ctx.arc(this.x + 10, this.y + 10, 3, 0, Math.PI * 2);
+                ctx.arc(this.x + this.width - 10, this.y + 10, 3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw legs
+                ctx.strokeStyle = '#0A0';
+                ctx.lineWidth = 2;
+                // Front legs
+                ctx.beginPath();
+                ctx.moveTo(this.x + 5, this.y + 15);
+                ctx.lineTo(this.x - 5, this.y + 5);
+                ctx.moveTo(this.x + this.width - 5, this.y + 15);
+                ctx.lineTo(this.x + this.width + 5, this.y + 5);
+                // Back legs
+                ctx.moveTo(this.x + 5, this.y + this.height - 10);
+                ctx.lineTo(this.x - 5, this.y + this.height);
+                ctx.moveTo(this.x + this.width - 5, this.y + this.height - 10);
+                ctx.lineTo(this.x + this.width + 5, this.y + this.height);
+                ctx.stroke();
+            },
+            reset: function() {
+                this.x = CANVAS_WIDTH / 2 - FROG_SIZE / 2;
+                this.y = CANVAS_HEIGHT - GRID_SIZE/2 - FROG_SIZE/2; // Centered in the starting zone
+            }
+        };
+        
+        // Home bases at the top
+        const homes = [];
+        const HOME_WIDTH = GRID_SIZE * 0.8;
+        for (let i = 0; i < 5; i++) {
+            homes.push({
+                x: i * (CANVAS_WIDTH / 5) + (CANVAS_WIDTH / 10) - HOME_WIDTH / 2,
+                y: 10,
+                width: HOME_WIDTH,
+                height: GRID_SIZE - 20,
+                occupied: false
+            });
+        }
+        
+        // Zone setup - proper Frogger layout
+        const zones = [
+            { y: 0, height: GRID_SIZE, type: 'home', color: '#4B0082' },  // Home zone at top (purple)
+            { y: GRID_SIZE, height: GRID_SIZE * 5, type: 'river', color: '#4169E1' },  // River
+            { y: GRID_SIZE * 6, height: GRID_SIZE, type: 'safe', color: '#228B22' },  // Middle safe zone
+            { y: GRID_SIZE * 7, height: GRID_SIZE * 5, type: 'road', color: '#333' },  // Road
+            { y: CANVAS_HEIGHT - GRID_SIZE, height: GRID_SIZE, type: 'safe', color: '#228B22' }  // Start zone (forest green)
+        ];
+        
+        // Lane setup - proper Frogger order (road first, then river)
+        const lanes = [
+            // River lanes (top to bottom)
+            { y: GRID_SIZE, type: 'river', speed: 1.5, color: '#4169E1', items: [] },
+            { y: GRID_SIZE * 2, type: 'river', speed: -2, color: '#4169E1', items: [] },
+            { y: GRID_SIZE * 3, type: 'river', speed: 2.5, color: '#4169E1', items: [] },
+            { y: GRID_SIZE * 4, type: 'river', speed: -1, color: '#4169E1', items: [] },
+            { y: GRID_SIZE * 5, type: 'river', speed: 1.8, color: '#4169E1', items: [] },
+            
+            // Middle safe zone
+            { y: GRID_SIZE * 6, type: 'safe', color: '#228B22', items: [] },
+            
+            // Road lanes (top to bottom)
+            { y: GRID_SIZE * 7, type: 'road', speed: 1, color: '#333', items: [] },
+            { y: GRID_SIZE * 8, type: 'road', speed: -1.5, color: '#333', items: [] },
+            { y: GRID_SIZE * 9, type: 'road', speed: 2, color: '#333', items: [] },
+            { y: GRID_SIZE * 10, type: 'road', speed: -1.2, color: '#333', items: [] },
+            { y: GRID_SIZE * 11, type: 'road', speed: 1.7, color: '#333', items: [] }
+        ];
+        
+        // Initialize obstacles in each lane
+        function initObstacles() {
+            lanes.forEach(lane => {
+                lane.items = [];
+                
+                if (lane.type === 'safe') return;
+                
+                // Fewer obstacles for more space to navigate
+                const count = Math.floor(Math.random() * 2) + 2;  // 2-3 obstacles per lane
+                const minWidth = lane.type === 'road' ? GRID_SIZE : GRID_SIZE * 2;
+                const maxWidth = lane.type === 'road' ? GRID_SIZE * 2 : GRID_SIZE * 3;
+                
+                for (let i = 0; i < count; i++) {
+                    const width = minWidth + Math.floor(Math.random() * (maxWidth - minWidth));
+                    const gap = CANVAS_WIDTH / count;
+                    let x = i * gap;
+                    
+                    // Add some randomness to x position
+                    x += Math.random() * GRID_SIZE - GRID_SIZE / 2;
+                    
+                    // Ensure starting area is clear (no obstacles near the frog's starting position)
+                    if (lane.y >= CANVAS_HEIGHT - (GRID_SIZE * 2)) {
+                        if (x < CANVAS_WIDTH/2 + GRID_SIZE && x > CANVAS_WIDTH/2 - GRID_SIZE - width) {
+                            x = x > CANVAS_WIDTH/2 ? CANVAS_WIDTH/2 + GRID_SIZE : CANVAS_WIDTH/2 - GRID_SIZE - width;
+                        }
+                    }
+                    
+                    let color;
+                    if (lane.type === 'road') {
+                        // Cars: different colors based on direction and lane
+                        const carColors = ['#F00', '#00F', '#FF0', '#F0F', '#0FF'];
+                        color = carColors[Math.floor(Math.random() * carColors.length)];
+                    } else {
+                        // Logs: brown
+                        color = '#8B4513';
+                    }
+                    
+                    lane.items.push({
+                        x: x,
+                        y: lane.y + (GRID_SIZE - OBSTACLE_HEIGHT) / 2,
+                        width: width,
+                        height: OBSTACLE_HEIGHT,
+                        color: color
+                    });
+                }
+            });
+        }
+        
+        // Key event listeners
+        window.addEventListener('keydown', function(e) {
+            if (gameOver) return;
+            
+            let newX = frog.x;
+            let newY = frog.y;
+            
+            switch(e.key) {
+                case 'ArrowUp':
+                    newY -= frog.speed;
+                    break;
+                case 'ArrowDown':
+                    newY += frog.speed;
+                    break;
+                case 'ArrowLeft':
+                    newX -= frog.speed;
+                    break;
+                case 'ArrowRight':
+                    newX += frog.speed;
+                    break;
+                default:
+                    return; // Exit if not an arrow key
+            }
+            
+            // Check boundaries
+            if (newX < 0 || newX + frog.width > CANVAS_WIDTH) {
+                return; // Don't move horizontally if out of bounds
+            }
+            
+            if (newY < 0 || newY + frog.height > CANVAS_HEIGHT) {
+                return; // Don't move vertically if out of bounds
+            }
+            
+            // Check if trying to enter a home base
+            if (newY < GRID_SIZE) {
+                let enteredHome = false;
+                for (let i = 0; i < homes.length; i++) {
+                    if (newX + frog.width/2 > homes[i].x && 
+                        newX + frog.width/2 < homes[i].x + homes[i].width) {
+                        if (!homes[i].occupied) {
+                            // Successfully entered a home
+                            homes[i].occupied = true;
+                            score += 100;
+                            updateScore();
+                            
+                            // Check if all homes are filled
+                            if (homes.every(home => home.occupied)) {
+                                score += 1000; // Bonus for filling all homes
+                                updateScore();
+                                resetHomes();
+                            }
+                            
+                            frog.reset();
+                            enteredHome = true;
+                        }
+                        break;
+                    }
+                }
+                
+                if (!enteredHome) {
+                    return; // Don't move if not entering a valid home
+                }
+            } else {
+                // Normal movement
+                frog.x = newX;
+                frog.y = newY;
+            }
+            
+            e.preventDefault();
+        });
+        
+        // Reset home bases
+        function resetHomes() {
+            homes.forEach(home => {
+                home.occupied = false;
+            });
+        }
+        
+        // Update score display
+        function updateScore() {
+            scoreDisplay.textContent = `Score: ${score}`;
+        }
+        
+        // Update lives display
+        function updateLives() {
+            livesDisplay.textContent = `Lives: ${lives}`;
+        }
+        
+        // Move obstacles
+        function moveObstacles() {
+            lanes.forEach(lane => {
+                if (lane.type === 'safe') return;
+                
+                lane.items.forEach(item => {
+                    item.x += lane.speed;
+                    
+                    // Wrap around the screen
+                    if (lane.speed > 0 && item.x > CANVAS_WIDTH) {
+                        item.x = -item.width;
+                    } else if (lane.speed < 0 && item.x + item.width < 0) {
+                        item.x = CANVAS_WIDTH;
+                    }
+                });
+            });
+        }
+        
+        // Check collision between frog and an obstacle
+        function checkCollision(frog, obstacle) {
+            return frog.x < obstacle.x + obstacle.width &&
+                   frog.x + frog.width > obstacle.x &&
+                   frog.y < obstacle.y + obstacle.height &&
+                   frog.y + frog.height > obstacle.y;
+        }
+        
+        // Handle collisions and frog state
+        function handleCollisions() {
+            let onLog = false;
+            let inWater = false;
+            
+            // Don't check collisions if in the start or middle safe zones
+            if ((frog.y >= CANVAS_HEIGHT - GRID_SIZE) || 
+                (frog.y >= GRID_SIZE * 6 && frog.y < GRID_SIZE * 7)) {
+                return;
+            }
+            
+            // Check each lane
+            lanes.forEach(lane => {
+                // Check if frog is in this lane's vertical space
+                if (frog.y + frog.height > lane.y && frog.y < lane.y + GRID_SIZE) {
+                    if (lane.type === 'river') {
+                        inWater = true;
+                        
+                        // Check if frog is on a log
+                        lane.items.forEach(log => {
+                            if (checkCollision(frog, log)) {
+                                onLog = true;
+                                // Move with the log
+                                frog.x += lane.speed;
+                                
+                                // Keep frog within boundaries
+                                if (frog.x < 0) frog.x = 0;
+                                if (frog.x > CANVAS_WIDTH - frog.width) frog.x = CANVAS_WIDTH - frog.width;
+                            }
+                        });
+                    } else if (lane.type === 'road') {
+                        // Check for collision with cars
+                        lane.items.forEach(car => {
+                            if (checkCollision(frog, car)) {
+                                loseLife();
+                            }
+                        });
+                    }
+                }
+            });
+            
+            // Drown if in water but not on a log
+            if (inWater && !onLog) {
+                loseLife();
+            }
+        }
+        
+        // Lose a life
+        function loseLife() {
+            lives--;
+            updateLives();
+            
+            if (lives <= 0) {
+                endGame();
+            } else {
+                frog.reset();
+            }
+        }
+        
+        // End the game
+        function endGame() {
+            gameOver = true;
+            finalScoreDisplay.textContent = score;
+            gameOverDisplay.style.display = 'block';
+            cancelAnimationFrame(animationId);
+        }
+        
+        // Restart the game
+        restartButton.addEventListener('click', function() {
+            score = 0;
+            lives = 3;
+            gameOver = false;
+            updateScore();
+            updateLives();
+            resetHomes();
+            frog.reset();
+            initObstacles();
+            gameOverDisplay.style.display = 'none';
+            gameLoop(0);
+        });
+        
+        // Clear the canvas
+        function clearCanvas() {
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+        }
+        
+        // Draw the game
+        function draw() {
+            clearCanvas();
+            
+            // Draw zones
+            zones.forEach(zone => {
+                ctx.fillStyle = zone.color;
+                ctx.fillRect(0, zone.y, CANVAS_WIDTH, zone.height);
+            });
+            
+            // Draw home bases
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, GRID_SIZE);
+            
+            homes.forEach(home => {
+                if (home.occupied) {
+                    // Draw occupied home with a frog
+                    ctx.fillStyle = '#0A0';
+                    ctx.beginPath();
+                    ctx.arc(home.x + home.width/2, home.y + home.height/2, home.width/2, 0, Math.PI * 2);
+                    ctx.fill();
+                } else {
+                    // Draw empty home
+                    ctx.fillStyle = '#2E8B57';
+                    ctx.beginPath();
+                    ctx.arc(home.x + home.width/2, home.y + home.height/2, home.width/2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+            
+            // Draw lane dividers for road
+            lanes.filter(lane => lane.type === 'road').forEach(lane => {
+                ctx.strokeStyle = 'white';
+                ctx.setLineDash([20, 10]);
+                ctx.beginPath();
+                ctx.moveTo(0, lane.y + GRID_SIZE / 2);
+                ctx.lineTo(CANVAS_WIDTH, lane.y + GRID_SIZE / 2);
+                ctx.stroke();
+                ctx.setLineDash([]);
+            });
+            
+            // Draw lane items (cars or logs)
+            lanes.forEach(lane => {
+                lane.items.forEach(item => {
+                    ctx.fillStyle = item.color;
+                    
+                    if (lane.type === 'road') {
+                        // Draw car
+                        ctx.fillRect(item.x, item.y, item.width, item.height);
+                        
+                        // Add car details
+                        ctx.fillStyle = 'black';
+                        // Wheels
+                        ctx.beginPath();
+                        ctx.arc(item.x + 8, item.y + item.height + 2, 3, 0, Math.PI * 2);
+                        ctx.arc(item.x + item.width - 8, item.y + item.height + 2, 3, 0, Math.PI * 2);
+                        ctx.fill();
+                        
+                        // Windows
+                        ctx.fillStyle = 'lightblue';
+                        ctx.fillRect(item.x + 5, item.y + 5, item.width - 10, item.height - 10);
+                    } else if (lane.type === 'river') {
+                        // Draw log with rounded ends
+                        ctx.beginPath();
+                        ctx.roundRect(item.x, item.y, item.width, item.height, 10);
+                        ctx.fill();
+                        
+                        // Add wood grain
+                        ctx.strokeStyle = '#5D4037';
+                        ctx.lineWidth = 1;
+                        for (let i = 1; i < 4; i++) {
+                            ctx.beginPath();
+                            ctx.moveTo(item.x + 5, item.y + (item.height * i) / 4);
+                            ctx.lineTo(item.x + item.width - 5, item.y + (item.height * i) / 4);
+                            ctx.stroke();
+                        }
+                    }
+                });
+            });
+            
+            // Draw frog
+            frog.draw();
+        }
+        
+        // Game loop with frame limiting for slower speed
+        let lastTime = 0;
+        const frameDelay = 30; // Higher number = slower game
+        
+        function gameLoop(timestamp) {
+            const deltaTime = timestamp - lastTime;
+            
+            if (deltaTime > frameDelay) {
+                lastTime = timestamp;
+                moveObstacles();
+                handleCollisions();
+                draw();
+            }
+            
+            if (!gameOver) {
+                animationId = requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        // Initialize the game
+        function init() {
+            initObstacles();
+            updateScore();
+            updateLives();
+            gameLoop(0);
+        }
+        
+        // Start the game
+        init();
+    </script>
+</body>
+</html>
