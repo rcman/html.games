@@ -98,13 +98,13 @@
             <p>Arrow Keys or WASD to move</p>
             <p>SPACE to fire</p>
             <p>Destroy all enemy bases to advance</p>
-            <div id="start-message">PRESS F1 TO START</div>
+            <div id="start-message">PRESS 1 TO START</div>
         </div>
         
         <div id="game-over">
             <h2>GAME OVER</h2>
             <div>FINAL SCORE: <span id="final-score">0</span></div>
-            <div id="restart-message">PRESS F1 TO PLAY AGAIN</div>
+            <div id="restart-message">PRESS 1 TO PLAY AGAIN</div>
         </div>
     </div>
 
@@ -158,8 +158,8 @@
         window.addEventListener('keydown', function(e) {
             keys[e.key] = true;
             
-            // F1 key to start/restart
-            if (e.key === 'F1') {
+            // Number 1 key to start/restart
+            if (e.key === '1') {
                 e.preventDefault();
                 if (!gameActive) {
                     if (document.getElementById('start-screen').style.display !== 'none') {
