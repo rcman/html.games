@@ -1,0 +1,641 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pitfall Clone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #333;
+            font-family: 'Courier New', monospace;
+        }
+        #game-container {
+            position: relative;
+        }
+        canvas {
+            border: 3px solid #555;
+            background-color: #000;
+        }
+        #score-display {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 16px;
+        }
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="800" height="400"></canvas>
+        <div id="score-display">Score: 0</div>
+        <div id="controls">
+            Controls: ←→ to move, ↑ to jump, ↓ to climb down ladders
+        </div>
+    </div>
+
+    <script>
+        // Game variables
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score-display');
+        
+        const GROUND_Y = canvas.height - 40;
+        const LOWER_LEVEL_Y = canvas.height - 120;
+        
+        let score = 0;
+        let gameOver = false;
+        
+        // Player
+        const player = {
+            x: 100,
+            y: GROUND_Y - 40,
+            width: 20,
+            height: 40,
+            speed: 5,
+            jumpForce: 12,
+            velocity: { x: 0, y: 0 },
+            isJumping: false,
+            isClimbing: false,
+            onRope: false,
+            ropeSwingAngle: 0,
+            ropeAttachedTo: null,
+            sprites: {
+                standing: null,
+                running: [],
+                jumping: null,
+                climbing: []
+            },
+            spriteIndex: 0,
+            facing: 'right',
+            animationTimer: 0
+        };
+        
+        // Game objects
+        const platforms = [
+            { x: 0, y: GROUND_Y, width: canvas.width, height: 40, type: 'ground' },
+            { x: 200, y: LOWER_LEVEL_Y, width: 600, height: 20, type: 'platform' }
+        ];
+        
+        const ladders = [
+            { x: 300, y: LOWER_LEVEL_Y - 100, width: 40, height: 120 },
+            { x: 600, y: LOWER_LEVEL_Y - 100, width: 40, height: 120 }
+        ];
+        
+        const ropes = [
+            { x: 200, y: 60, length: 100, swingAngle: 0, swingSpeed: 0.02, swingMax: Math.PI/6 },
+            { x: 400, y: 60, length: 100, swingAngle: Math.PI/10, swingSpeed: 0.015, swingMax: Math.PI/5 },
+            { x: 600, y: 60, length: 120, swingAngle: -Math.PI/8, swingSpeed: 0.025, swingMax: Math.PI/4 }
+        ];
+        
+        const treasures = [
+            { x: 250, y: LOWER_LEVEL_Y - 30, width: 20, height: 20, value: 100, collected: false },
+            { x: 450, y: LOWER_LEVEL_Y - 30, width: 20, height: 20, value: 200, collected: false },
+            { x: 650, y: GROUND_Y - 30, width: 20, height: 20, value: 500, collected: false }
+        ];
+        
+        const enemies = [
+            { 
+                x: 400, 
+                y: GROUND_Y - 30, 
+                width: 30, 
+                height: 20, 
+                speed: 2, 
+                direction: 1, 
+                leftBound: 350, 
+                rightBound: 500, 
+                type: 'scorpion' 
+            },
+            { 
+                x: 350, 
+                y: LOWER_LEVEL_Y - 30, 
+                width: 30, 
+                height: 20, 
+                speed: 1.5, 
+                direction: -1, 
+                leftBound: 250, 
+                rightBound: 500, 
+                type: 'snake' 
+            }
+        ];
+        
+        const pits = [
+            { x: 500, y: GROUND_Y - 10, width: 80, height: 50 }
+        ];
+        
+        // Input handling
+        const keys = {};
+        
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+        
+        // Game functions
+        function update() {
+            if (gameOver) return;
+            
+            handlePlayerMovement();
+            updateRopes();
+            updateEnemies();
+            checkCollisions();
+            
+            // Animation timing
+            player.animationTimer++;
+            if (player.animationTimer > 5) {
+                player.spriteIndex = (player.spriteIndex + 1) % 4;
+                player.animationTimer = 0;
+            }
+        }
+        
+        function handlePlayerMovement() {
+            // Default - apply gravity unless climbing
+            if (!player.isClimbing) {
+                player.velocity.y += 0.5; // Gravity
+            } else {
+                player.velocity.y = 0;
+            }
+            
+            // Handle rope swinging
+            if (player.onRope) {
+                const rope = player.ropeAttachedTo;
+                player.x = rope.x + Math.sin(rope.swingAngle) * rope.length;
+                player.y = rope.y + Math.cos(rope.swingAngle) * rope.length - player.height;
+                
+                // Jump off rope
+                if (keys['ArrowUp'] || keys[' ']) {
+                    player.onRope = false;
+                    player.ropeAttachedTo = null;
+                    player.velocity.y = -player.jumpForce;
+                    player.isJumping = true;
+                    
+                    // Add horizontal momentum from rope swing
+                    player.velocity.x = Math.sin(rope.swingAngle) * 8;
+                }
+                
+                return;
+            }
+            
+            // Left-right movement (unless climbing)
+            if (!player.isClimbing) {
+                player.velocity.x = 0;
+                
+                if (keys['ArrowLeft']) {
+                    player.velocity.x = -player.speed;
+                    player.facing = 'left';
+                }
+                if (keys['ArrowRight']) {
+                    player.velocity.x = player.speed;
+                    player.facing = 'right';
+                }
+            }
+            
+            // Jumping
+            if (keys['ArrowUp'] || keys[' ']) {
+                if (!player.isJumping && !player.isClimbing) {
+                    player.velocity.y = -player.jumpForce;
+                    player.isJumping = true;
+                }
+            }
+            
+            // Climbing ladders
+            if (!player.onRope) {
+                let onLadder = false;
+                
+                for (const ladder of ladders) {
+                    if (
+                        player.x + player.width / 2 > ladder.x && 
+                        player.x + player.width / 2 < ladder.x + ladder.width && 
+                        player.y + player.height >= ladder.y && 
+                        player.y <= ladder.y + ladder.height
+                    ) {
+                        onLadder = true;
+                        
+                        if (keys['ArrowUp'] && !player.isClimbing) {
+                            player.isClimbing = true;
+                            player.velocity.y = 0;
+                            player.x = ladder.x + ladder.width/2 - player.width/2;
+                        }
+                        
+                        if (keys['ArrowDown'] && !player.isClimbing) {
+                            player.isClimbing = true;
+                            player.velocity.y = 0;
+                            player.x = ladder.x + ladder.width/2 - player.width/2;
+                        }
+                        
+                        if (player.isClimbing) {
+                            if (keys['ArrowUp']) {
+                                player.velocity.y = -3;
+                            } else if (keys['ArrowDown']) {
+                                player.velocity.y = 3;
+                            } else {
+                                player.velocity.y = 0;
+                            }
+                            
+                            // Stop climbing if reached top or bottom of ladder
+                            if (player.y <= ladder.y || player.y + player.height >= ladder.y + ladder.height) {
+                                if (!keys['ArrowUp'] && !keys['ArrowDown']) {
+                                    player.isClimbing = false;
+                                }
+                            }
+                        }
+                        
+                        break;
+                    }
+                }
+                
+                if (!onLadder && player.isClimbing) {
+                    player.isClimbing = false;
+                }
+            }
+            
+            // Apply velocity
+            player.x += player.velocity.x;
+            player.y += player.velocity.y;
+            
+            // Screen boundaries
+            if (player.x < 0) player.x = 0;
+            if (player.x + player.width > canvas.width) player.x = canvas.width - player.width;
+            
+            // Check for platform collisions
+            player.isJumping = true; // Assume in air unless on platform
+            
+            for (const platform of platforms) {
+                if (
+                    player.x + player.width > platform.x &&
+                    player.x < platform.x + platform.width &&
+                    player.y + player.height >= platform.y &&
+                    player.y + player.height <= platform.y + 10 &&
+                    player.velocity.y >= 0
+                ) {
+                    player.y = platform.y - player.height;
+                    player.velocity.y = 0;
+                    player.isJumping = false;
+                    break;
+                }
+            }
+        }
+        
+        function updateRopes() {
+            for (const rope of ropes) {
+                // Update swing
+                rope.swingAngle += rope.swingSpeed;
+                
+                if (rope.swingAngle > rope.swingMax || rope.swingAngle < -rope.swingMax) {
+                    rope.swingSpeed *= -1;
+                }
+                
+                // Check if player can grab rope
+                if (
+                    !player.onRope && 
+                    !player.isClimbing &&
+                    Math.abs(player.x + player.width/2 - (rope.x + Math.sin(rope.swingAngle) * rope.length)) < 20 &&
+                    Math.abs(player.y - (rope.y + Math.cos(rope.swingAngle) * rope.length - player.height)) < 20
+                ) {
+                    if (keys['ArrowUp']) {
+                        player.onRope = true;
+                        player.ropeAttachedTo = rope;
+                        player.velocity.y = 0;
+                        player.velocity.x = 0;
+                        player.isJumping = false;
+                    }
+                }
+            }
+        }
+        
+        function updateEnemies() {
+            for (const enemy of enemies) {
+                // Move enemies back and forth
+                enemy.x += enemy.speed * enemy.direction;
+                
+                if (enemy.x <= enemy.leftBound || enemy.x + enemy.width >= enemy.rightBound) {
+                    enemy.direction *= -1;
+                }
+            }
+        }
+        
+        function checkCollisions() {
+            // Check for treasure collection
+            for (const treasure of treasures) {
+                if (
+                    !treasure.collected &&
+                    player.x < treasure.x + treasure.width &&
+                    player.x + player.width > treasure.x &&
+                    player.y < treasure.y + treasure.height &&
+                    player.y + player.height > treasure.y
+                ) {
+                    treasure.collected = true;
+                    score += treasure.value;
+                    scoreDisplay.textContent = `Score: ${score}`;
+                }
+            }
+            
+            // Check for enemy collision
+            for (const enemy of enemies) {
+                if (
+                    player.x < enemy.x + enemy.width &&
+                    player.x + player.width > enemy.x &&
+                    player.y < enemy.y + enemy.height &&
+                    player.y + player.height > enemy.y
+                ) {
+                    // Game over
+                    gameOver = true;
+                }
+            }
+            
+            // Check for pit falls
+            for (const pit of pits) {
+                if (
+                    player.x + player.width > pit.x &&
+                    player.x < pit.x + pit.width &&
+                    player.y + player.height > pit.y
+                ) {
+                    // Game over
+                    gameOver = true;
+                }
+            }
+        }
+        
+        // Rendering functions
+        function render() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background
+            drawBackground();
+            
+            // Draw platforms
+            drawPlatforms();
+            
+            // Draw pits
+            drawPits();
+            
+            // Draw ladders
+            drawLadders();
+            
+            // Draw ropes
+            drawRopes();
+            
+            // Draw treasures
+            drawTreasures();
+            
+            // Draw enemies
+            drawEnemies();
+            
+            // Draw player
+            drawPlayer();
+            
+            // Draw game over screen if needed
+            if (gameOver) {
+                drawGameOver();
+            }
+        }
+        
+        function drawBackground() {
+            // Draw sky
+            ctx.fillStyle = '#87CEEB';
+            ctx.fillRect(0, 0, canvas.width, canvas.height - platforms[0].height);
+            
+            // Draw jungle elements (trees)
+            for (let x = 20; x < canvas.width; x += 120) {
+                // Tree trunk
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(x, GROUND_Y - 100, 20, 100);
+                
+                // Tree foliage
+                ctx.fillStyle = '#228B22';
+                ctx.beginPath();
+                ctx.moveTo(x - 20, GROUND_Y - 100);
+                ctx.lineTo(x + 40, GROUND_Y - 100);
+                ctx.lineTo(x + 10, GROUND_Y - 150);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.beginPath();
+                ctx.moveTo(x - 15, GROUND_Y - 130);
+                ctx.lineTo(x + 35, GROUND_Y - 130);
+                ctx.lineTo(x + 10, GROUND_Y - 180);
+                ctx.closePath();
+                ctx.fill();
+            }
+        }
+        
+        function drawPlatforms() {
+            for (const platform of platforms) {
+                if (platform.type === 'ground') {
+                    // Ground with dirt texture
+                    ctx.fillStyle = '#8B4513';
+                    ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+                    
+                    // Grass top
+                    ctx.fillStyle = '#228B22';
+                    ctx.fillRect(platform.x, platform.y, platform.width, 10);
+                } else {
+                    // Underground platforms
+                    ctx.fillStyle = '#A0522D';
+                    ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+                }
+            }
+        }
+        
+        function drawPits() {
+            for (const pit of pits) {
+                // Black hole
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(pit.x, pit.y, pit.width, pit.height);
+                
+                // Add some depth with gradient
+                const gradient = ctx.createLinearGradient(0, pit.y, 0, pit.y + pit.height);
+                gradient.addColorStop(0, 'rgba(0, 0, 0, 0.8)');
+                gradient.addColorStop(1, 'rgba(0, 0, 0, 1)');
+                ctx.fillStyle = gradient;
+                ctx.fillRect(pit.x, pit.y, pit.width, pit.height);
+            }
+        }
+        
+        function drawLadders() {
+            for (const ladder of ladders) {
+                // Ladder sides
+                ctx.strokeStyle = '#8B4513';
+                ctx.lineWidth = 4;
+                
+                ctx.beginPath();
+                ctx.moveTo(ladder.x, ladder.y);
+                ctx.lineTo(ladder.x, ladder.y + ladder.height);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(ladder.x + ladder.width, ladder.y);
+                ctx.lineTo(ladder.x + ladder.width, ladder.y + ladder.height);
+                ctx.stroke();
+                
+                // Ladder rungs
+                for (let y = ladder.y + 15; y < ladder.y + ladder.height; y += 15) {
+                    ctx.beginPath();
+                    ctx.moveTo(ladder.x, y);
+                    ctx.lineTo(ladder.x + ladder.width, y);
+                    ctx.stroke();
+                }
+            }
+        }
+        
+        function drawRopes() {
+            for (const rope of ropes) {
+                const ropeEndX = rope.x + Math.sin(rope.swingAngle) * rope.length;
+                const ropeEndY = rope.y + Math.cos(rope.swingAngle) * rope.length;
+                
+                // Rope anchor
+                ctx.fillStyle = '#8B4513';
+                ctx.beginPath();
+                ctx.arc(rope.x, rope.y, 5, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Rope
+                ctx.strokeStyle = '#A52A2A';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(rope.x, rope.y);
+                ctx.lineTo(ropeEndX, ropeEndY);
+                ctx.stroke();
+                
+                // Rope handle
+                ctx.fillStyle = '#8B4513';
+                ctx.fillRect(ropeEndX - 5, ropeEndY - 5, 10, 10);
+            }
+        }
+        
+        function drawTreasures() {
+            for (const treasure of treasures) {
+                if (!treasure.collected) {
+                    // Treasure chest
+                    ctx.fillStyle = '#DAA520'; // Gold
+                    ctx.fillRect(treasure.x, treasure.y, treasure.width, treasure.height);
+                    
+                    // Chest details
+                    ctx.strokeStyle = '#8B4513';
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(treasure.x, treasure.y, treasure.width, treasure.height);
+                    
+                    // Chest lock
+                    ctx.fillStyle = '#C0C0C0';
+                    ctx.fillRect(treasure.x + treasure.width/2 - 2, treasure.y + 2, 4, 4);
+                }
+            }
+        }
+        
+        function drawEnemies() {
+            for (const enemy of enemies) {
+                if (enemy.type === 'scorpion') {
+                    // Scorpion body
+                    ctx.fillStyle = '#8B0000';
+                    ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                    
+                    // Scorpion tail
+                    ctx.beginPath();
+                    ctx.moveTo(enemy.x + (enemy.direction > 0 ? 0 : enemy.width), enemy.y + enemy.height/2);
+                    ctx.lineTo(enemy.x + (enemy.direction > 0 ? -10 : enemy.width + 10), enemy.y);
+                    ctx.stroke();
+                    
+                    // Scorpion pincers
+                    ctx.beginPath();
+                    ctx.moveTo(enemy.x + (enemy.direction > 0 ? enemy.width : 0), enemy.y + enemy.height/2);
+                    ctx.lineTo(enemy.x + (enemy.direction > 0 ? enemy.width + 10 : -10), enemy.y + enemy.height/2);
+                    ctx.stroke();
+                } else if (enemy.type === 'snake') {
+                    // Snake body
+                    ctx.fillStyle = '#006400';
+                    ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                    
+                    // Snake head
+                    ctx.fillStyle = '#008000';
+                    ctx.fillRect(enemy.x + (enemy.direction > 0 ? enemy.width - 8 : 0), enemy.y, 8, enemy.height);
+                    
+                    // Snake eyes
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(enemy.x + (enemy.direction > 0 ? enemy.width - 4 : 2), enemy.y + 2, 2, 2);
+                }
+            }
+        }
+        
+        function drawPlayer() {
+            // Set player color based on state
+            ctx.fillStyle = player.isClimbing ? '#FF6347' : '#4169E1';
+            
+            // Draw player body
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Draw player head
+            ctx.fillStyle = '#FFD700';
+            ctx.fillRect(player.x + player.width/4, player.y - 10, player.width/2, 10);
+            
+            // Draw player face direction
+            ctx.fillStyle = '#000000';
+            if (player.facing === 'right') {
+                ctx.fillRect(player.x + player.width * 3/4, player.y - 8, 2, 2);
+            } else {
+                ctx.fillRect(player.x + player.width/4, player.y - 8, 2, 2);
+            }
+            
+            // Add simple animation for running
+            if (player.velocity.x !== 0 && !player.isJumping && !player.isClimbing && !player.onRope) {
+                const legOffset = Math.sin(player.spriteIndex * Math.PI/2) * 5;
+                
+                ctx.fillStyle = '#4169E1';
+                ctx.fillRect(player.x + player.width/4, player.y + player.height, 4, legOffset);
+                ctx.fillRect(player.x + player.width*3/4, player.y + player.height, 4, -legOffset);
+            }
+        }
+        
+        function drawGameOver() {
+            // Semi-transparent overlay
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Game over text
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '48px "Courier New", monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 30);
+            
+            // Score display
+            ctx.font = '24px "Courier New", monospace';
+            ctx.fillText(`Final Score: ${score}`, canvas.width/2, canvas.height/2 + 20);
+            
+            // Restart hint
+            ctx.font = '18px "Courier New", monospace';
+            ctx.fillText('Refresh to play again', canvas.width/2, canvas.height/2 + 60);
+        }
+        
+        // Game loop
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start the game
+        function startGame() {
+            gameLoop();
+        }
+        
+        // Initialize and start the game
+        startGame();
+    </script>
+</body>
+</html>
