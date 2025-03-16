@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cave Explorer</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: Arial, sans-serif;
+        }
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            margin: 20px auto;
+            border: 4px solid #333;
+            overflow: hidden;
+        }
+        #game-canvas {
+            background-color: #111;
+        }
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 18px;
+            text-shadow: 2px 2px 2px black;
+        }
+        #start-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            z-index: 10;
+        }
+        #game-over-screen {
+            display: none;
+        }
+        button {
+            margin-top: 20px;
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+        h1 {
+            color: #FFD700;
+            text-shadow: 2px 2px 4px #000;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas" width="800" height="600"></canvas>
+        <div id="hud">
+            Score: <span id="score">0</span> | Lives: <span id="lives">3</span> | Level: <span id="level">1</span>
+        </div>
+        <div id="start-screen">
+            <h1>Cave Explorer</h1>
+            <p>Use arrow keys to move. Collect treasures and avoid obstacles!</p>
+            <ul>
+                <li>Arrow keys to move</li>
+                <li>Collect gold coins for points</li>
+                <li>Avoid bats and falling rocks</li>
+                <li>Find the exit to advance to the next level</li>
+            </ul>
+            <button id="start-button">Start Game</button>
+        </div>
+        <div id="game-over-screen">
+            <h1>Game Over</h1>
+            <p>Your final score: <span id="final-score">0</span></p>
+            <button id="restart-button">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Game constants
+        const TILE_SIZE = 40;
+        const PLAYER_SIZE = 30;
+        const GRAVITY = 0.5;
+        const JUMP_POWER = 12;
+        const MOVEMENT_SPEED = 5;
+
+        // Game variables
+        let canvas, ctx;
+        let player = {
+            x: 100,
+            y: 100,
+            width: PLAYER_SIZE,
+            height: PLAYER_SIZE,
+            velocityX: 0,
+            velocityY: 0,
+            isJumping: false,
+            color: '#33ccff',
+            facingRight: true
+        };
+        
+        let gameState = {
+            score: 0,
+            lives: 3,
+            level: 1,
+            isGameOver: false,
+            isGameRunning: false
+        };
+
+        let keys = {
+            left: false,
+            right: false,
+            up: false
+        };
+
+        let camera = {
+            x: 0,
+            y: 0
+        };
+
+        let platforms = [];
+        let treasures = [];
+        let enemies = [];
+        let exit = {};
+
+        // Initialize the game
+        function init() {
+            canvas = document.getElementById('game-canvas');
+            ctx = canvas.getContext('2d');
+
+            // Add event listeners
+            document.addEventListener('keydown', keyDownHandler);
+            document.addEventListener('keyup', keyUpHandler);
+            
+            document.getElementById('start-button').addEventListener('click', startGame);
+            document.getElementById('restart-button').addEventListener('click', restartGame);
+
+            // Generate initial level
+            generateLevel();
+        }
+
+        function startGame() {
+            document.getElementById('start-screen').style.display = 'none';
+            gameState.isGameRunning = true;
+            gameLoop();
+        }
+
+        function restartGame() {
+            document.getElementById('game-over-screen').style.display = 'none';
+            
+            // Reset game state
+            gameState.score = 0;
+            gameState.lives = 3;
+            gameState.level = 1;
+            gameState.isGameOver = false;
+            gameState.isGameRunning = true;
+            
+            // Reset player
+            player.x = 100;
+            player.y = 100;
+            player.velocityX = 0;
+            player.velocityY = 0;
+            
+            // Generate new level
+            generateLevel();
+            
+            // Update HUD
+            updateHUD();
+            
+            // Restart game loop
+            gameLoop();
+        }
+
+        function generateLevel() {
+            platforms = [];
+            treasures = [];
+            enemies = [];
+            
+            // Create ground platforms
+            for (let i = 0; i < 50; i++) {
+                platforms.push({
+                    x: i * TILE_SIZE,
+                    y: canvas.height - TILE_SIZE,
+                    width: TILE_SIZE,
+                    height: TILE_SIZE,
+                    color: '#663300'
+                });
+            }
+            
+            // Create platforms
+            for (let i = 0; i < 20; i++) {
+                const platformWidth = Math.floor(Math.random() * 5 + 3) * TILE_SIZE;
+                const x = Math.floor(Math.random() * 40) * TILE_SIZE;
+                const y = Math.floor(Math.random() * 10 + 3) * TILE_SIZE;
+                
+                for (let j = 0; j < platformWidth / TILE_SIZE; j++) {
+                    platforms.push({
+                        x: x + (j * TILE_SIZE),
+                        y: y,
+                        width: TILE_SIZE,
+                        height: TILE_SIZE,
+                        color: '#663300'
+                    });
+                }
+                
+                // Add treasures on some platforms
+                if (Math.random() < 0.7) {
+                    treasures.push({
+                        x: x + Math.floor(platformWidth / 2),
+                        y: y - TILE_SIZE,
+                        width: TILE_SIZE / 2,
+                        height: TILE_SIZE / 2,
+                        color: '#ffd700',
+                        value: 10,
+                        collected: false
+                    });
+                }
+                
+                // Add enemies on some platforms
+                if (Math.random() < 0.3) {
+                    enemies.push({
+                        x: x + Math.floor(platformWidth / 2),
+                        y: y - TILE_SIZE,
+                        width: TILE_SIZE,
+                        height: TILE_SIZE / 2,
+                        color: '#ff0000',
+                        velocityX: Math.random() > 0.5 ? 2 : -2,
+                        range: platformWidth,
+                        initialX: x + Math.floor(platformWidth / 2)
+                    });
+                }
+            }
+            
+            // Add level exit
+            exit = {
+                x: 45 * TILE_SIZE,
+                y: canvas.height - TILE_SIZE * 2,
+                width: TILE_SIZE,
+                height: TILE_SIZE,
+                color: '#00ff00'
+            };
+            
+            // Set player position at start
+            player.x = 100;
+            player.y = 100;
+        }
+
+        function keyDownHandler(e) {
+            if (e.key === 'ArrowRight') {
+                keys.right = true;
+                player.facingRight = true;
+            } else if (e.key === 'ArrowLeft') {
+                keys.left = true;
+                player.facingRight = false;
+            } else if (e.key === 'ArrowUp') {
+                keys.up = true;
+            }
+        }
+
+        function keyUpHandler(e) {
+            if (e.key === 'ArrowRight') {
+                keys.right = false;
+            } else if (e.key === 'ArrowLeft') {
+                keys.left = false;
+            } else if (e.key === 'ArrowUp') {
+                keys.up = false;
+            }
+        }
+
+        function update() {
+            if (!gameState.isGameRunning) return;
+            
+            // Handle player movement
+            if (keys.right) {
+                player.velocityX = MOVEMENT_SPEED;
+            } else if (keys.left) {
+                player.velocityX = -MOVEMENT_SPEED;
+            } else {
+                player.velocityX = 0;
+            }
+            
+            // Handle jumping
+            if (keys.up && !player.isJumping) {
+                player.velocityY = -JUMP_POWER;
+                player.isJumping = true;
+            }
+            
+            // Apply gravity
+            player.velocityY += GRAVITY;
+            
+            // Update player position
+            player.x += player.velocityX;
+            player.y += player.velocityY;
+            
+            // Check collisions with platforms
+            player.isJumping = true; // Assume in air unless proven otherwise
+            
+            for (let platform of platforms) {
+                if (checkCollision(player, platform)) {
+                    // Collision from top
+                    if (player.y + player.height > platform.y && 
+                        player.y < platform.y && 
+                        player.velocityY >= 0) {
+                        player.y = platform.y - player.height;
+                        player.velocityY = 0;
+                        player.isJumping = false;
+                    }
+                    // Collision from bottom
+                    else if (player.y < platform.y + platform.height && 
+                             player.y + player.height > platform.y + platform.height && 
+                             player.velocityY < 0) {
+                        player.y = platform.y + platform.height;
+                        player.velocityY = 0;
+                    }
+                    // Collision from left
+                    else if (player.x + player.width > platform.x && 
+                             player.x < platform.x) {
+                        player.x = platform.x - player.width;
+                    }
+                    // Collision from right
+                    else if (player.x < platform.x + platform.width && 
+                             player.x + player.width > platform.x + platform.width) {
+                        player.x = platform.x + platform.width;
+                    }
+                }
+            }
+            
+            // Check collisions with treasures
+            for (let treasure of treasures) {
+                if (!treasure.collected && checkCollision(player, treasure)) {
+                    treasure.collected = true;
+                    gameState.score += treasure.value;
+                    updateHUD();
+                }
+            }
+            
+            // Check collisions with enemies
+            for (let enemy of enemies) {
+                // Update enemy movement
+                enemy.x += enemy.velocityX;
+                
+                // Enemy range limit
+                if (enemy.x > enemy.initialX + enemy.range / 2 || 
+                    enemy.x < enemy.initialX - enemy.range / 2) {
+                    enemy.velocityX *= -1;
+                }
+                
+                // Check collision with player
+                if (checkCollision(player, enemy)) {
+                    gameState.lives--;
+                    updateHUD();
+                    
+                    // Reset player position
+                    player.x = 100;
+                    player.y = 100;
+                    player.velocityX = 0;
+                    player.velocityY = 0;
+                    
+                    if (gameState.lives <= 0) {
+                        gameOver();
+                    }
+                }
+            }
+            
+            // Check if player reached exit
+            if (checkCollision(player, exit)) {
+                levelComplete();
+            }
+            
+            // Check if player fell off
+            if (player.y > canvas.height) {
+                gameState.lives--;
+                updateHUD();
+                
+                // Reset player position
+                player.x = 100;
+                player.y = 100;
+                player.velocityX = 0;
+                player.velocityY = 0;
+                
+                if (gameState.lives <= 0) {
+                    gameOver();
+                }
+            }
+            
+            // Update camera position
+            camera.x = player.x - canvas.width / 2;
+            if (camera.x < 0) camera.x = 0;
+        }
+
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.width &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.height &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+
+        function render() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Apply camera transformation
+            ctx.save();
+            ctx.translate(-camera.x, 0);
+            
+            // Draw platforms
+            for (let platform of platforms) {
+                ctx.fillStyle = platform.color;
+                ctx.fillRect(platform.x, platform.y, platform.width, platform.height);
+            }
+            
+            // Draw treasures
+            for (let treasure of treasures) {
+                if (!treasure.collected) {
+                    ctx.fillStyle = treasure.color;
+                    ctx.beginPath();
+                    ctx.arc(
+                        treasure.x + treasure.width / 2, 
+                        treasure.y + treasure.height / 2, 
+                        treasure.width / 2, 
+                        0, 
+                        Math.PI * 2
+                    );
+                    ctx.fill();
+                }
+            }
+            
+            // Draw enemies
+            for (let enemy of enemies) {
+                ctx.fillStyle = enemy.color;
+                
+                // Draw a bat-like shape
+                ctx.beginPath();
+                ctx.moveTo(enemy.x, enemy.y + enemy.height / 2);
+                ctx.lineTo(enemy.x + enemy.width / 4, enemy.y);
+                ctx.lineTo(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+                ctx.lineTo(enemy.x + 3 * enemy.width / 4, enemy.y);
+                ctx.lineTo(enemy.x + enemy.width, enemy.y + enemy.height / 2);
+                ctx.fill();
+            }
+            
+            // Draw exit
+            ctx.fillStyle = exit.color;
+            ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
+            
+            // Draw exit sign
+            ctx.fillStyle = '#ffffff';
+            ctx.font = '14px Arial';
+            ctx.fillText('EXIT', exit.x + 2, exit.y + 24);
+            
+            // Draw player
+            ctx.fillStyle = player.color;
+            
+            // Draw a simple player character
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Draw eyes
+            ctx.fillStyle = '#000000';
+            if (player.facingRight) {
+                ctx.fillRect(player.x + player.width * 0.7, player.y + player.height * 0.3, 4, 4);
+            } else {
+                ctx.fillRect(player.x + player.width * 0.3, player.y + player.height * 0.3, 4, 4);
+            }
+            
+            // Restore canvas transformation
+            ctx.restore();
+        }
+
+        function updateHUD() {
+            document.getElementById('score').textContent = gameState.score;
+            document.getElementById('lives').textContent = gameState.lives;
+            document.getElementById('level').textContent = gameState.level;
+        }
+
+        function gameOver() {
+            gameState.isGameOver = true;
+            gameState.isGameRunning = false;
+            
+            document.getElementById('final-score').textContent = gameState.score;
+            document.getElementById('game-over-screen').style.display = 'flex';
+        }
+
+        function levelComplete() {
+            gameState.level++;
+            updateHUD();
+            generateLevel();
+        }
+
+        function gameLoop() {
+            if (gameState.isGameOver) return;
+            
+            update();
+            render();
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start the game when the page loads
+        window.onload = init;
+    </script>
+</body>
+</html>

@@ -1,0 +1,717 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Silkworm Clone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Courier New', Courier, monospace;
+            color: white;
+            overflow: hidden;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            border: 2px solid #333;
+            overflow: hidden;
+        }
+        
+        #game-canvas {
+            background-color: #000;
+        }
+        
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 10;
+        }
+        
+        #score-display {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            font-size: 18px;
+            z-index: 5;
+        }
+        
+        #lives-display {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            font-size: 18px;
+            z-index: 5;
+        }
+        
+        .button {
+            padding: 10px 20px;
+            margin: 10px;
+            background-color: #444;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-family: 'Courier New', Courier, monospace;
+            font-size: 16px;
+        }
+        
+        .button:hover {
+            background-color: #666;
+        }
+        
+        #game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 20;
+        }
+        
+        h1 {
+            color: #f00;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 30px;
+        }
+        
+        h2 {
+            color: #0f0;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas" width="800" height="600"></canvas>
+        <div id="score-display">Score: 0</div>
+        <div id="lives-display">Lives: 3</div>
+        
+        <div id="start-screen">
+            <h1>SILKWORM</h1>
+            <h2>Select Your Vehicle</h2>
+            <div>
+                <button class="button" id="helicopter-btn">Helicopter</button>
+                <button class="button" id="jeep-btn">Jeep</button>
+            </div>
+            <p>Controls: Arrow keys to move, Space to shoot</p>
+        </div>
+        
+        <div id="game-over">
+            <h1>Game Over</h1>
+            <div id="final-score">Score: 0</div>
+            <button class="button" id="restart-btn">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        // Game constants
+        const PLAYER_SPEED = 5;
+        const BULLET_SPEED = 10;
+        const ENEMY_SPEED = 3;
+        const SCROLL_SPEED = 2;
+        
+        // Game variables
+        let canvas, ctx;
+        let gameLoop;
+        let score = 0;
+        let lives = 3;
+        let playerVehicle = '';
+        let player = {
+            x: 100,
+            y: 300,
+            width: 50,
+            height: 30,
+            isMovingUp: false,
+            isMovingDown: false,
+            isMovingLeft: false,
+            isMovingRight: false,
+            isShooting: false,
+            lastShot: 0,
+            shootDelay: 200
+        };
+        
+        let bullets = [];
+        let enemies = [];
+        let explosions = [];
+        let terrainElements = [];
+        
+        // Vehicle characteristics
+        const vehicles = {
+            helicopter: {
+                width: 60,
+                height: 30,
+                color: '#0099ff',
+                canFlyOverTerrain: true
+            },
+            jeep: {
+                width: 50,
+                height: 25,
+                color: '#ff9900',
+                canFlyOverTerrain: false
+            }
+        };
+        
+        // Enemy types
+        const enemyTypes = [
+            { type: 'turret', width: 30, height: 30, color: '#ff0000', health: 2, points: 100 },
+            { type: 'helicopter', width: 50, height: 25, color: '#ff00ff', health: 1, points: 150 },
+            { type: 'tank', width: 60, height: 25, color: '#00ff00', health: 3, points: 200 }
+        ];
+
+        // Initialize the game
+        function initGame() {
+            canvas = document.getElementById('game-canvas');
+            ctx = canvas.getContext('2d');
+            
+            // Event listeners for vehicle selection
+            document.getElementById('helicopter-btn').addEventListener('click', () => startGame('helicopter'));
+            document.getElementById('jeep-btn').addEventListener('click', () => startGame('jeep'));
+            document.getElementById('restart-btn').addEventListener('click', restartGame);
+            
+            // Generate initial terrain
+            generateTerrain();
+        }
+        
+        // Start the game with selected vehicle
+        function startGame(vehicle) {
+            playerVehicle = vehicle;
+            player = {
+                ...player,
+                ...vehicles[vehicle],
+                y: vehicle === 'helicopter' ? 200 : 500 // Different starting positions
+            };
+            
+            document.getElementById('start-screen').style.display = 'none';
+            
+            // Add keyboard event listeners
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            
+            // Start game loop
+            gameLoop = setInterval(update, 1000 / 60); // 60 FPS
+            
+            // Spawn enemies periodically
+            spawnEnemies();
+        }
+        
+        // Restart the game
+        function restartGame() {
+            clearInterval(gameLoop);
+            
+            // Reset game variables
+            score = 0;
+            lives = 3;
+            bullets = [];
+            enemies = [];
+            explosions = [];
+            terrainElements = [];
+            
+            // Update displays
+            document.getElementById('score-display').textContent = `Score: ${score}`;
+            document.getElementById('lives-display').textContent = `Lives: ${lives}`;
+            document.getElementById('game-over').style.display = 'none';
+            document.getElementById('start-screen').style.display = 'flex';
+            
+            // Generate new terrain
+            generateTerrain();
+        }
+        
+        // Handle keyboard input
+        function handleKeyDown(e) {
+            switch(e.key) {
+                case 'ArrowUp':
+                    player.isMovingUp = true;
+                    break;
+                case 'ArrowDown':
+                    player.isMovingDown = true;
+                    break;
+                case 'ArrowLeft':
+                    player.isMovingLeft = true;
+                    break;
+                case 'ArrowRight':
+                    player.isMovingRight = true;
+                    break;
+                case ' ':
+                    player.isShooting = true;
+                    break;
+            }
+        }
+        
+        function handleKeyUp(e) {
+            switch(e.key) {
+                case 'ArrowUp':
+                    player.isMovingUp = false;
+                    break;
+                case 'ArrowDown':
+                    player.isMovingDown = false;
+                    break;
+                case 'ArrowLeft':
+                    player.isMovingLeft = false;
+                    break;
+                case 'ArrowRight':
+                    player.isMovingRight = false;
+                    break;
+                case ' ':
+                    player.isShooting = false;
+                    break;
+            }
+        }
+        
+        // Generate terrain for the level
+        function generateTerrain() {
+            terrainElements = [];
+            
+            // Ground
+            terrainElements.push({
+                type: 'ground',
+                x: 0,
+                y: 550,
+                width: canvas.width,
+                height: 50,
+                color: '#333'
+            });
+            
+            // Add some random obstacles
+            for (let i = 0; i < 10; i++) {
+                terrainElements.push({
+                    type: 'obstacle',
+                    x: Math.random() * 2000 + 800, // Place them ahead in the level
+                    y: 530,
+                    width: 30 + Math.random() * 70,
+                    height: 20 + Math.random() * 30,
+                    color: '#555'
+                });
+            }
+        }
+        
+        // Spawn enemies
+        function spawnEnemies() {
+            setInterval(() => {
+                if (enemies.length < 10) { // Limit number of enemies
+                    const enemyType = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+                    
+                    const enemy = {
+                        ...enemyType,
+                        x: canvas.width + Math.random() * 200,
+                        y: enemyType.type === 'turret' ? 520 : Math.random() * 400 + 50,
+                        speedX: -ENEMY_SPEED - Math.random() * 2,
+                        speedY: enemyType.type === 'turret' ? 0 : (Math.random() - 0.5) * 2,
+                        lastShot: 0,
+                        shootDelay: 1000 + Math.random() * 2000
+                    };
+                    
+                    enemies.push(enemy);
+                }
+            }, 1000);
+        }
+        
+        // Update game state
+        function update() {
+            // Clear the canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Update player position
+            updatePlayer();
+            
+            // Update bullets
+            updateBullets();
+            
+            // Update enemies
+            updateEnemies();
+            
+            // Update explosions
+            updateExplosions();
+            
+            // Update terrain
+            updateTerrain();
+            
+            // Check collisions
+            checkCollisions();
+            
+            // Draw everything
+            drawGame();
+            
+            // Player shooting
+            if (player.isShooting && Date.now() - player.lastShot > player.shootDelay) {
+                shoot();
+                player.lastShot = Date.now();
+            }
+        }
+        
+        // Update player position
+        function updatePlayer() {
+            if (player.isMovingUp && player.y > 0) {
+                player.y -= PLAYER_SPEED;
+            }
+            if (player.isMovingDown) {
+                const maxY = playerVehicle === 'helicopter' ? canvas.height - player.height : 520 - player.height;
+                if (player.y < maxY) {
+                    player.y += PLAYER_SPEED;
+                }
+            }
+            if (player.isMovingLeft && player.x > 0) {
+                player.x -= PLAYER_SPEED;
+            }
+            if (player.isMovingRight && player.x < canvas.width - player.width) {
+                player.x += PLAYER_SPEED;
+            }
+            
+            // Jeep can't fly, keep it on ground
+            if (playerVehicle === 'jeep') {
+                player.y = Math.min(player.y, 520 - player.height);
+            }
+        }
+        
+        // Player shooting
+        function shoot() {
+            const bullet = {
+                x: player.x + player.width,
+                y: player.y + player.height / 2 - 2,
+                width: 10,
+                height: 4,
+                speed: BULLET_SPEED,
+                color: '#ffff00',
+                isPlayerBullet: true
+            };
+            
+            bullets.push(bullet);
+        }
+        
+        // Update bullets position
+        function updateBullets() {
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                
+                if (bullet.isPlayerBullet) {
+                    bullet.x += bullet.speed;
+                } else {
+                    bullet.x -= bullet.speed;
+                }
+                
+                // Remove bullets that go off screen
+                if (bullet.x > canvas.width || bullet.x < 0) {
+                    bullets.splice(i, 1);
+                }
+            }
+        }
+        
+        // Update enemies
+        function updateEnemies() {
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                
+                enemy.x += enemy.speedX;
+                enemy.y += enemy.speedY;
+                
+                // Bounce off top and bottom
+                if (enemy.y < 0 || enemy.y > 500 - enemy.height) {
+                    enemy.speedY *= -1;
+                }
+                
+                // Remove enemies that go off left side
+                if (enemy.x + enemy.width < 0) {
+                    enemies.splice(i, 1);
+                    continue;
+                }
+                
+                // Enemy shooting
+                if (Date.now() - enemy.lastShot > enemy.shootDelay) {
+                    enemyShoot(enemy);
+                    enemy.lastShot = Date.now();
+                }
+            }
+        }
+        
+        // Enemy shooting
+        function enemyShoot(enemy) {
+            const bullet = {
+                x: enemy.x,
+                y: enemy.y + enemy.height / 2,
+                width: 8,
+                height: 3,
+                speed: 6,
+                color: '#ff6666',
+                isPlayerBullet: false
+            };
+            
+            bullets.push(bullet);
+        }
+        
+        // Update explosions
+        function updateExplosions() {
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                const explosion = explosions[i];
+                explosion.lifetime -= 1;
+                
+                if (explosion.lifetime <= 0) {
+                    explosions.splice(i, 1);
+                }
+            }
+        }
+        
+        // Update terrain
+        function updateTerrain() {
+            // Scroll terrain to simulate movement
+            for (let i = 0; i < terrainElements.length; i++) {
+                terrainElements[i].x -= SCROLL_SPEED;
+                
+                // If a terrain element goes off screen, move it to the right
+                if (terrainElements[i].type === 'obstacle' && terrainElements[i].x + terrainElements[i].width < 0) {
+                    terrainElements[i].x = canvas.width + Math.random() * 500;
+                }
+            }
+        }
+        
+        // Check for collisions
+        function checkCollisions() {
+            // Player bullets hitting enemies
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                const bullet = bullets[i];
+                
+                if (bullet.isPlayerBullet) {
+                    for (let j = enemies.length - 1; j >= 0; j--) {
+                        const enemy = enemies[j];
+                        
+                        if (
+                            bullet.x < enemy.x + enemy.width &&
+                            bullet.x + bullet.width > enemy.x &&
+                            bullet.y < enemy.y + enemy.height &&
+                            bullet.y + bullet.height > enemy.y
+                        ) {
+                            // Hit an enemy
+                            enemy.health -= 1;
+                            bullets.splice(i, 1);
+                            
+                            if (enemy.health <= 0) {
+                                // Enemy destroyed
+                                createExplosion(enemy.x, enemy.y);
+                                score += enemy.points;
+                                enemies.splice(j, 1);
+                                document.getElementById('score-display').textContent = `Score: ${score}`;
+                            }
+                            
+                            break;
+                        }
+                    }
+                } else {
+                    // Enemy bullets hitting player
+                    if (
+                        bullet.x < player.x + player.width &&
+                        bullet.x + bullet.width > player.x &&
+                        bullet.y < player.y + player.height &&
+                        bullet.y + bullet.height > player.y
+                    ) {
+                        // Player hit
+                        bullets.splice(i, 1);
+                        playerHit();
+                        break;
+                    }
+                }
+            }
+            
+            // Player colliding with enemies
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const enemy = enemies[i];
+                
+                if (
+                    player.x < enemy.x + enemy.width &&
+                    player.x + player.width > enemy.x &&
+                    player.y < enemy.y + enemy.height &&
+                    player.y + player.height > enemy.y
+                ) {
+                    // Collision with enemy
+                    createExplosion(enemy.x, enemy.y);
+                    enemies.splice(i, 1);
+                    playerHit();
+                }
+            }
+            
+            // Player colliding with terrain (only for jeep)
+            if (playerVehicle === 'jeep') {
+                for (let i = terrainElements.length - 1; i >= 0; i--) {
+                    const terrain = terrainElements[i];
+                    
+                    if (terrain.type === 'obstacle' &&
+                        player.x < terrain.x + terrain.width &&
+                        player.x + player.width > terrain.x &&
+                        player.y + player.height > terrain.y
+                    ) {
+                        // Collision with obstacle
+                        playerHit();
+                        break;
+                    }
+                }
+            }
+        }
+        
+        // Handle player being hit
+        function playerHit() {
+            createExplosion(player.x, player.y);
+            lives -= 1;
+            document.getElementById('lives-display').textContent = `Lives: ${lives}`;
+            
+            if (lives <= 0) {
+                gameOver();
+            } else {
+                // Reset player position
+                player.x = 100;
+                player.y = playerVehicle === 'helicopter' ? 200 : 500;
+            }
+        }
+        
+        // Create explosion effect
+        function createExplosion(x, y) {
+            explosions.push({
+                x: x,
+                y: y,
+                size: 30,
+                lifetime: 20,
+                color: '#ffcc00'
+            });
+        }
+        
+        // Game over
+        function gameOver() {
+            clearInterval(gameLoop);
+            document.getElementById('final-score').textContent = `Score: ${score}`;
+            document.getElementById('game-over').style.display = 'flex';
+            
+            // Remove event listeners
+            window.removeEventListener('keydown', handleKeyDown);
+            window.removeEventListener('keyup', handleKeyUp);
+        }
+        
+        // Draw the game
+        function drawGame() {
+            // Draw terrain
+            drawTerrain();
+            
+            // Draw player
+            drawPlayer();
+            
+            // Draw bullets
+            drawBullets();
+            
+            // Draw enemies
+            drawEnemies();
+            
+            // Draw explosions
+            drawExplosions();
+        }
+        
+        // Draw the player
+        function drawPlayer() {
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Draw vehicle details
+            if (playerVehicle === 'helicopter') {
+                // Rotor
+                ctx.fillStyle = '#ffffff';
+                ctx.fillRect(player.x + 10, player.y - 5, 40, 3);
+                
+                // Tail
+                ctx.fillRect(player.x - 10, player.y + 15, 15, 4);
+            } else {
+                // Wheels
+                ctx.fillStyle = '#444';
+                ctx.fillRect(player.x + 10, player.y + player.height, 10, 5);
+                ctx.fillRect(player.x + 35, player.y + player.height, 10, 5);
+                
+                // Gun
+                ctx.fillStyle = '#888';
+                ctx.fillRect(player.x + player.width - 5, player.y + 10, 15, 5);
+            }
+        }
+        
+        // Draw bullets
+        function drawBullets() {
+            for (const bullet of bullets) {
+                ctx.fillStyle = bullet.color;
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            }
+        }
+        
+        // Draw enemies
+        function drawEnemies() {
+            for (const enemy of enemies) {
+                ctx.fillStyle = enemy.color;
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                
+                // Draw different enemy types
+                if (enemy.type === 'helicopter') {
+                    // Rotor
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(enemy.x + 5, enemy.y - 5, 30, 2);
+                } else if (enemy.type === 'tank') {
+                    // Cannon
+                    ctx.fillStyle = '#888';
+                    ctx.fillRect(enemy.x - 10, enemy.y + 10, 15, 5);
+                } else if (enemy.type === 'turret') {
+                    // Turret barrel
+                    ctx.fillStyle = '#888';
+                    ctx.fillRect(enemy.x - 15, enemy.y + 10, 15, 8);
+                }
+            }
+        }
+        
+        // Draw explosions
+        function drawExplosions() {
+            for (const explosion of explosions) {
+                ctx.fillStyle = explosion.color;
+                const size = explosion.size - (20 - explosion.lifetime) * 0.5;
+                
+                ctx.beginPath();
+                ctx.arc(explosion.x + 15, explosion.y + 15, size, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(explosion.x + 15, explosion.y + 15, size * 0.6, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // Draw terrain
+        function drawTerrain() {
+            for (const terrain of terrainElements) {
+                ctx.fillStyle = terrain.color;
+                ctx.fillRect(terrain.x, terrain.y, terrain.width, terrain.height);
+                
+                if (terrain.type === 'ground') {
+                    // Draw ground details
+                    ctx.fillStyle = '#222';
+                    for (let i = 0; i < canvas.width; i += 50) {
+                        ctx.fillRect(i, 555, 30, 2);
+                    }
+                }
+            }
+        }
+        
+        // Initialize the game when the page loads
+        window.addEventListener('load', initGame);
+    </script>
+</body>
+</html>

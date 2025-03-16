@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Platform Shooter</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background-color: #222;
+            overflow: hidden;
+        }
+        canvas {
+            border: 2px solid #444;
+            background-color: #000;
+        }
+        #game-container {
+            position: relative;
+        }
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 18px;
+        }
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 16px;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="gameCanvas" width="1920" height="1080"></canvas>
+        <div id="hud">HP: 100 | Score: 0</div>
+        <div id="controls">
+            Controls: WASD to move, Space to jump, Mouse to aim, Click to shoot, W/S to climb ladders
+        </div>
+    </div>
+    
+    <script>
+        // Game initialization
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const hud = document.getElementById('hud');
+        
+        // Scale canvas to fit window while maintaining aspect ratio
+        function resizeCanvas() {
+            const scale = Math.min(
+                window.innerWidth / canvas.width,
+                window.innerHeight / canvas.height
+            ) * 0.95;
+            
+            canvas.style.width = (canvas.width * scale) + 'px';
+            canvas.style.height = (canvas.height * scale) + 'px';
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        
+        // Game constants
+        const GRAVITY = 0.5;
+        const PLAYER_SPEED = 6;
+        const JUMP_FORCE = 15;
+        const LADDER_CLIMB_SPEED = 4;
+        const BULLET_SPEED = 15;
+        
+        // Game state
+        let score = 0;
+        let gameOver = false;
+        let mouseX = 0;
+        let mouseY = 0;
+        
+        // Input handling
+        const keys = {};
+        let mouseDown = false;
+        let mousePosition = { x: 0, y: 0 };
+        
+        window.addEventListener('keydown', (e) => { keys[e.key.toLowerCase()] = true; });
+        window.addEventListener('keyup', (e) => { keys[e.key.toLowerCase()] = false; });
+        canvas.addEventListener('mousedown', () => { mouseDown = true; });
+        canvas.addEventListener('mouseup', () => { mouseDown = false; });
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const scaleX = canvas.width / rect.width;
+            const scaleY = canvas.height / rect.height;
+            
+            mousePosition.x = (e.clientX - rect.left) * scaleX;
+            mousePosition.y = (e.clientY - rect.top) * scaleY;
+        });
+        
+        // Game objects
+        class GameObject {
+            constructor(x, y, width, height, color) {
+                this.x = x;
+                this.y = y;
+                this.width = width;
+                this.height = height;
+                this.color = color;
+            }
+            
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+            
+            collidesWith(other) {
+                return (
+                    this.x < other.x + other.width &&
+                    this.x + this.width > other.x &&
+                    this.y < other.y + other.height &&
+                    this.y + this.height > other.y
+                );
+            }
+        }
+        
+        class Player extends GameObject {
+            constructor(x, y) {
+                super(x, y, 50, 80, '#3498db');
+                this.velX = 0;
+                this.velY = 0;
+                this.hp = 100;
+                this.isOnGround = false;
+                this.isOnLadder = false;
+                this.facingRight = true;
+                this.shootCooldown = 0;
+                this.invulnerable = 0;
+            }
+            
+            update() {
+                // Movement controls
+                this.velX = 0;
+                
+                if (keys['a'] || keys['arrowleft']) {
+                    this.velX = -PLAYER_SPEED;
+                    this.facingRight = false;
+                }
+                if (keys['d'] || keys['arrowright']) {
+                    this.velX = PLAYER_SPEED;
+                    this.facingRight = true;
+                }
+                
+                // Jumping
+                if ((keys[' '] || keys['w'] || keys['arrowup']) && this.isOnGround && !this.isOnLadder) {
+                    this.velY = -JUMP_FORCE;
+                    this.isOnGround = false;
+                }
+                
+                // Ladder movement
+                if (this.isOnLadder) {
+                    this.velY = 0;
+                    if (keys['w'] || keys['arrowup']) {
+                        this.velY = -LADDER_CLIMB_SPEED;
+                    }
+                    if (keys['s'] || keys['arrowdown']) {
+                        this.velY = LADDER_CLIMB_SPEED;
+                    }
+                    
+                    // Allow jumping off ladder
+                    if (keys[' ']) {
+                        this.velY = -JUMP_FORCE;
+                        this.isOnLadder = false;
+                    }
+                } else {
+                    // Apply gravity when not on ladder
+                    this.velY += GRAVITY;
+                }
+                
+                // Move player
+                this.x += this.velX;
+                this.y += this.velY;
+                
+                // Constrain to screen
+                if (this.x < 0) this.x = 0;
+                if (this.x + this.width > canvas.width) this.x = canvas.width - this.width;
+                if (this.y < 0) this.y = 0;
+                if (this.y + this.height > canvas.height) {
+                    this.y = canvas.height - this.height;
+                    this.isOnGround = true;
+                    this.velY = 0;
+                }
+                
+                // Shooting
+                if (this.shootCooldown > 0) {
+                    this.shootCooldown--;
+                }
+                
+                if (mouseDown && this.shootCooldown === 0) {
+                    this.shoot();
+                    this.shootCooldown = 15; // Rate of fire
+                }
+                
+                // Invulnerability frames
+                if (this.invulnerable > 0) {
+                    this.invulnerable--;
+                }
+                
+                // Update HUD
+                hud.textContent = `HP: ${this.hp} | Score: ${score}`;
+            }
+            
+            shoot() {
+                const centerX = this.x + this.width / 2;
+                const centerY = this.y + this.height / 2;
+                
+                // Calculate angle to mouse
+                const angle = Math.atan2(mousePosition.y - centerY, mousePosition.x - centerX);
+                
+                // Create bullet
+                const bullet = new Bullet(
+                    centerX,
+                    centerY,
+                    Math.cos(angle) * BULLET_SPEED,
+                    Math.sin(angle) * BULLET_SPEED,
+                    true
+                );
+                
+                bullets.push(bullet);
+            }
+            
+            takeDamage(amount) {
+                if (this.invulnerable > 0) return;
+                
+                this.hp -= amount;
+                this.invulnerable = 60; // 1 second of invulnerability
+                
+                if (this.hp <= 0) {
+                    gameOver = true;
+                }
+            }
+            
+            draw() {
+                // Flashing when invulnerable
+                if (this.invulnerable > 0 && this.invulnerable % 6 > 3) {
+                    ctx.fillStyle = '#ff5555';
+                } else {
+                    ctx.fillStyle = this.color;
+                }
+                
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Draw face direction
+                ctx.fillStyle = '#000';
+                if (this.facingRight) {
+                    ctx.fillRect(this.x + 35, this.y + 20, 10, 10);
+                } else {
+                    ctx.fillRect(this.x + 5, this.y + 20, 10, 10);
+                }
+                
+                // Draw gun
+                ctx.save();
+                ctx.translate(this.x + this.width/2, this.y + this.height/2);
+                const angle = Math.atan2(mousePosition.y - (this.y + this.height/2), mousePosition.x - (this.x + this.width/2));
+                ctx.rotate(angle);
+                ctx.fillStyle = '#555';
+                ctx.fillRect(0, -3, 30, 6);
+                ctx.restore();
+            }
+        }
+        
+        class Platform extends GameObject {
+            constructor(x, y, width, height) {
+                super(x, y, width, height, '#8e44ad');
+            }
+        }
+        
+        class Ladder extends GameObject {
+            constructor(x, y, height) {
+                super(x, y, 40, height, 'rgba(139, 69, 19, 0.7)');
+            }
+            
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Draw ladder rungs
+                ctx.fillStyle = '#a0522d';
+                for (let y = this.y + 15; y < this.y + this.height; y += 30) {
+                    ctx.fillRect(this.x - 5, y, this.width + 10, 5);
+                }
+            }
+        }
+        
+        class Enemy extends GameObject {
+            constructor(x, y, platformStart, platformEnd) {
+                super(x, y, 50, 60, '#e74c3c');
+                this.hp = 30;
+                this.speed = 2;
+                this.direction = Math.random() > 0.5 ? 1 : -1;
+                this.shootCooldown = Math.floor(Math.random() * 120);
+                this.platformStart = platformStart;
+                this.platformEnd = platformEnd;
+                this.sightRange = 500;
+            }
+            
+            update() {
+                // Move back and forth on platform
+                this.x += this.speed * this.direction;
+                
+                if (this.x <= this.platformStart) {
+                    this.x = this.platformStart;
+                    this.direction = 1;
+                } else if (this.x + this.width >= this.platformEnd) {
+                    this.x = this.platformEnd - this.width;
+                    this.direction = -1;
+                }
+                
+                // Shooting logic
+                if (this.shootCooldown > 0) {
+                    this.shootCooldown--;
+                }
+                
+                // Check if player is in sight range
+                const playerCenterX = player.x + player.width/2;
+                const playerCenterY = player.y + player.height/2;
+                const enemyCenterX = this.x + this.width/2;
+                const enemyCenterY = this.y + this.height/2;
+                
+                const dist = Math.sqrt(
+                    Math.pow(playerCenterX - enemyCenterX, 2) +
+                    Math.pow(playerCenterY - enemyCenterY, 2)
+                );
+                
+                if (dist < this.sightRange && this.shootCooldown === 0) {
+                    this.shoot(playerCenterX, playerCenterY);
+                    this.shootCooldown = 120; // 2 seconds
+                }
+            }
+            
+            shoot(targetX, targetY) {
+                const centerX = this.x + this.width / 2;
+                const centerY = this.y + this.height / 2;
+                
+                // Calculate angle to player
+                const angle = Math.atan2(targetY - centerY, targetX - centerX);
+                
+                // Create bullet
+                const bullet = new Bullet(
+                    centerX,
+                    centerY,
+                    Math.cos(angle) * BULLET_SPEED * 0.7, // Slightly slower than player bullets
+                    Math.sin(angle) * BULLET_SPEED * 0.7,
+                    false
+                );
+                
+                bullets.push(bullet);
+            }
+            
+            takeDamage(amount) {
+                this.hp -= amount;
+                if (this.hp <= 0) {
+                    const index = enemies.indexOf(this);
+                    if (index !== -1) {
+                        enemies.splice(index, 1);
+                        score += 100;
+                    }
+                    
+                    // Random chance to spawn a health pickup
+                    if (Math.random() < 0.3) {
+                        healthPickups.push(new HealthPickup(this.x, this.y));
+                    }
+                }
+            }
+            
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Draw eyes
+                ctx.fillStyle = '#000';
+                if (this.direction > 0) {
+                    ctx.fillRect(this.x + 35, this.y + 15, 8, 8);
+                } else {
+                    ctx.fillRect(this.x + 7, this.y + 15, 8, 8);
+                }
+                
+                // Health bar
+                ctx.fillStyle = '#000';
+                ctx.fillRect(this.x, this.y - 10, this.width, 5);
+                ctx.fillStyle = '#2ecc71';
+                ctx.fillRect(this.x, this.y - 10, (this.hp / 30) * this.width, 5);
+            }
+        }
+        
+        class Bullet extends GameObject {
+            constructor(x, y, velX, velY, isPlayerBullet) {
+                const size = isPlayerBullet ? 5 : 7;
+                const color = isPlayerBullet ? '#f1c40f' : '#e74c3c';
+                super(x, y, size, size, color);
+                this.velX = velX;
+                this.velY = velY;
+                this.isPlayerBullet = isPlayerBullet;
+                this.lifetime = 120; // 2 seconds lifetime
+            }
+            
+            update() {
+                this.x += this.velX;
+                this.y += this.velY;
+                this.lifetime--;
+                
+                // Check if bullet is out of bounds or expired
+                if (
+                    this.x < 0 ||
+                    this.x > canvas.width ||
+                    this.y < 0 ||
+                    this.y > canvas.height ||
+                    this.lifetime <= 0
+                ) {
+                    const index = bullets.indexOf(this);
+                    if (index !== -1) {
+                        bullets.splice(index, 1);
+                    }
+                    return;
+                }
+                
+                // Check for collisions
+                if (this.isPlayerBullet) {
+                    // Player bullets hit enemies
+                    for (let i = 0; i < enemies.length; i++) {
+                        if (this.collidesWith(enemies[i])) {
+                            enemies[i].takeDamage(10);
+                            
+                            const index = bullets.indexOf(this);
+                            if (index !== -1) {
+                                bullets.splice(index, 1);
+                            }
+                            return;
+                        }
+                    }
+                } else {
+                    // Enemy bullets hit player
+                    if (this.collidesWith(player)) {
+                        player.takeDamage(10);
+                        
+                        const index = bullets.indexOf(this);
+                        if (index !== -1) {
+                            bullets.splice(index, 1);
+                        }
+                        return;
+                    }
+                }
+                
+                // Bullets collide with platforms
+                for (let i = 0; i < platforms.length; i++) {
+                    if (this.collidesWith(platforms[i])) {
+                        const index = bullets.indexOf(this);
+                        if (index !== -1) {
+                            bullets.splice(index, 1);
+                        }
+                        return;
+                    }
+                }
+            }
+        }
+        
+        class HealthPickup extends GameObject {
+            constructor(x, y) {
+                super(x, y, 20, 20, '#2ecc71');
+                this.velY = 0;
+                this.isOnGround = false;
+            }
+            
+            update() {
+                if (!this.isOnGround) {
+                    this.velY += GRAVITY * 0.5;
+                    this.y += this.velY;
+                }
+                
+                // Check for collision with player
+                if (this.collidesWith(player)) {
+                    player.hp = Math.min(player.hp + 30, 100);
+                    
+                    const index = healthPickups.indexOf(this);
+                    if (index !== -1) {
+                        healthPickups.splice(index, 1);
+                    }
+                    return;
+                }
+                
+                // Check for collision with platforms
+                for (let i = 0; i < platforms.length; i++) {
+                    if (this.collidesWith(platforms[i])) {
+                        this.y = platforms[i].y - this.height;
+                        this.isOnGround = true;
+                        this.velY = 0;
+                        break;
+                    }
+                }
+                
+                // Check if fell off the bottom of the screen
+                if (this.y > canvas.height) {
+                    const index = healthPickups.indexOf(this);
+                    if (index !== -1) {
+                        healthPickups.splice(index, 1);
+                    }
+                }
+            }
+            
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+                
+                // Draw cross
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(this.x + 8, this.y + 4, 4, 12);
+                ctx.fillRect(this.x + 4, this.y + 8, 12, 4);
+            }
+        }
+        
+        // Create game objects
+        const player = new Player(100, 500);
+        const platforms = [
+            // Ground level
+            new Platform(0, canvas.height - 50, canvas.width, 50),
+            
+            // Middle platforms
+            new Platform(200, 700, 400, 40),
+            new Platform(700, 700, 400, 40),
+            new Platform(1400, 700, 400, 40),
+            
+            // Upper platforms
+            new Platform(100, 400, 300, 40),
+            new Platform(600, 400, 400, 40),
+            new Platform(1200, 400, 300, 40),
+            
+            // Top level platforms
+            new Platform(400, 150, 250, 40),
+            new Platform(850, 150, 250, 40),
+            new Platform(1300, 150, 250, 40)
+        ];
+        
+        const ladders = [
+            // Connecting ground to middle level
+            new Ladder(250, 350, 350),
+            new Ladder(800, 350, 350),
+            new Ladder(1500, 350, 350),
+            
+            // Connecting middle to upper level
+            new Ladder(450, 50, 350),
+            new Ladder(900, 50, 350),
+            new Ladder(1350, 50, 350),
+            
+            // NEW: Ground level to platforms
+            new Ladder(300, 700, 330),
+            new Ladder(750, 700, 330),
+            new Ladder(1450, 700, 330)
+        ];
+        
+        const enemies = [
+            // Middle level enemies
+            new Enemy(300, 640, 200, 600),
+            new Enemy(800, 640, 700, 1100),
+            new Enemy(1500, 640, 1400, 1800),
+            
+            // Upper level enemies
+            new Enemy(150, 340, 100, 400),
+            new Enemy(750, 340, 600, 1000),
+            new Enemy(1300, 340, 1200, 1500),
+            
+            // Top level enemies
+            new Enemy(450, 90, 400, 650),
+            new Enemy(900, 90, 850, 1100),
+            new Enemy(1350, 90, 1300, 1550)
+        ];
+        
+        const bullets = [];
+        const healthPickups = [];
+        
+        // Game loop
+        function gameLoop() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (!gameOver) {
+                // Update player
+                player.update();
+                
+                // Reset ladder status
+                player.isOnLadder = false;
+                
+                // Check collisions with platforms
+                player.isOnGround = false;
+                for (let i = 0; i < platforms.length; i++) {
+                    const platform = platforms[i];
+                    
+                    // Check if player is on a platform
+                    if (
+                        player.velY >= 0 &&
+                        player.y + player.height <= platform.y + 10 &&
+                        player.y + player.height >= platform.y - 10 &&
+                        player.x + player.width > platform.x &&
+                        player.x < platform.x + platform.width
+                    ) {
+                        player.isOnGround = true;
+                        player.velY = 0;
+                        player.y = platform.y - player.height;
+                    }
+                }
+                
+                // Check collisions with ladders
+                for (let i = 0; i < ladders.length; i++) {
+                    const ladder = ladders[i];
+                    
+                    if (
+                        player.x + player.width/2 > ladder.x &&
+                        player.x + player.width/2 < ladder.x + ladder.width &&
+                        player.y + player.height > ladder.y &&
+                        player.y < ladder.y + ladder.height
+                    ) {
+                        // Player is touching ladder - make climbing more intuitive
+                        // Just use up/down keys to climb without needing to press E
+                        if (keys['w'] || keys['arrowup'] || keys['s'] || keys['arrowdown']) {
+                            player.isOnLadder = true;
+                            
+                            // Center player on ladder
+                            player.x = ladder.x + ladder.width/2 - player.width/2;
+                        }
+                    }
+                }
+                
+                // Update enemies
+                for (let i = 0; i < enemies.length; i++) {
+                    enemies[i].update();
+                }
+                
+                // Update bullets
+                for (let i = 0; i < bullets.length; i++) {
+                    bullets[i].update();
+                }
+                
+                // Update health pickups
+                for (let i = 0; i < healthPickups.length; i++) {
+                    healthPickups[i].update();
+                }
+            }
+            
+            // Draw game objects
+            for (let i = 0; i < platforms.length; i++) {
+                platforms[i].draw();
+            }
+            
+            for (let i = 0; i < ladders.length; i++) {
+                ladders[i].draw();
+            }
+            
+            for (let i = 0; i < healthPickups.length; i++) {
+                healthPickups[i].draw();
+            }
+            
+            for (let i = 0; i < enemies.length; i++) {
+                enemies[i].draw();
+            }
+            
+            for (let i = 0; i < bullets.length; i++) {
+                bullets[i].draw();
+            }
+            
+            player.draw();
+            
+            // Game over overlay
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = '#fff';
+                ctx.font = '80px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 40);
+                
+                ctx.font = '40px Arial';
+                ctx.fillText(`Score: ${score}`, canvas.width/2, canvas.height/2 + 40);
+                
+                ctx.font = '30px Arial';
+                ctx.fillText('Click to restart', canvas.width/2, canvas.height/2 + 100);
+                
+                // Restart game on click
+                canvas.onclick = () => {
+                    location.reload();
+                };
+            }
+            
+            // Request next frame
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start game
+        gameLoop();
+    </script>
+</body>
+</html>

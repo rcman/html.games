@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bosconian Clone</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        #game-canvas {
+            display: block;
+            background-color: #000;
+        }
+        #ui-container {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: #fff;
+            font-size: 16px;
+            text-align: left;
+        }
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        #start-screen h1 {
+            color: #ff0;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        #start-screen p {
+            color: #fff;
+            margin: 5px;
+            font-size: 16px;
+        }
+        #start-message {
+            margin-top: 30px;
+            padding: 10px 30px;
+            font-size: 24px;
+            color: #f00;
+        }
+        #game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 11;
+        }
+        #game-over h2 {
+            color: #f00;
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+        #restart-message {
+            margin-top: 30px;
+            padding: 10px 30px;
+            font-size: 24px;
+            color: #f00;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <canvas id="game-canvas"></canvas>
+        <div id="ui-container">
+            <div>SCORE: <span id="score-value">0</span></div>
+            <div>LIVES: <span id="lives-value">3</span></div>
+            <div>LEVEL: <span id="level-value">1</span></div>
+        </div>
+        
+        <div id="start-screen">
+            <h1>BOSCONIAN</h1>
+            <p>Arrow Keys or WASD to move</p>
+            <p>SPACE to fire</p>
+            <p>Destroy all enemy bases to advance</p>
+            <div id="start-message">PRESS F1 TO START</div>
+        </div>
+        
+        <div id="game-over">
+            <h2>GAME OVER</h2>
+            <div>FINAL SCORE: <span id="final-score">0</span></div>
+            <div id="restart-message">PRESS F1 TO PLAY AGAIN</div>
+        </div>
+    </div>
+
+    <script>
+    // Game Variables
+    let canvas, ctx;
+    let gameActive = false;
+    let gameLoop;
+    let score = 0;
+    let lives = 3;
+    let level = 1;
+    
+    // Game Objects
+    let player = {
+        x: 0,
+        y: 0,
+        size: 20,
+        speed: 5,
+        angle: 0,
+        color: '#0f0'
+    };
+    
+    let bullets = [];
+    let enemies = [];
+    let bases = [];
+    let stars = [];
+    let asteroids = [];
+    
+    // Input Handling
+    let keys = {};
+    let lastShot = 0;
+    
+    // Constants
+    const BULLET_SIZE = 4;
+    const BULLET_SPEED = 8;
+    const ENEMY_SIZE = 25;
+    const BASE_SIZE = 60;
+    const STAR_COUNT = 150;
+    const ASTEROID_COUNT = 10;
+    
+    // Initialize the game
+    window.onload = function() {
+        // Setup canvas
+        canvas = document.getElementById('game-canvas');
+        ctx = canvas.getContext('2d');
+        
+        // Set canvas size to window size
+        resizeCanvas();
+        
+        // Input event listeners
+        window.addEventListener('keydown', function(e) {
+            keys[e.key] = true;
+            
+            // F1 key to start/restart
+            if (e.key === 'F1') {
+                e.preventDefault();
+                if (!gameActive) {
+                    if (document.getElementById('start-screen').style.display !== 'none') {
+                        startGame();
+                    } else if (document.getElementById('game-over').style.display !== 'none') {
+                        restartGame();
+                    }
+                }
+            }
+            
+            // Prevent spacebar from scrolling
+            if (e.key === ' ') {
+                e.preventDefault();
+            }
+        });
+        
+        window.addEventListener('keyup', function(e) {
+            keys[e.key] = false;
+        });
+        
+        // Handle window resize
+        window.addEventListener('resize', resizeCanvas);
+        
+        // Create stars
+        createStars();
+        
+        // Initialize player position
+        player.x = canvas.width / 2;
+        player.y = canvas.height / 2;
+        
+        // Start render loop (just to show stars on the start screen)
+        renderStartScreen();
+    };
+    
+    // Resize canvas to match window size
+    function resizeCanvas() {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        // Reset player position if game is active
+        if (gameActive) {
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+        }
+    }
+    
+    // Create stars for background
+    function createStars() {
+        stars = [];
+        for (let i = 0; i < STAR_COUNT; i++) {
+            stars.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 2 + 0.5,
+                color: `rgba(255, 255, 255, ${Math.random() * 0.7 + 0.3})`
+            });
+        }
+    }
+    
+    // Start screen render loop
+    function renderStartScreen() {
+        // Clear canvas
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw stars
+        drawStars();
+        
+        // Continue animation if game is not active
+        if (!gameActive) {
+            requestAnimationFrame(renderStartScreen);
+        }
+    }
+    
+    // Start the game
+    function startGame() {
+        // Hide start screen
+        document.getElementById('start-screen').style.display = 'none';
+        
+        // Reset game state
+        resetGame();
+        
+        // Start the main game loop
+        gameLoop = setInterval(update, 16); // ~60fps
+        
+        // Set game as active
+        gameActive = true;
+    }
+    
+    // Restart the game
+    function restartGame() {
+        // Hide game over screen
+        document.getElementById('game-over').style.display = 'none';
+        
+        // Reset game state
+        resetGame();
+        
+        // Start the game
+        gameActive = true;
+        gameLoop = setInterval(update, 16);
+    }
+    
+    // Reset the game state
+    function resetGame() {
+        // Reset variables
+        score = 0;
+        lives = 3;
+        level = 1;
+        
+        // Reset player
+        player.x = canvas.width / 2;
+        player.y = canvas.height / 2;
+        player.angle = 0;
+        
+        // Clear arrays
+        bullets = [];
+        enemies = [];
+        bases = [];
+        asteroids = [];
+        
+        // Create game objects
+        createLevel(level);
+        
+        // Update UI
+        updateUI();
+    }
+    
+    // Create a new level
+    function createLevel(level) {
+        // Clear enemies and bases
+        enemies = [];
+        bases = [];
+        asteroids = [];
+        
+        // Create bases
+        const baseCount = Math.min(2 + level, 8);
+        for (let i = 0; i < baseCount; i++) {
+            createBase();
+        }
+        
+        // Create asteroids
+        for (let i = 0; i < ASTEROID_COUNT + level; i++) {
+            createAsteroid();
+        }
+        
+        // Update level display
+        document.getElementById('level-value').textContent = level;
+    }
+    
+    // Create a base at a random position
+    function createBase() {
+        // Try to find a valid position that's not too close to player or other bases
+        let validPosition = false;
+        let baseX, baseY;
+        let attempts = 0;
+        
+        while (!validPosition && attempts < 50) {
+            baseX = BASE_SIZE + Math.random() * (canvas.width - BASE_SIZE * 2);
+            baseY = BASE_SIZE + Math.random() * (canvas.height - BASE_SIZE * 2);
+            
+            // Check distance from player
+            const distToPlayer = distance(baseX, baseY, player.x, player.y);
+            if (distToPlayer < 200) {
+                attempts++;
+                continue;
+            }
+            
+            // Check distance from other bases
+            let tooClose = false;
+            for (const base of bases) {
+                const distToBase = distance(baseX, baseY, base.x, base.y);
+                if (distToBase < BASE_SIZE * 3) {
+                    tooClose = true;
+                    break;
+                }
+            }
+            
+            if (!tooClose) {
+                validPosition = true;
+            }
+            
+            attempts++;
+        }
+        
+        // Create the base
+        const base = {
+            x: baseX,
+            y: baseY,
+            size: BASE_SIZE,
+            health: 3,
+            cannons: [],
+            color: '#f00'
+        };
+        
+        // Add cannons to the base
+        for (let i = 0; i < 4; i++) {
+            const angle = i * Math.PI / 2;
+            base.cannons.push({
+                x: baseX + Math.cos(angle) * BASE_SIZE * 0.7,
+                y: baseY + Math.sin(angle) * BASE_SIZE * 0.7,
+                size: BASE_SIZE / 4,
+                angle: angle,
+                lastShot: 0
+            });
+        }
+        
+        bases.push(base);
+    }
+    
+    // Create an asteroid at a random position
+    function createAsteroid() {
+        // Try to find a valid position
+        let validPosition = false;
+        let asteroidX, asteroidY, asteroidSize;
+        let attempts = 0;
+        
+        while (!validPosition && attempts < 50) {
+            asteroidX = Math.random() * canvas.width;
+            asteroidY = Math.random() * canvas.height;
+            asteroidSize = Math.random() * 20 + 15;
+            
+            // Check distance from player
+            const distToPlayer = distance(asteroidX, asteroidY, player.x, player.y);
+            if (distToPlayer < 150) {
+                attempts++;
+                continue;
+            }
+            
+            // Check distance from bases
+            let tooClose = false;
+            for (const base of bases) {
+                const distToBase = distance(asteroidX, asteroidY, base.x, base.y);
+                if (distToBase < base.size + asteroidSize + 20) {
+                    tooClose = true;
+                    break;
+                }
+            }
+            
+            if (!tooClose) {
+                validPosition = true;
+            }
+            
+            attempts++;
+        }
+        
+        // Create the asteroid
+        asteroids.push({
+            x: asteroidX,
+            y: asteroidY,
+            size: asteroidSize,
+            speedX: (Math.random() - 0.5) * 2,
+            speedY: (Math.random() - 0.5) * 2,
+            color: '#777'
+        });
+    }
+    
+    // Create a new enemy
+    function createEnemy() {
+        // Determine spawn position on edge of screen
+        let spawnX, spawnY;
+        
+        if (Math.random() < 0.5) {
+            // Spawn on horizontal edge
+            spawnX = Math.random() < 0.5 ? 0 : canvas.width;
+            spawnY = Math.random() * canvas.height;
+        } else {
+            // Spawn on vertical edge
+            spawnX = Math.random() * canvas.width;
+            spawnY = Math.random() < 0.5 ? 0 : canvas.height;
+        }
+        
+        // Create enemy
+        enemies.push({
+            x: spawnX,
+            y: spawnY,
+            size: ENEMY_SIZE,
+            speed: 2 + Math.random() * level * 0.5,
+            angle: 0,
+            color: '#f00',
+            type: Math.random() < 0.3 ? 'spinner' : 'chaser',
+            lastShot: 0
+        });
+    }
+    
+    // Main update function
+    function update() {
+        // Player movement
+        updatePlayer();
+        
+        // Update bullets
+        updateBullets();
+        
+        // Update enemies
+        updateEnemies();
+        
+        // Update bases
+        updateBases();
+        
+        // Update asteroids
+        updateAsteroids();
+        
+        // Spawn new enemies
+        if (Math.random() < 0.01 + level * 0.005) {
+            createEnemy();
+        }
+        
+        // Check all collisions
+        checkCollisions();
+        
+        // Check level completion
+        if (bases.length === 0) {
+            level++;
+            createLevel(level);
+        }
+        
+        // Render everything
+        render();
+    }
+    
+    // Update player position and rotation
+    function updatePlayer() {
+        let dx = 0;
+        let dy = 0;
+        
+        // Handle keyboard input
+        if (keys['ArrowUp'] || keys['w'] || keys['W']) {
+            dy -= player.speed;
+        }
+        if (keys['ArrowDown'] || keys['s'] || keys['S']) {
+            dy += player.speed;
+        }
+        if (keys['ArrowLeft'] || keys['a'] || keys['A']) {
+            dx -= player.speed;
+        }
+        if (keys['ArrowRight'] || keys['d'] || keys['D']) {
+            dx += player.speed;
+        }
+        
+        // Calculate angle if moving
+        if (dx !== 0 || dy !== 0) {
+            player.angle = Math.atan2(dy, dx);
+        }
+        
+        // Update position
+        player.x += dx;
+        player.y += dy;
+        
+        // Keep player on screen
+        player.x = Math.max(player.size, Math.min(canvas.width - player.size, player.x));
+        player.y = Math.max(player.size, Math.min(canvas.height - player.size, player.y));
+        
+        // Handle shooting
+        if (keys[' '] && Date.now() - lastShot > 200) {
+            // Create bullet
+            bullets.push({
+                x: player.x + Math.cos(player.angle) * player.size,
+                y: player.y + Math.sin(player.angle) * player.size,
+                speed: BULLET_SPEED,
+                angle: player.angle,
+                size: BULLET_SIZE,
+                color: '#0f0',
+                isPlayerBullet: true
+            });
+            
+            lastShot = Date.now();
+        }
+    }
+    
+    // Update bullet positions
+    function updateBullets() {
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            const bullet = bullets[i];
+            
+            // Move bullet
+            bullet.x += Math.cos(bullet.angle) * bullet.speed;
+            bullet.y += Math.sin(bullet.angle) * bullet.speed;
+            
+            // Remove bullets that go off screen
+            if (
+                bullet.x < 0 ||
+                bullet.x > canvas.width ||
+                bullet.y < 0 ||
+                bullet.y > canvas.height
+            ) {
+                bullets.splice(i, 1);
+            }
+        }
+    }
+    
+    // Update enemy positions
+    function updateEnemies() {
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            const enemy = enemies[i];
+            
+            // Calculate direction towards player
+            const dx = player.x - enemy.x;
+            const dy = player.y - enemy.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            
+            // Update enemy angle
+            enemy.angle = Math.atan2(dy, dx);
+            
+            // Move enemy
+            enemy.x += Math.cos(enemy.angle) * enemy.speed;
+            enemy.y += Math.sin(enemy.angle) * enemy.speed;
+            
+            // Enemy shooting
+            if (Date.now() - enemy.lastShot > 2000 && dist < 300 && Math.random() < 0.1) {
+                bullets.push({
+                    x: enemy.x,
+                    y: enemy.y,
+                    speed: BULLET_SPEED * 0.7,
+                    angle: enemy.angle,
+                    size: BULLET_SIZE,
+                    color: '#f00',
+                    isPlayerBullet: false
+                });
+                
+                enemy.lastShot = Date.now();
+            }
+        }
+    }
+    
+    // Update bases
+    function updateBases() {
+        for (const base of bases) {
+            // Base cannons targeting player
+            for (const cannon of base.cannons) {
+                const dx = player.x - cannon.x;
+                const dy = player.y - cannon.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                // Update cannon angle to target player
+                cannon.angle = Math.atan2(dy, dx);
+                
+                // Cannon shooting
+                if (Date.now() - cannon.lastShot > 2000 && dist < 300) {
+                    bullets.push({
+                        x: cannon.x,
+                        y: cannon.y,
+                        speed: BULLET_SPEED * 0.6,
+                        angle: cannon.angle,
+                        size: BULLET_SIZE,
+                        color: '#f00',
+                        isPlayerBullet: false
+                    });
+                    
+                    cannon.lastShot = Date.now();
+                }
+            }
+        }
+    }
+    
+    // Update asteroids
+    function updateAsteroids() {
+        for (const asteroid of asteroids) {
+            // Move asteroid
+            asteroid.x += asteroid.speedX;
+            asteroid.y += asteroid.speedY;
+            
+            // Bounce off edges
+            if (asteroid.x < asteroid.size || asteroid.x > canvas.width - asteroid.size) {
+                asteroid.speedX *= -1;
+            }
+            if (asteroid.y < asteroid.size || asteroid.y > canvas.height - asteroid.size) {
+                asteroid.speedY *= -1;
+            }
+        }
+    }
+    
+    // Check all collisions
+    function checkCollisions() {
+        // Player vs bullets
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            const bullet = bullets[i];
+            
+            if (!bullet.isPlayerBullet) {
+                const dist = distance(bullet.x, bullet.y, player.x, player.y);
+                
+                if (dist < player.size + bullet.size) {
+                    // Player hit
+                    bullets.splice(i, 1);
+                    playerHit();
+                    break;
+                }
+            }
+        }
+        
+        // Player vs enemies
+        for (let i = enemies.length - 1; i >= 0; i--) {
+            const enemy = enemies[i];
+            const dist = distance(enemy.x, enemy.y, player.x, player.y);
+            
+            if (dist < player.size + enemy.size * 0.8) {
+                // Player hit
+                enemies.splice(i, 1);
+                playerHit();
+                break;
+            }
+        }
+        
+        // Player vs bases
+        for (const base of bases) {
+            const dist = distance(base.x, base.y, player.x, player.y);
+            
+            if (dist < player.size + base.size) {
+                // Player hit
+                playerHit();
+                break;
+            }
+        }
+        
+        // Player vs asteroids
+        for (const asteroid of asteroids) {
+            const dist = distance(asteroid.x, asteroid.y, player.x, player.y);
+            
+            if (dist < player.size + asteroid.size) {
+                // Player hit
+                playerHit();
+                break;
+            }
+        }
+        
+        // Bullets vs enemies
+        for (let i = bullets.length - 1; i >= 0; i--) {
+            const bullet = bullets[i];
+            
+            if (bullet.isPlayerBullet) {
+                // Check enemy hits
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    const dist = distance(bullet.x, bullet.y, enemy.x, enemy.y);
+                    
+                    if (dist < bullet.size + enemy.size) {
+                        // Enemy hit
+                        enemies.splice(j, 1);
+                        bullets.splice(i, 1);
+                        score += 100;
+                        updateUI();
+                        break;
+                    }
+                }
+                
+                // Check base hits
+                for (let j = bases.length - 1; j >= 0; j--) {
+                    const base = bases[j];
+                    const dist = distance(bullet.x, bullet.y, base.x, base.y);
+                    
+                    if (dist < bullet.size + base.size) {
+                        // Base hit
+                        base.health--;
+                        if (base.health <= 0) {
+                            bases.splice(j, 1);
+                            score += 500;
+                        } else {
+                            score += 50;
+                        }
+                        bullets.splice(i, 1);
+                        updateUI();
+                        break;
+                    }
+                    
+                    // Check cannon hits
+                    for (let k = base.cannons.length - 1; k >= 0; k--) {
+                        const cannon = base.cannons[k];
+                        const dist = distance(bullet.x, bullet.y, cannon.x, cannon.y);
+                        
+                        if (dist < bullet.size + cannon.size) {
+                            // Cannon hit
+                            base.cannons.splice(k, 1);
+                            bullets.splice(i, 1);
+                            score += 150;
+                            updateUI();
+                            
+                            // If no cannons left, reduce base health
+                            if (base.cannons.length === 0) {
+                                base.health = 1;
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // Handle player hit
+    function playerHit() {
+        lives--;
+        updateUI();
+        
+        if (lives <= 0) {
+            // Game over
+            gameOver();
+        } else {
+            // Reset player position
+            player.x = canvas.width / 2;
+            player.y = canvas.height / 2;
+        }
+    }
+    
+    // Game over
+    function gameOver() {
+        // Stop game loop
+        clearInterval(gameLoop);
+        gameActive = false;
+        
+        // Show game over screen
+        document.getElementById('game-over').style.display = 'flex';
+        document.getElementById('final-score').textContent = score;
+        
+        // Start render loop for background
+        renderStartScreen();
+    }
+    
+    // Update UI
+    function updateUI() {
+        document.getElementById('score-value').textContent = score;
+        document.getElementById('lives-value').textContent = lives;
+        document.getElementById('level-value').textContent = level;
+    }
+    
+    // Calculate distance between two points
+    function distance(x1, y1, x2, y2) {
+        return Math.sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
+    }
+    
+    // Render everything
+    function render() {
+        // Clear canvas
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Draw stars
+        drawStars();
+        
+        // Draw asteroids
+        drawAsteroids();
+        
+        // Draw bases
+        drawBases();
+        
+        // Draw enemies
+        drawEnemies();
+        
+        // Draw bullets
+        drawBullets();
+        
+        // Draw player
+        drawPlayer();
+    }
+    
+    // Draw stars
+    function drawStars() {
+        for (const star of stars) {
+            ctx.fillStyle = star.color;
+            ctx.beginPath();
+            ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    // Draw player
+    function drawPlayer() {
+        ctx.save();
+        ctx.translate(player.x, player.y);
+        ctx.rotate(player.angle);
+        
+        // Draw ship
+        ctx.fillStyle = player.color;
+        ctx.beginPath();
+        ctx.moveTo(player.size, 0);
+        ctx.lineTo(-player.size / 2, -player.size / 2);
+        ctx.lineTo(-player.size / 3, 0);
+        ctx.lineTo(-player.size / 2, player.size / 2);
+        ctx.closePath();
+        ctx.fill();
+        
+        ctx.restore();
+    }
+    
+    // Draw bullets
+    function drawBullets() {
+        for (const bullet of bullets) {
+            ctx.fillStyle = bullet.color;
+            ctx.beginPath();
+            ctx.arc(bullet.x, bullet.y, bullet.size, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+    
+    // Draw enemies
+    function drawEnemies() {
+        for (const enemy of enemies) {
+            ctx.save();
+            ctx.translate(enemy.x, enemy.y);
+            ctx.rotate(enemy.angle);
+            
+            if (enemy.type === 'spinner') {
+                // Draw spinner enemy
+                ctx.fillStyle = '#ff0';
+                ctx.beginPath();
+                for (let i = 0; i < 8; i++) {
+                    const angle = i * Math.PI / 4;
+                    const innerRadius = enemy.size * 0.4;
+                    const outerRadius = enemy.size;
+                    
+                    ctx.lineTo(
+                        Math.cos(angle) * outerRadius,
+                        Math.sin(angle) * outerRadius
+                    );
+                    
+                    const innerAngle = angle + Math.PI / 8;
+                    ctx.lineTo(
+                        Math.cos(innerAngle) * innerRadius,
+                        Math.sin(innerAngle) * innerRadius
+                    );
+                }
+                ctx.closePath();
+                ctx.fill();
+            } else {
+                // Draw chaser enemy
+                ctx.fillStyle = enemy.color;
+                ctx.beginPath();
+                ctx.moveTo(enemy.size, 0);
+                ctx.lineTo(-enemy.size / 2, -enemy.size / 2);
+                ctx.lineTo(-enemy.size, 0);
+                ctx.lineTo(-enemy.size / 2, enemy.size / 2);
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            ctx.restore();
+        }
+    }
+    
+    // Draw bases
+    function drawBases() {
+        for (const base of bases) {
+            // Draw base
+            ctx.fillStyle = base.color;
+            ctx.beginPath();
+            ctx.arc(base.x, base.y, base.size, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw inner circle
+            ctx.fillStyle = '#000';
+            ctx.beginPath();
+            ctx.arc(base.x, base.y, base.size * 0.7, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw health indicator
+            ctx.fillStyle = base.health > 2 ? '#0f0' : (base.health > 1 ? '#ff0' : '#f00');
+            ctx.beginPath();
+            ctx.arc(base.x, base.y, base.size * 0.4, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw cannons
+            for (const cannon of base.cannons) {
+                ctx.save();
+                ctx.translate(cannon.x, cannon.y);
+                ctx.rotate(cannon.angle);
+                
+                // Draw cannon
+                ctx.fillStyle = '#f00';
+                ctx.fillRect(-cannon.size / 2, -cannon.size / 2, cannon.size * 1.5, cannon.size);
+                
+                ctx.restore();
+            }
+        }
+    }
+    
+    // Draw asteroids
+    function drawAsteroids() {
+        for (const asteroid of asteroids) {
+            ctx.fillStyle = asteroid.color;
+            ctx.beginPath();
+            ctx.arc(asteroid.x, asteroid.y, asteroid.size, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw details
+            ctx.fillStyle = '#444';
+            ctx.beginPath();
+            ctx.arc(
+                asteroid.x + asteroid.size * 0.3,
+                asteroid.y - asteroid.size * 0.2,
+                asteroid.size * 0.2,
+                0, Math.PI * 2
+            );
+            ctx.fill();
+            
+            ctx.beginPath();
+            ctx.arc(
+                asteroid.x - asteroid.size * 0.3,
+                asteroid.y + asteroid.size * 0.3,
+                asteroid.size * 0.15,
+                0, Math.PI * 2
+            );
+            ctx.fill();
+        }
+    }
+    </script>
+</body>
+</html>
