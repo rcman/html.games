@@ -27,4 +27,4 @@ Game Link:[Shooter](http://htmlpreview.github.io/?https://github.com/rcman/html.
 <br>
 Game Link:[PitFall](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/newpitfall.html)
 <br>
-Game Link:[Galage Kind of](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/claude_galaga.html)
+Game Link:[Galaga Kind of](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/claude_galaga.html)
