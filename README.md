@@ -16,3 +16,7 @@ Game Link:[Silkworm](http://htmlpreview.github.io/?https://github.com/rcman/html
 Game Link:[Platform Shooter](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/platform_shooter.html)
 <br>
 Game Link:[vertical Shooter](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/vertical_spaceshooter.html)
+<br>
+Game Link:[Another Platformer](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/platform.html)
+<br>
+Game Link:[Shooter](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/claude.html)
