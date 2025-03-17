@@ -26,3 +26,5 @@ Game Link:[Another Platformer](http://htmlpreview.github.io/?https://github.com/
 Game Link:[Shooter](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/claude.html)
 <br>
 Game Link:[PitFall](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/newpitfall.html)
+<br>
+Game Link:[Galage Kind of](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/claude_galaga.html)
