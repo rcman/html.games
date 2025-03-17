@@ -34,3 +34,5 @@ Game Link:[Basic Robotron](http://htmlpreview.github.io/?https://github.com/rcma
 Game Link:[Rick Dangerous](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/rick_dangerous.html)
 <br>
 Game Link:[Space Invaders](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/spaceinvader.html)
+<br>
+Game Link:[Spelunker](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/spelunker.html)
