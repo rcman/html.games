@@ -1,7 +1,10 @@
 # There HTML games were created by the AI Claude. They are being updated as some have some issues.
-
+<br>
+The Links below are the ones I feel work better than the rest but you can try them all.
 
 <br>
+
+
 
 Game Link:[Boscanianv2](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/boscanianv3.html)
 <br>
