@@ -36,3 +36,5 @@ Game Link:[Rick Dangerous](http://htmlpreview.github.io/?https://github.com/rcma
 Game Link:[Space Invaders](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/spaceinvader.html)
 <br>
 Game Link:[Spelunker](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/spelunker.html)
+<br>
+Game Link:[Spy Hunter](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/spy_try99.html)
