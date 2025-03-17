@@ -30,3 +30,5 @@ Game Link:[PitFall](http://htmlpreview.github.io/?https://github.com/rcman/html.
 Game Link:[Galaga Kind of](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/claude_galaga.html)
 <br>
 Game Link:[Basic Robotron](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/grok-robo.html)
+<br>
+Game Link:[Rick Dangerous](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/rick_dangerous.html)
