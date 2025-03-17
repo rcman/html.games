@@ -32,3 +32,5 @@ Game Link:[Galaga Kind of](http://htmlpreview.github.io/?https://github.com/rcma
 Game Link:[Basic Robotron](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/grok-robo.html)
 <br>
 Game Link:[Rick Dangerous](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/rick_dangerous.html)
+<br>
+Game Link:[Space Invaders](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/spaceinvader.html)
