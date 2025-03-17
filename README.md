@@ -24,3 +24,5 @@ Game Link:[vertical Shooter](http://htmlpreview.github.io/?https://github.com/rc
 Game Link:[Another Platformer](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/platform.html)
 <br>
 Game Link:[Shooter](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/claude.html)
+<br>
+Game Link:[PitFall](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/newpitfall.html)
