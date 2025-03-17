@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Space Shooter</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        canvas {
+            border: 1px solid #333;
+            box-shadow: 0 0 20px rgba(50, 50, 255, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+
+    <script>
+        // Initialize game canvas
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        canvas.width = 480;
+        canvas.height = 640;
+
+        // Game variables
+        let score = 0;
+        let hiScore = localStorage.getItem("hiScore") || 0;
+        let gameOver = false;
+        let gameStarted = false;
+
+        // Player variables
+        const player = {
+            x: canvas.width / 2 - 25,
+            y: canvas.height - 80,
+            width: 50,
+            height: 50,
+            speed: 5,
+            fireRate: 20, // Lower number means faster firing
+            currentFireRate: 20,
+            bulletCount: 1,
+            color: "#33ff88",
+            firing: false,
+            fireCounter: 0,
+            lives: 3
+        };
+
+        // Game state
+        const keys = {};
+        const bullets = [];
+        const enemies = [];
+        const particles = [];
+        const powerUps = [];
+        let enemySpawnCounter = 0;
+
+        // Star background
+        const stars = [];
+        const NUM_STARS = 100;
+        for (let i = 0; i < NUM_STARS; i++) {
+            stars.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                size: Math.random() * 3 + 1,
+                speed: Math.random() * 3 + 1
+            });
+        }
+
+        // Event listeners
+        window.addEventListener("keydown", (e) => {
+            keys[e.key] = true;
+            if (e.key === " ") {
+                player.firing = true;
+            }
+            if (e.key === "Enter" && !gameStarted) {
+                gameStarted = true;
+            }
+            if (e.key === "Enter" && gameOver) {
+                resetGame();
+            }
+        });
+
+        window.addEventListener("keyup", (e) => {
+            keys[e.key] = false;
+            if (e.key === " ") {
+                player.firing = false;
+            }
+        });
+
+        // Movement functions
+        function movePlayer() {
+            if (keys["ArrowLeft"] && player.x > 0) {
+                player.x -= player.speed;
+            }
+            if (keys["ArrowRight"] && player.x < canvas.width - player.width) {
+                player.x += player.speed;
+            }
+            if (keys["ArrowUp"] && player.y > canvas.height / 2) {
+                player.y -= player.speed;
+            }
+            if (keys["ArrowDown"] && player.y < canvas.height - player.height) {
+                player.y += player.speed;
+            }
+        }
+
+        // Bullet creation
+        function createBullet() {
+            if (player.fireCounter <= 0) {
+                player.fireCounter = player.currentFireRate;
+                
+                if (player.bulletCount === 1) {
+                    bullets.push({
+                        x: player.x + player.width / 2 - 3,
+                        y: player.y,
+                        width: 6,
+                        height: 15,
+                        color: "#00ffff",
+                        speed: 8
+                    });
+                } else if (player.bulletCount === 2) {
+                    bullets.push({
+                        x: player.x + player.width / 3 - 3,
+                        y: player.y,
+                        width: 6,
+                        height: 15,
+                        color: "#00ffff",
+                        speed: 8
+                    });
+                    bullets.push({
+                        x: player.x + (player.width * 2 / 3) - 3,
+                        y: player.y,
+                        width: 6,
+                        height: 15,
+                        color: "#00ffff",
+                        speed: 8
+                    });
+                } else {
+                    bullets.push({
+                        x: player.x + player.width / 2 - 3,
+                        y: player.y,
+                        width: 6,
+                        height: 15,
+                        color: "#00ffff",
+                        speed: 8
+                    });
+                    bullets.push({
+                        x: player.x + 10 - 3,
+                        y: player.y + 10,
+                        width: 6,
+                        height: 15,
+                        color: "#00ffff",
+                        speed: 8
+                    });
+                    bullets.push({
+                        x: player.x + player.width - 10 - 3,
+                        y: player.y + 10,
+                        width: 6,
+                        height: 15,
+                        color: "#00ffff",
+                        speed: 8
+                    });
+                }
+            } else {
+                player.fireCounter--;
+            }
+        }
+
+        // Enemy creation with different patterns
+        function createEnemy() {
+            if (enemySpawnCounter <= 0) {
+                enemySpawnCounter = Math.floor(Math.random() * 60) + 30;
+                
+                const pattern = Math.floor(Math.random() * 4);
+                const enemySize = Math.random() * 20 + 30;
+                
+                const enemy = {
+                    x: Math.random() * (canvas.width - enemySize),
+                    y: -enemySize,
+                    width: enemySize,
+                    height: enemySize,
+                    speed: Math.random() * 2 + 1,
+                    color: `hsl(${Math.floor(Math.random() * 360)}, 100%, 50%)`,
+                    pattern: pattern,
+                    angle: 0,
+                    amplitude: Math.random() * 100 + 50,
+                    health: Math.ceil(enemySize / 10),
+                    initialX: 0
+                };
+                
+                enemy.initialX = enemy.x;
+                enemies.push(enemy);
+            } else {
+                enemySpawnCounter--;
+            }
+        }
+
+        // Moving enemies based on patterns
+        function moveEnemies() {
+            for (let i = 0; i < enemies.length; i++) {
+                const enemy = enemies[i];
+                enemy.y += enemy.speed;
+                
+                // Different movement patterns
+                if (enemy.pattern === 0) {
+                    // Straight down
+                } else if (enemy.pattern === 1) {
+                    // Sine wave
+                    enemy.angle += 0.05;
+                    enemy.x = enemy.initialX + Math.sin(enemy.angle) * (enemy.amplitude / 2);
+                } else if (enemy.pattern === 2) {
+                    // Zigzag
+                    if (Math.floor(enemy.y / 40) % 2 === 0) {
+                        enemy.x += enemy.speed;
+                    } else {
+                        enemy.x -= enemy.speed;
+                    }
+                    
+                    // Keep within bounds
+                    if (enemy.x < 0) enemy.x = 0;
+                    if (enemy.x > canvas.width - enemy.width) enemy.x = canvas.width - enemy.width;
+                } else if (enemy.pattern === 3) {
+                    // Circular
+                    enemy.angle += 0.05;
+                    enemy.x = enemy.initialX + Math.cos(enemy.angle) * (enemy.amplitude / 3);
+                }
+                
+                // Remove if off screen
+                if (enemy.y > canvas.height) {
+                    enemies.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        // Move bullets
+        function moveBullets() {
+            for (let i = 0; i < bullets.length; i++) {
+                bullets[i].y -= bullets[i].speed;
+                
+                // Remove bullets that go off screen
+                if (bullets[i].y < 0) {
+                    bullets.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        // Move stars for background
+        function moveStars() {
+            for (let i = 0; i < stars.length; i++) {
+                stars[i].y += stars[i].speed;
+                
+                // Reset star if it goes off screen
+                if (stars[i].y > canvas.height) {
+                    stars[i].y = 0;
+                    stars[i].x = Math.random() * canvas.width;
+                }
+            }
+        }
+
+        // Move power-ups
+        function movePowerUps() {
+            for (let i = 0; i < powerUps.length; i++) {
+                powerUps[i].y += 2;
+                
+                // Remove if off screen
+                if (powerUps[i].y > canvas.height) {
+                    powerUps.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        // Check for collisions
+        function checkCollisions() {
+            // Bullets hitting enemies
+            for (let i = 0; i < bullets.length; i++) {
+                for (let j = 0; j < enemies.length; j++) {
+                    if (
+                        bullets[i].x < enemies[j].x + enemies[j].width &&
+                        bullets[i].x + bullets[i].width > enemies[j].x &&
+                        bullets[i].y < enemies[j].y + enemies[j].height &&
+                        bullets[i].y + bullets[i].height > enemies[j].y
+                    ) {
+                        // Decrease enemy health or destroy
+                        enemies[j].health--;
+                        
+                        // Create particles
+                        createParticles(
+                            bullets[i].x + bullets[i].width / 2,
+                            bullets[i].y,
+                            10,
+                            enemies[j].color
+                        );
+                        
+                        // Remove bullet
+                        bullets.splice(i, 1);
+                        i--;
+                        
+                        if (enemies[j].health <= 0) {
+                            // Check for power-up drop (20% chance)
+                            if (Math.random() < 0.2) {
+                                const powerUpType = Math.random() < 0.5 ? 0 : 1; // 0 for fire rate, 1 for bullet count
+                                powerUps.push({
+                                    x: enemies[j].x + enemies[j].width / 2 - 15,
+                                    y: enemies[j].y,
+                                    width: 30,
+                                    height: 30,
+                                    type: powerUpType
+                                });
+                            }
+                            
+                            // Create explosion particles
+                            createParticles(
+                                enemies[j].x + enemies[j].width / 2,
+                                enemies[j].y + enemies[j].height / 2,
+                                30,
+                                enemies[j].color
+                            );
+                            
+                            // Increase score
+                            score += Math.floor(enemies[j].width);
+                            
+                            // Remove enemy
+                            enemies.splice(j, 1);
+                            j--;
+                        }
+                        
+                        break;
+                    }
+                }
+            }
+            
+            // Player hitting enemies
+            for (let i = 0; i < enemies.length; i++) {
+                if (
+                    player.x < enemies[i].x + enemies[i].width &&
+                    player.x + player.width > enemies[i].x &&
+                    player.y < enemies[i].y + enemies[i].height &&
+                    player.y + player.height > enemies[i].y
+                ) {
+                    // Create explosion
+                    createParticles(
+                        enemies[i].x + enemies[i].width / 2,
+                        enemies[i].y + enemies[i].height / 2,
+                        50,
+                        enemies[i].color
+                    );
+                    
+                    // Remove enemy
+                    enemies.splice(i, 1);
+                    i--;
+                    
+                    // Decrease player lives
+                    player.lives--;
+                    
+                    if (player.lives <= 0) {
+                        gameOver = true;
+                        
+                        // Update high score
+                        if (score > hiScore) {
+                            hiScore = score;
+                            localStorage.setItem("hiScore", hiScore);
+                        }
+                    }
+                }
+            }
+            
+            // Player collecting power-ups
+            for (let i = 0; i < powerUps.length; i++) {
+                if (
+                    player.x < powerUps[i].x + powerUps[i].width &&
+                    player.x + player.width > powerUps[i].x &&
+                    player.y < powerUps[i].y + powerUps[i].height &&
+                    player.y + player.height > powerUps[i].y
+                ) {
+                    // Apply power-up effect
+                    if (powerUps[i].type === 0) {
+                        // Fire rate power-up (decrease by 5, but not below 5)
+                        player.currentFireRate = Math.max(5, player.currentFireRate - 5);
+                    } else {
+                        // Bullet count power-up (increase by 1, but not above 3)
+                        player.bulletCount = Math.min(3, player.bulletCount + 1);
+                    }
+                    
+                    // Create particles
+                    createParticles(
+                        powerUps[i].x + powerUps[i].width / 2,
+                        powerUps[i].y + powerUps[i].height / 2,
+                        20,
+                        powerUps[i].type === 0 ? "#ff0" : "#f0f"
+                    );
+                    
+                    // Remove power-up
+                    powerUps.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        // Create particles
+        function createParticles(x, y, count, color) {
+            for (let i = 0; i < count; i++) {
+                particles.push({
+                    x: x,
+                    y: y,
+                    size: Math.random() * 3 + 1,
+                    speedX: (Math.random() - 0.5) * 5,
+                    speedY: (Math.random() - 0.5) * 5,
+                    color: color,
+                    life: Math.random() * 30 + 10
+                });
+            }
+        }
+
+        // Update particles
+        function updateParticles() {
+            for (let i = 0; i < particles.length; i++) {
+                particles[i].x += particles[i].speedX;
+                particles[i].y += particles[i].speedY;
+                particles[i].life--;
+                
+                if (particles[i].life <= 0) {
+                    particles.splice(i, 1);
+                    i--;
+                }
+            }
+        }
+
+        // Draw game elements
+        function draw() {
+            // Clear canvas
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw stars
+            for (const star of stars) {
+                ctx.fillStyle = "#fff";
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Draw player
+            if (!gameOver) {
+                ctx.fillStyle = player.color;
+                ctx.beginPath();
+                ctx.moveTo(player.x + player.width / 2, player.y);
+                ctx.lineTo(player.x + player.width, player.y + player.height);
+                ctx.lineTo(player.x, player.y + player.height);
+                ctx.closePath();
+                ctx.fill();
+            }
+            
+            // Draw bullets
+            for (const bullet of bullets) {
+                ctx.fillStyle = bullet.color;
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            }
+            
+            // Draw enemies
+            for (const enemy of enemies) {
+                ctx.fillStyle = enemy.color;
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+            }
+            
+            // Draw particles
+            for (const particle of particles) {
+                ctx.fillStyle = particle.color;
+                ctx.globalAlpha = particle.life / 40;
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.size, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.globalAlpha = 1;
+            }
+            
+            // Draw power-ups
+            for (const powerUp of powerUps) {
+                if (powerUp.type === 0) {
+                    // Fire rate power-up (yellow)
+                    ctx.fillStyle = "#ff0";
+                } else {
+                    // Bullet count power-up (magenta)
+                    ctx.fillStyle = "#f0f";
+                }
+                
+                ctx.beginPath();
+                ctx.arc(
+                    powerUp.x + powerUp.width / 2,
+                    powerUp.y + powerUp.height / 2,
+                    powerUp.width / 2,
+                    0,
+                    Math.PI * 2
+                );
+                ctx.fill();
+                
+                // Power-up symbol
+                ctx.fillStyle = "#000";
+                ctx.font = "20px Arial";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(
+                    powerUp.type === 0 ? "F" : "B",
+                    powerUp.x + powerUp.width / 2,
+                    powerUp.y + powerUp.height / 2
+                );
+            }
+            
+            // Draw UI
+            ctx.fillStyle = "#fff";
+            ctx.font = "20px Arial";
+            ctx.textAlign = "left";
+            ctx.fillText(`Score: ${score}`, 10, 30);
+            ctx.textAlign = "right";
+            ctx.fillText(`Hi-Score: ${hiScore}`, canvas.width - 10, 30);
+            
+            // Draw lives
+            ctx.textAlign = "left";
+            ctx.fillText(`Lives: ${player.lives}`, 10, 60);
+            
+            // Draw game over screen
+            if (gameOver) {
+                ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = "#fff";
+                ctx.font = "40px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText("GAME OVER", canvas.width / 2, canvas.height / 2 - 40);
+                ctx.font = "25px Arial";
+                ctx.fillText(`Score: ${score}`, canvas.width / 2, canvas.height / 2 + 20);
+                ctx.fillText("Press Enter to Restart", canvas.width / 2, canvas.height / 2 + 60);
+            }
+            
+            // Draw start screen
+            if (!gameStarted) {
+                ctx.fillStyle = "rgba(0, 0, 0, 0.7)";
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = "#fff";
+                ctx.font = "40px Arial";
+                ctx.textAlign = "center";
+                ctx.fillText("SPACE SHOOTER", canvas.width / 2, canvas.height / 2 - 40);
+                ctx.font = "25px Arial";
+                ctx.fillText("Press Enter to Start", canvas.width / 2, canvas.height / 2 + 20);
+                ctx.font = "18px Arial";
+                ctx.fillText("Arrow Keys to Move, Space to Fire", canvas.width / 2, canvas.height / 2 + 60);
+            }
+        }
+
+        // Reset game
+        function resetGame() {
+            score = 0;
+            player.lives = 3;
+            player.x = canvas.width / 2 - 25;
+            player.y = canvas.height - 80;
+            player.currentFireRate = player.fireRate;
+            player.bulletCount = 1;
+            bullets.length = 0;
+            enemies.length = 0;
+            particles.length = 0;
+            powerUps.length = 0;
+            gameOver = false;
+        }
+
+        // Game loop
+        function gameLoop() {
+            if (gameStarted && !gameOver) {
+                movePlayer();
+                moveStars();
+                moveBullets();
+                moveEnemies();
+                movePowerUps();
+                updateParticles();
+                checkCollisions();
+                
+                if (player.firing) {
+                    createBullet();
+                }
+                
+                createEnemy();
+            } else {
+                // Just move stars in background
+                moveStars();
+            }
+            
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Start game loop
+        gameLoop();
+    </script>
+</body>
+</html>
