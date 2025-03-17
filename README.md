@@ -8,3 +8,5 @@ Game Link:[Boscanianv2](http://htmlpreview.github.io/?https://github.com/rcman/h
 Game Link:[Frogger](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/frogger.html)
 <br>
 Game Link:[Boscanianv2](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/boscanianv2.html)
+<br>
+Game Link:[Platform Shooter](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/platform_shooter.html)
