@@ -4,6 +4,7 @@
 <br>
 
 Game Link:[Boscanianv2](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/boscanianv2.html)
-
 <br>
-Boscanian <a href="/en/get-started/writing-on-github/working-with-advanced-formatting/creating-a-permanent-link-to-a-code-snippet">Creating 
+Game Link:[Frogger](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/frogger.html)
+<br>
+Game Link:[Boscanianv2](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/boscanianv2.html)
