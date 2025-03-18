@@ -1,0 +1,1160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elevator Action Clone</title>
+    <script src="https://cdn.jsdelivr.net/npm/pixi.js@7.3.2/dist/pixi.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/howler@2.2.3/dist/howler.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            touch-action: none;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            max-height: 600px;
+            aspect-ratio: 4/3;
+        }
+        
+        canvas {
+            display: block;
+            max-width: 100%;
+            max-height: 100%;
+            margin: 0 auto;
+        }
+        
+        #mobile-controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            right: 10px;
+            display: none;
+            justify-content: space-between;
+            z-index: 100;
+        }
+        
+        .control-button {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            color: white;
+            user-select: none;
+        }
+        
+        .control-group {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .action-button {
+            width: 70px;
+            height: 70px;
+            background-color: rgba(255, 0, 0, 0.3);
+            border-radius: 50%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            color: white;
+            user-select: none;
+        }
+        
+        @media (max-width: 768px) {
+            #mobile-controls {
+                display: flex;
+            }
+        }
+        
+        .dark-mode #mobile-controls .control-button {
+            background-color: rgba(100, 100, 100, 0.3);
+        }
+        
+        .dark-mode #mobile-controls .action-button {
+            background-color: rgba(200, 50, 50, 0.4);
+        }
+    </style>
+</head>
+<body>
+    <div id="game-container">
+        <div id="mobile-controls">
+            <div class="control-group">
+                <div class="control-button" id="left-btn">←</div>
+                <div class="control-group" style="flex-direction: column; justify-content: center;">
+                    <div class="control-button" id="up-btn">↑</div>
+                    <div class="control-button" id="down-btn">↓</div>
+                </div>
+                <div class="control-button" id="right-btn">→</div>
+            </div>
+            <div class="action-button" id="fire-btn">FIRE</div>
+        </div>
+    </div>
+    
+    <script>
+        // Check for dark mode
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark-mode');
+        }
+        
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark-mode');
+            } else {
+                document.documentElement.classList.remove('dark-mode');
+            }
+        });
+        
+        // Game configuration
+        const GAME_WIDTH = 800;
+        const GAME_HEIGHT = 600;
+        const FLOOR_HEIGHT = 60;
+        const PLAYER_WIDTH = 40;
+        const PLAYER_HEIGHT = 50;
+        const GRAVITY = 0.5;
+        const JUMP_FORCE = -10;
+        const MOVE_SPEED = 3;
+        const FLOOR_COUNT = 10;
+        const ELEVATOR_SPEED = 2;
+        const ENEMY_SPAWN_RATE = 0.005;
+        const ENEMY_MOVE_SPEED = 1.5;
+        const BULLET_SPEED = 8;
+        
+        // Initialize PIXI Application
+        const app = new PIXI.Application({
+            width: GAME_WIDTH,
+            height: GAME_HEIGHT,
+            backgroundColor: 0x222222,
+            antialias: true
+        });
+        
+        document.getElementById('game-container').appendChild(app.view);
+        
+        // Resize handler
+        function resizeGame() {
+            const gameContainer = document.getElementById('game-container');
+            const containerWidth = gameContainer.clientWidth;
+            const containerHeight = gameContainer.clientHeight;
+            
+            const scaleX = containerWidth / GAME_WIDTH;
+            const scaleY = containerHeight / GAME_HEIGHT;
+            const scale = Math.min(scaleX, scaleY);
+            
+            app.renderer.resize(containerWidth, containerHeight);
+            app.stage.scale.x = scale;
+            app.stage.scale.y = scale;
+        }
+        
+        window.addEventListener('resize', resizeGame);
+        resizeGame();
+        
+        // Load sprites and sounds
+        const sprites = {};
+        const sounds = {
+            shoot: new Howl({
+                src: ['data:audio/wav;base64,UklGRl9HAABXQVZFZm10IBAAAAABAAEAESsAABErAAABAAgAZGF0YTtHAAAAAP//AQABAP//AQAAAP7/AAD9//7//f/9//3//v/+//3/AAAAAAAAAAD//wAA//8AAP///v/+//3//f/8//z//f/9//7//v8AAAEA/v/+/wAAAQABAP///v/+//7//v/+//7//v/+//7//v/+//7//P/8//v/+//7//v/+//7//z//P/9//3//f/9//7//v/+//7//v/+//3//f/8//z/+//7//v/+//7//v/+//7//v/+//8//z//P/8//3//f/+//7//v/+//7//v/+//7//v/+//3//f/8//z/+//7//r/+v/6//r/+v/6//r/+v/7//v//P/8//3//f/+//7//////wAAAQABAAIAAgADAAMAAwADAAIAAgABAAEAAAAAAAAA///+//7//f/9//z//P/7//v/+v/6//r/+v/6//r/+v/6//v/+//8//z//f/9//7//v//////AAABAAEAAgACAAMAAwAEAAQABAAEAAQABAADAAMAAgACAAEAAQAAAAAAAAD///7//v/9//3//P/8//v/+//6//r/+v/6//r/+v/7//v//P/8//3//f/+//7//////wAAAQABAAIAAgADAAMABAAEAAQABAAFAAUABAAEAAQABAADAAMAAgACAAEAAQAAAAAAAAD///7//v/9//3//P/8//v/+//6//r/+v/6//r/+v/7//v//P/8//3//f/+//7//////wAAAQABAAIAAgADAAMABAAEAAUABQAGAAYABgAGAAYABgAFAAUABAAEAAMAAwACAAIAAQABAAAAAAAAAP///v/+//3//f/8//z/+//7//r/+v/6//r/+v/6//v/+//8//z//f/9//7//v//////AAABAA==']
+            }),
+            door: new Howl({
+                src: ['data:audio/wav;base64,UklGRl9HAABXQVZFZm10IBAAAAABAAEAESsAABErAAABAAgAZGF0YTtHAAAAAAEACAAPABYAGwAgACQAJgAoACkAKQApACcAJAAhAB0AFwASAA0ACAADAP7/+f/0/+//6v/m/+L/3v/a/9f/1P/S/9D/zv/N/8z/y//K/8n/yP/H/8f/xv/G/8X/xf/G/8b/xv/H/8j/yP/J/8r/zP/N/87/0P/S/9T/1v/Y/9v/3v/g/+P/5v/p/+z/7//y//X/+P/7/wAAAwAGAAgACwAOABEAEwAWABkAGwAdAB8AIAAiACMAJAAlACYAJgAnACgAKAApACgAKQAoACgAKAAnACYAJgAkACMAIQAgAB4AHAAaABcAFQATABAADQALAAgABQADAAAAAP3/+v/3//T/8f/v/+z/6f/n/+T/4f/f/9z/2f/X/9T/0f/P/83/yv/I/8b/xP/C/8D/vv+8/7v/uf+4/7b/tf+0/7P/sv+x/7H/sP+v/6//r/+v/6//r/+v/6//sP+w/7H/sf+y/7P/tP+1/7b/t/+5/7r/vP+9/7//wf/D/8X/x//J/8z/zv/Q/9P/1f/Y/9v/3f/g/+P/5v/p/+z/7//y//X/+P/7/wAAAwAGAAgACwAOABEAFAAXABkAHAAfACEAJAAmACkAKwAtAC8AMQAzADQANgA3ADkAOgA7ADwA']
+            }),
+            elevatorMove: new Howl({
+                src: ['data:audio/wav;base64,UklGRl9HAABXQVZFZm10IBAAAAABAAEAESsAABErAAABAAgAZGF0YTtHAAAAHAAcABwAHAAcABsAGwAbABwAHAAcABwAHAAcABwAHAAcABsAGwAbABsAGgAaABoAGgAZABkAGQAZABkAGAAYABgAFwAXABcAFgAWABUAFQAUABQAEwASABIAEQAQABAADwAOAA0ADQAMAAsACwAKAAkACAAHAAYABgAFAAQAAwACAAIAAQAAAAAAAAD///7//v/9//3//P/8//v/+//6//r/+f/5//j/+P/3//f/9v/2//X/9f/0//T/8//z//L/8v/x//H/8P/w/+//7//u/+7/7f/t/+z/7P/r/+v/6v/q/+n/6f/o/+j/5//n/+b/5v/l/+X/5P/k/+P/4//i/+L/4f/h/+D/4P/f/9//3v/e/93/3f/c/9z/2//b/9r/2v/Z/9n/2P/Y/9f/1//W/9b/1f/V/9T/1P/T/9P/0v/S/9H/0f/Q/9D/z//P/87/zv/N/83/zP/M/8v/y//K/8r/yf/J/8j/yP/H/8f/xv/G/8X/xf/E/8T/w//D/8L/wv/B/8H/wP/A/7//v/++/77/vf+9/7z/vP+7/7v/uv+6/7n/uf+4/7j/t/+3/7b/tv+1/7X/tP+0/7P/s/+y/7L/sf+x/7D/sP+v/6//rv+u/63/rf+s/6z/q/+r/6r/qv+p/6n/qP+o/6f/p/+m/6b/pf+l/6T/pP+j/6P/ov+i/6H/of+g/6D/n/+f/57/nv+d/53/nP+c/5v/m/+a/5r/mf+Z/5j/mP+X/5f/lv+W/5X/lf+U/5T/k/+T/5L/kv+R/5H/kP+Q/4//j/+O/47/jf+N/4z/jP+L/4v/iv+K/4n/if+I/4j/h/+H/4b/hv+F/4X/hP+E/4P/g/+C/4L/gf+B/4D/gP9//3//fv9+/33/ff98/3z/e/97/3r/ev95/3n/eP94/3f/d/92/3b/df91/3T/dP9z/3P/cv9y/3H/cf9w/3D/b/9v/27/bv9t/23/bP9s/2v/a/9q/2r/af9p/2j/aP9n/2f/Zv9m/2X/Zf9k/2T/Y/9j/2L/Yv9h/2H/YP9g/1//X/9e/17/Xf9d/1z/XP9b/1v/Wv9a/1n/Wf9Y/1j/V/9X/1b/Vv9V/1X/VP9U/1P/U/9S/1L/Uf9R/1D/UP9P/0//Tv9O/03/Tf9M/0z/S/9L/0r/Sv9J/0n/SP9I/0f/R/9G/0b/Rf9F/0T/RP9D/0P/Qv9C/0H/Qf9A/0D/P/8//z7/Pv89/z3/PP88/zv/O/86/zr/Of85/zj/OP83/zf/Nv82/zX/Nf80/zT/M/8z/zL/Mv8x/zH/MP8w/y//L/8u/y7/Lf8t/yz/LP8r/yv/Kv8q/yn/Kf8o/yj/J/8n/yb/Jv8l/yX/JP8k/yP/I/8i/yL/If8h/yD/IP8f/x//Hv8e/x3/Hf8c/xz/G/8b/xr/Gv8Z/xn/GP8Y/xf/F/8W/xb/Ff8V/xT/FP8T/xP/Ev8S/xH/Ef8Q/xD/D/8P/w7/Dv8N/w3/DP8M/wv/C/8K/wr/Cf8J/wj/CP8H/wf/Bv8G/wX/Bf8E/wT/A/8D/wL/Av8B/wH/AP8A////']
+            }),
+            bgm: new Howl({
+                src: ['data:audio/wav;base64,UklGRl9HAABXQVZFZm10IBAAAAABAAEAESsAABErAAABAAgAZGF0YTtHAAAAHAAcABoAGgAYABgAFgAWABQAFAASABIAEAAQAA4ADgAMAAwACgAKAAgACAAGAAYABAAEAAIAAgAAAAAAAAD+//7//P/8//r/+v/4//j/9v/2//T/9P/y//L/8P/w/+7/7v/s/+z/6v/q/+j/6P/m/+b/5P/k/+L/4v/g/+D/3v/e/9z/3P/a/9r/2P/Y/9b/1v/U/9T/0v/S/9D/0P/O/87/zP/M/8r/yv/I/8j/xv/G/8T/xP/C/8L/wP/A/77/vv+8/7z/uv+6/7j/uP+2/7b/tP+0/7L/sv+w/7D/rv+u/6z/rP+q/6r/qP+o/6b/pv+k/6T/ov+i/6D/oP+e/57/nP+c/5r/mv+Y/5j/lv+W/5T/lP+S/5L/kP+Q/47/jv+M/4z/iv+K/4j/iP+G/4b/hP+E/4L/gv+A/4D/fv9+/3z/fP96/3r/eP94/3b/dv90/3T/cv9y/3D/cP9u/27/bP9s/2r/av9o/2j/Zv9m/2T/ZP9i/2L/YP9g/17/Xv9c/1z/Wv9a/1j/WP9W/1b/VP9U/1L/Uv9Q/1D/Tv9O/0z/TP9K/0r/SP9I/0b/Rv9E/0T/Qv9C/0D/QP8+/z7/PP88/zr/Ov84/zj/Nv82/zT/NP8y/zL/MP8w/y7/Lv8s/yz/Kv8q/yj/KP8m/yb/JP8k/yL/Iv8g/yD/Hv8e/xz/HP8a/xr/GP8Y/xb/Fv8U/xT/Ev8S/xD/EP8O/w7/DP8M/wr/Cv8I/wj/Bv8G/wT/BP8C/wL/AAAA/v/+//z//P/6//r/+P/4//b/9v/0//T/8v/y//D/8P/u/+7/7P/s/+r/6v/o/+j/5v/m/+T/5P/i/+L/4P/g/97/3v/c/9z/2v/a/9j/2P/W/9b/1P/U/9L/0v/Q/9D/zv/O/8z/zP/K/8r/yP/I/8b/xv/E/8T/wv/C/8D/wP++/77/vP+8/7r/uv+4/7j/tv+2/7T/tP+y/7L/sP+w/67/rv+s/6z/qv+q/6j/qP+m/6b/pP+k/6L/ov+g/6D/nv+e/5z/nP+a/5r/mP+Y/5b/lv+U/5T/kv+S/5D/kP+O/47/jP+M/4r/iv+I/4j/hv+G/4T/hP+C/4L/gP+A/37/fv98/3z/ev96/3j/eP92/3b/dP90/3L/cv9w/3D/bv9u/2z/bP9q/2r/aP9o/2b/Zv9k/2T/Yv9i/2D/YP9e/17/XP9c/1r/Wv9Y/1j/Vv9W/1T/VP9S/1L/UP9Q/07/Tv9M/0z/Sv9K/0j/SP9G/0b/RP9E/0L/Qv9A/0D/Pv8+/zz/PP86/zr/OP84/zb/Nv80/zT/Mv8y/zD/MP8u/y7/LP8s/yr/Kv8o/yj/Jv8m/yT/JP8i/yL/IP8g/x7/Hv8c/xz/Gv8a/xj/GP8W/xb/FP8U/xL/Ev8Q/xD/Dv8O/wz/DP8K/wr/CP8I/wb/Bv8E/wT/Av8C/wAAAP7//v/8//z/+v/6//j/+P/2//b/9P/0//L/8v/w//D/7v/u/+z/7P/q/+r/6P/o/+b/5v/k/+T/4v/i/+D/4P/e/97/3P/c/9r/2v/Y/9j/1v/W/9T/1P/S/9L/0P/Q/87/zv/M/8z/yv/K/8j/yP/G/8b/xP/E/8L/wv/A/8D/vv++/7z/vP+6/7r/uP+4/7b/tv+0/7T/sv+y/7D/sP+u/67/rP+s/6r/qv+o/6j/pv+m/6T/pP+i/6L/oP+g/57/nv+c/5z/mv+a/5j/mP+W/5b/lP+U/5L/kv+Q/5D/jv+O/4z/jP+K/4r/iP+I/4b/hv+E/4T/gv+C/4D/gP9+/37/fP98/3r/ev94/3j/dv92/3T/dP9y/3L/cP9w/27/bv9s/2z/av9q/2j/aP9m/2b/ZP9k/2L/Yv9g/2D/Xv9e/1z/XP9a/1r/WP9Y/1b/Vv9U/1T/Uv9S/1D/UP9O/07/TP9M/0r/Sv9I/0j/Rv9G/0T/RP9C/0L/QP9A/z7/Pv88/zz/Ov86/zj/OP82/zb/NP80/zL/Mv8w/zD/Lv8u/yz/LP8q/yr/KP8o/yb/Jv8k/yT/Iv8i/yD/IP8e/x7/HP8c/xr/Gv8Y/xj/Fv8W/xT/FP8S/xL/EP8Q/w7/Dv8M/wz/Cv8K/wj/CP8G/wb/BP8E/wL/Av8AAAD+//7//P/8//r/+v/4//j/9v/2//T/9P/y//L/8P/w/+7/7v/s/+z/6v/q/+j/6P/m/+b/5P/k/+L/4v/g/+D/3v/e/9z/3P/a/9r/2P/Y/9b/1v/U/9T/0v/S/9D/0P/O/87/zP/M/8r/yv/I/8j/xv/G/8T/xP/C/8L/wP/A/77/vv+8/7z/uv+6/7j/uP+2/7b/tP+0/7L/sv+w/7D/rv+u/6z/rP+q/6r/qP+o/6b/pv+k/6T/ov+i/6D/oP+e/57/nP+c/5r/mv+Y/5j/lv+W/5T/lP+S/5L/kP+Q/47/jv+M/4z/iv+K/4j/iP+G/4b/hP+E/4L/gv+A/4D/fv9+/3z/fP96/3r/eP94/3b/dv90/3T/cv9y/3D/cP9u/27/bP9s/2r/av9o/2j/Zv9m/2T/ZP9i/2L/YP9g/17/Xv9c/1z/Wv9a/1j/WP9W/1b/VP9U/1L/Uv9Q/1D/Tv9O/0z/TP9K/0r/SP9I/0b/Rv9E/0T/Qv9C/0D/QP8+/z7/PP88/zr/Ov84/zj/Nv82/zT/NP8y/zL/MP8w/y7/Lv8s/yz/Kv8q/yj/KP8m/yb/JP8k/yL/Iv8g/yD/Hv8e/xz/HP8a/xr/GP8Y/xb/Fv8U/xT/Ev8S/xD/EP8O/w7/DP8M/wr/Cv8I/wj/Bv8G/wT/BP8C/wL/AAAA/v/+//z//P/6//r/+P/4//b/9v/0//T/8v/y//D/8P/u/+7/7P/s/+r/6v/o/+j/5v/m/+T/5P/i/+L/4P/g/97/3v/c/9z/2v/a/9j/2P/W/9b/1P/U/9L/0v/Q/9D/zv/O/8z/zP/K/8r/yP/I/8b/xv/E/8T/wv/C/8D/wP++/77/vP+8/7r/uv+4/7j/tv+2/7T/tP+y/7L/sP+w/67/rv+s/6z/qv+q/6j/qP+m/6b/pP+k/6L/ov+g/6D/nv+e/5z/nP+a/5r/mP+Y/5b/lv+U/5T/kv+S/5D/kP+O/47/jP+M/4r/iv+I/4j/hv+G/4T/hP+C/4L/gP+A/37/fv98/3z/ev96/3j/eP92/3b/dP90/3L/cv9w/3D/bv9u/2z/bP9q/2r/aP9o/2b/Zv9k/2T/Yv9i/2D/YP9e/17/XP9c/1r/Wv9Y/1j/Vv9W/1T/VP9S/1L/UP9Q/07/Tv9M/0z/Sv9K/0j/SP9G/0b/RP9E/0L/Qv9A/0D/Pv8+/zz/PP86/zr/OP84/zb/Nv80/zT/Mv8y/zD/MP8u/y7/LP8s/yr/Kv8o/yj/Jv8m/yT/JP8i/yL/IP8g/x7/Hv8c/xz/Gv8a/xj/GP8W/xb/FP8U/xL/Ev8Q/xD/Dv8O/wz/DP8K/wr/CP8I/wb/Bv8E/wT/Av8C/wAAAP7//v/8//z/+v/6//j/+P/2//b/9P/0//L/8v/w//D/7v/u/+z/7P/q/+r/6P/o/+b/5v/k/+T/4v/i/+D/4P/e/97/3P/c/9r/2v/Y/9j/1v/W/9T/1P/S/9L/0P/Q/87/zv/M/8z/yv/K/8j/yP/G/8b/xP/E/8L/wv/A/8D/vv++/7z/vP+6/7r/uP+4/7b/tv+0/7T/sv+y/7D/sP+u/67/rP+s/6r/qv+o/6j/pv+m/6T/pP+i/6L/oP+g/57/nv+c/5z/mv+a/5j/mP+W/5b/lP+U/5L/kv+Q/5D/jv+O/4z/jP+K/4r/iP+I/4b/hv+E/4T/gv+C/4D/gP9+/37/fP98/3r/ev94/3j/dv92/3T/dP9y/3L/cP9w/27/bv9s/2z/av9q/2j/aP9m/2b/ZP9k/2L/Yv9g/2D/Xv9e/1z/XP9a/1r/WP9Y/1b/Vv9U/1T/Uv9S/1D/UP9O/07/TP9M/0r/Sv9I/0j/Rv9G/0T/RP9C/0L/QP9A/z7/Pv88/zz/Ov86/zj/OP82/zb/NP80/zL/Mv8w/zD/Lv8u/yz/LP8q/yr/KP8o/yb/Jv8k/yT/Iv8i/yD/IP8e/x7/HP8c/xr/Gv8Y/xj/Fv8W/xT/FP8S/xL/EP8Q/w7/Dv8M/wz/Cv8K/wj/CP8G/wb/BP8E/wL/Av8AAAD+//7//P/8//r/+v/4//j/9v/2//T/9P/y//L/8P/w/+7/7v/s/+z/6v/q/+j/6P/m/+b/5P/k/+L/4v/g/+D/3v/e/9z/3P/a/9r/2P/Y/9b/1v/U/9T/0v/S/9D/0P/O/87/zP/M/8r/yv/I/8j/xv/G/8T/xP/C/8L/wP/A/77/vv+8/7z/uv+6/7j/uP+2/7b/tP+0/7L/sv+w/7D/rv+u/6z/rP+q/6r/qP+o/6b/pv+k/6T/ov+i/6D/oP+e/57/nP+c/5r/mv+Y/5j/lv+W/5T/lP+S/5L/kP+Q/47/jv+M/4z/iv+K/4j/iP+G/4b/hP+E/4L/gv+A/4D/fv9+/3z/fP96/3r/eP94/3b/dv90/3T/cv9y/3D/cP9u/27/bP9s/2r/av9o/2j/Zv9m/2T/ZP9i/2L/YP9g/17/Xv9c/1z/Wv9a/1j/WP9W/1b/VP9U/1L/Uv9Q/1D/Tv9O/0z/TP9K/0r/SP9I/0b/Rv9E/0T/Qv9C/0D/QP8+/z7/PP88/zr/Ov84/zj/Nv82/zT/NP8y/zL/MP8w/y7/Lv8s/yz/Kv8q/yj/KP8m/yb/JP8k/yL/Iv8g/yD/Hv8e/xz/HP8a/xr/GP8Y/xb/Fv8U/xT/Ev8S/xD/EP8O/w7/DP8M/wr/Cv8I/wj/Bv8G/wT/BP8C/wL/AAAA']
+            }),
+            death: new Howl({
+                src: ['data:audio/wav;base64,UklGRl9HAABXQVZFZm10IBAAAAABAAEAESsAABErAAABAAgAZGF0YTtHAAAAAP//AgAGAAsAEgAbACMAKwAyADgAPAA+AD8APgA8ADkANQAwACoAIwAcABUADQAGAP//+P/x/+r/4//c/9X/z//K/8X/wf+9/7r/uP+2/7X/tP+0/7T/tf+2/7f/uf+7/77/wf/F/8n/zf/S/9f/3P/i/+j/7v/0//r/AAAGAAwAEgAYAB0AIgAnACsALwAyADUANwA4ADoAOwA7ADsAOwA6ADoAOQA4ADcANgA0ADMAMQAvAC0AKwApACYAJAAhAB4AGwAYABUAEgAPAAwACQAGAAMAAAD9//r/9//0//H/7v/r/+j/5f/i/9//3P/Z/9b/0//Q/83/yv/H/8T/wf++/7v/uP+1/7L/r/+s/6n/pv+j/6D/nf+a/5f/lP+R/47/i/+I/4X/gv9//3z/ef92/3P/cP9t/2r/Z/9k/2H/Xv9b/1j/Vf9S/0//TP9J/0b/Q/9A/z3/Ov83/zT/Mf8u/yv/KP8l/yL/H/8c/xn/Fv8T/xD/Df8K/wf/BP8B//7++/74/vX+8v7v/uz+6f7m/uP+4P7d/tr+1/7U/tH+zv7L/sj+xf7C/r/+vP65/rb+s/6w/q3+qv6n/qT+of6e/pv+mP6V/pL+j/6M/on+hv6D/oD+ff56/nf+dP5x/m7+a/5o/mX+Yv5f/lz+Wf5W/lP+UP5N/kr+R/5E/kH+Pv47/jj+Nf4y/i/+LP4p/ib+I/4g/h3+Gv4X/hT+Ef4O/gv+CP4F/gL+//38/fn99v3z/fD97f3q/ef95P3h/d790/3Q/c39yv3H/cT9wf2+/bv9uP21/bL9r/2s/an9pv2j/aD9nf2a/Zf9lP2R/Y79i/2I/YX9gv1//Xz9ef12/XP9cP1t/Wr9Z/1k/WH9Xv1b/Vj9Vf1S/U/9TP1J/Ub9Q/1A/T39OP01/TL9L/0s/Sj9Jf0i/R/9HP0Y/RX9Ev0P/Qz9CP0F/QL9/vz7/Pj89Pzx/O785fzi/N/82vzX/NP80PzM/Mn8xvzC/L/8u/y4/LT8sfyt/Kj8pfyh/J38mfyW/JL8jvyK/Ib8g/x//Hr8dvxy/G78a/xm/GL8XvxZ/FX8UfxM/Ej8Q/w//Dv8N/wy/C78Kvwl/CH8HPwY/BP8D/wK/Ab8AfwB/P774Pvb+9f70vvN+8j7xPu/+7v7tvu0+6/7qvum+6L7nfuY+5T7j/uL+4b7gvt9+3n7dPtw+2z7Z/tj+177WvtW+1H7Tftg+5n73vsa/Gb82f8LAD8AcgClANgACwE9AW8BoQHTAQQCNQJmApYCxQL0AiIDUgOBA68D3AMJBDUEYQSMBLYE4AQJBTEFWAWABacFzgXzBRgGPAZfBn0GnAbABuMGawgRCaUJMwq4CkUL0AtdDOkMdQ0BDo0OGQ+kDzAQvBBHEdMRXhLpEnwTDRSdFC0VvhVOFt4Wbhf+F48YHxmvGT8a0BpgG/Abgxz3HIcddR47Fw8UEQ/EC3IIJwUKArUATQDQAGgBFwLdArYDnARdBT4G']
+            }),
+            pickup: new Howl({
+                src: ['data:audio/wav;base64,UklGRl9HAABXQVZFZm10IBAAAAABAAEAESsAABErAAABAAgAZGF0YTtHAAAAPwA/AD4APgA9AD0APAA8ADsAOwA6ADoAOQA5ADgAOAA3ADcANgA2ADUANQAzADMAMgAyADEAMQAwADAALwAvAC4ALgAtAC0ALAAsACsAKwAqACoAKQApACgAKAAnACcAJgAmACUAJQAkACQAIwAjACIAIgAgACAAHwAfAB4AHgAdAB0AHAAcABsAGwAaABoAGQAZABgAGAAWABYAFQAVABQAFAAUABQAEwATABIAEgARABEAEQARABAAEAAPAA8ADwAPAA4ADgANAA0ADQANAAwADAAMAAwACwALAAoACgAKAAoACQAJAAgACAAIAAgABwAHAAcABwAGAAYABgAGAAUABQAFAAUABAAEAAQABAAEAAQAAwADAAMAAwACAAIAAgACAAIAAgACAAIAAQABAAEAAQABAAEAAQABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAD/////////////////////']
+            })
+        };
+        
+        // Create game world
+        const world = {
+            player: null,
+            floors: [],
+            elevators: [],
+            doors: [],
+            enemies: [],
+            bullets: [],
+            lights: [],
+            score: 0,
+            lives: 3,
+            level: 1,
+            gameOver: false,
+            gameState: 'menu', // menu, playing, gameOver
+            gravity: GRAVITY
+        };
+        
+        // Add background container
+        const bgContainer = new PIXI.Container();
+        app.stage.addChild(bgContainer);
+        
+        // Add game container
+        const gameContainer = new PIXI.Container();
+        app.stage.addChild(gameContainer);
+        
+        // Add UI container on top
+        const uiContainer = new PIXI.Container();
+        app.stage.addChild(uiContainer);
+        
+        // Create player
+        function createPlayer() {
+            const player = new PIXI.Graphics();
+            player.beginFill(0x5D5CDE);
+            player.drawRect(0, 0, PLAYER_WIDTH, PLAYER_HEIGHT);
+            player.endFill();
+            
+            // Add a hat to make it look like a spy
+            player.beginFill(0x000000);
+            player.drawRect(5, 0, 30, 10);
+            player.endFill();
+            
+            // Add player properties
+            player.x = GAME_WIDTH / 2;
+            player.y = 100;
+            player.vx = 0;
+            player.vy = 0;
+            player.direction = 1; // 1 = right, -1 = left
+            player.isJumping = false;
+            player.isOnGround = false;
+            player.isOnElevator = false;
+            player.currentElevator = null;
+            player.shootCooldown = 0;
+            player.invulnerable = 0;
+            player.blinkTime = 0;
+            player.visible = true;
+            player.documentCount = 0;
+            player.dead = false;
+            
+            // Update function
+            player.update = function(delta) {
+                // Apply gravity if not on elevator
+                if (!player.isOnElevator) {
+                    player.vy += world.gravity;
+                }
+                
+                // Move player
+                player.x += player.vx;
+                player.y += player.vy;
+                
+                // Screen boundaries
+                if (player.x < 0) player.x = 0;
+                if (player.x > GAME_WIDTH - PLAYER_WIDTH) player.x = GAME_WIDTH - PLAYER_WIDTH;
+                
+                // Update shoot cooldown
+                if (player.shootCooldown > 0) {
+                    player.shootCooldown -= delta;
+                }
+                
+                // Handle invulnerability blinking
+                if (player.invulnerable > 0) {
+                    player.invulnerable -= delta;
+                    player.blinkTime -= delta;
+                    
+                    if (player.blinkTime <= 0) {
+                        player.visible = !player.visible;
+                        player.blinkTime = 5;
+                    }
+                    
+                    if (player.invulnerable <= 0) {
+                        player.visible = true;
+                    }
+                }
+            };
+            
+            // Shoot function
+            player.shoot = function() {
+                if (player.shootCooldown <= 0) {
+                    // Create bullet
+                    const bullet = new PIXI.Graphics();
+                    bullet.beginFill(0xFFFF00);
+                    bullet.drawRect(0, 0, 10, 4);
+                    bullet.endFill();
+                    
+                    bullet.x = player.direction > 0 ? player.x + PLAYER_WIDTH : player.x;
+                    bullet.y = player.y + PLAYER_HEIGHT / 2;
+                    bullet.vx = player.direction * BULLET_SPEED;
+                    bullet.fromPlayer = true;
+                    
+                    gameContainer.addChild(bullet);
+                    world.bullets.push(bullet);
+                    
+                    // Set cooldown
+                    player.shootCooldown = 15;
+                    
+                    // Play sound
+                    sounds.shoot.play();
+                }
+            };
+            
+            gameContainer.addChild(player);
+            return player;
+        }
+        
+        // Create floor
+        function createFloor(x, y, width) {
+            const floor = new PIXI.Graphics();
+            floor.beginFill(0x333333);
+            floor.drawRect(0, 0, width, FLOOR_HEIGHT / 2);
+            floor.endFill();
+            
+            floor.x = x;
+            floor.y = y;
+            floor.width = width;
+            
+            gameContainer.addChild(floor);
+            return floor;
+        }
+        
+        // Create building structure
+        function createBuilding() {
+            // Clear previous
+            world.floors = [];
+            world.elevators = [];
+            world.doors = [];
+            world.enemies = [];
+            world.bullets = [];
+            world.lights = [];
+            
+            // Create floors
+            for (let i = 0; i < FLOOR_COUNT; i++) {
+                const floorY = GAME_HEIGHT - FLOOR_HEIGHT * (i + 1);
+                
+                // Left section
+                const leftFloor = createFloor(0, floorY, 300);
+                world.floors.push(leftFloor);
+                
+                // Right section (if not the bottom floor)
+                if (i > 0) {
+                    const rightFloor = createFloor(500, floorY, 300);
+                    world.floors.push(rightFloor);
+                } else {
+                    // Bottom floor is complete
+                    const fullFloor = createFloor(0, floorY, GAME_WIDTH);
+                    world.floors.push(fullFloor);
+                }
+                
+                // Add doors on each floor
+                if (i > 0) {
+                    // Left door
+                    const leftDoor = createDoor(100, floorY - 70, i % 3 === 0);
+                    world.doors.push(leftDoor);
+                    
+                    // Right door
+                    const rightDoor = createDoor(650, floorY - 70, i % 5 === 0);
+                    world.doors.push(rightDoor);
+                }
+                
+                // Add light fixtures
+                if (i > 0) {
+                    const light1 = createLight(200, floorY - 30);
+                    world.lights.push(light1);
+                    
+                    const light2 = createLight(600, floorY - 30);
+                    world.lights.push(light2);
+                }
+            }
+            
+            // Create elevators (starts at 2nd floor)
+            for (let i = 1; i < FLOOR_COUNT; i++) {
+                const elevatorY = GAME_HEIGHT - FLOOR_HEIGHT * (i + 1) + 10;
+                const elevator = createElevator(380, elevatorY);
+                elevator.minY = GAME_HEIGHT - FLOOR_HEIGHT * (i + 1) + 10;
+                elevator.maxY = GAME_HEIGHT - FLOOR_HEIGHT * i + 10;
+                world.elevators.push(elevator);
+            }
+        }
+        
+        // Create elevator
+        function createElevator(x, y) {
+            const elevator = new PIXI.Graphics();
+            elevator.beginFill(0x888888);
+            elevator.drawRect(0, 0, 100, FLOOR_HEIGHT - 20);
+            elevator.endFill();
+            
+            // Add design details
+            elevator.lineStyle(2, 0x666666);
+            elevator.moveTo(10, 0);
+            elevator.lineTo(10, FLOOR_HEIGHT - 20);
+            elevator.moveTo(90, 0);
+            elevator.lineTo(90, FLOOR_HEIGHT - 20);
+            elevator.lineStyle(2, 0x444444);
+            elevator.moveTo(0, 10);
+            elevator.lineTo(100, 10);
+            
+            elevator.x = x;
+            elevator.y = y;
+            elevator.direction = 1; // 1 = up, -1 = down
+            elevator.speed = ELEVATOR_SPEED;
+            elevator.minY = y;
+            elevator.maxY = y + FLOOR_HEIGHT;
+            elevator.moving = true;
+            elevator.calledBy = null; // Track which floor called the elevator
+            
+            elevator.update = function() {
+                if (elevator.moving) {
+                    elevator.y += elevator.direction * elevator.speed;
+                    
+                    // Change direction at boundaries
+                    if (elevator.y <= elevator.minY) {
+                        elevator.y = elevator.minY;
+                        elevator.direction = 1;
+                    } else if (elevator.y >= elevator.maxY) {
+                        elevator.y = elevator.maxY;
+                        elevator.direction = -1;
+                    }
+                }
+            };
+            
+            gameContainer.addChild(elevator);
+            return elevator;
+        }
+        
+        // Create door
+        function createDoor(x, y, hasDocument = false) {
+            const door = new PIXI.Graphics();
+            door.beginFill(hasDocument ? 0xFF0000 : 0x8B4513);
+            door.drawRect(0, 0, 40, 70);
+            door.endFill();
+            
+            // Add design details
+            door.lineStyle(2, 0x000000);
+            door.drawRect(5, 5, 30, 60);
+            
+            // Add doorknob
+            door.beginFill(0xFFD700);
+            door.drawCircle(30, 35, 3);
+            door.endFill();
+            
+            door.x = x;
+            door.y = y;
+            door.hasDocument = hasDocument;
+            door.isOpen = false;
+            
+            gameContainer.addChild(door);
+            return door;
+        }
+        
+        // Create light
+        function createLight(x, y) {
+            const light = new PIXI.Graphics();
+            light.beginFill(0xFFFFAA);
+            light.drawRect(0, 0, 40, 10);
+            light.endFill();
+            
+            // Add fixture
+            light.lineStyle(1, 0x666666);
+            light.drawRect(0, 0, 40, 10);
+            
+            light.x = x;
+            light.y = y;
+            light.isOn = true;
+            
+            gameContainer.addChild(light);
+            return light;
+        }
+        
+        // Create enemy
+        function createEnemy(x, y) {
+            const enemy = new PIXI.Graphics();
+            enemy.beginFill(0xFF0000);
+            enemy.drawRect(0, 0, PLAYER_WIDTH, PLAYER_HEIGHT);
+            enemy.endFill();
+            
+            // Add detail to make it look like an agent
+            enemy.beginFill(0x000000);
+            enemy.drawRect(5, 0, 30, 8); // hat
+            enemy.endFill();
+            
+            enemy.x = x;
+            enemy.y = y;
+            enemy.vx = 0;
+            enemy.vy = 0;
+            enemy.direction = Math.random() > 0.5 ? 1 : -1; // Random direction
+            enemy.speed = ENEMY_MOVE_SPEED;
+            enemy.shootCooldown = 0;
+            enemy.isOnGround = false;
+            
+            enemy.update = function(delta) {
+                // Move
+                enemy.vx = enemy.direction * enemy.speed;
+                enemy.vy += world.gravity;
+                
+                enemy.x += enemy.vx;
+                enemy.y += enemy.vy;
+                
+                // Boundary check
+                if (enemy.x < 0) {
+                    enemy.x = 0;
+                    enemy.direction *= -1;
+                } else if (enemy.x > GAME_WIDTH - PLAYER_WIDTH) {
+                    enemy.x = GAME_WIDTH - PLAYER_WIDTH;
+                    enemy.direction *= -1;
+                }
+                
+                // Random direction change
+                if (Math.random() < 0.005) {
+                    enemy.direction *= -1;
+                }
+                
+                // Random shooting
+                if (enemy.shootCooldown <= 0) {
+                    if (Math.random() < 0.01) {
+                        // Create bullet
+                        const bullet = new PIXI.Graphics();
+                        bullet.beginFill(0xFF0000);
+                        bullet.drawRect(0, 0, 10, 4);
+                        bullet.endFill();
+                        
+                        bullet.x = enemy.direction > 0 ? enemy.x + PLAYER_WIDTH : enemy.x;
+                        bullet.y = enemy.y + PLAYER_HEIGHT / 2;
+                        bullet.vx = enemy.direction * BULLET_SPEED;
+                        bullet.fromPlayer = false;
+                        
+                        gameContainer.addChild(bullet);
+                        world.bullets.push(bullet);
+                        
+                        enemy.shootCooldown = 60;
+                        
+                        // Play sound
+                        sounds.shoot.play();
+                    }
+                } else {
+                    enemy.shootCooldown -= delta;
+                }
+            };
+            
+            gameContainer.addChild(enemy);
+            return enemy;
+        }
+        
+        // Check collision between two rectangles
+        function checkCollision(rect1, rect2) {
+            return (
+                rect1.x < rect2.x + rect2.width &&
+                rect1.x + rect1.width > rect2.x &&
+                rect1.y < rect2.y + rect2.height &&
+                rect1.y + rect1.height > rect2.y
+            );
+        }
+        
+        // Create UI elements
+        function createUI() {
+            uiContainer.removeChildren();
+            
+            // Score display
+            const scoreText = new PIXI.Text('SCORE: 0', {
+                fontFamily: 'Arial',
+                fontSize: 24,
+                fill: 0xFFFFFF
+            });
+            scoreText.x = 20;
+            scoreText.y = 20;
+            uiContainer.addChild(scoreText);
+            
+            // Lives display
+            const livesText = new PIXI.Text('LIVES: 3', {
+                fontFamily: 'Arial',
+                fontSize: 24,
+                fill: 0xFFFFFF
+            });
+            livesText.x = GAME_WIDTH - 120;
+            livesText.y = 20;
+            uiContainer.addChild(livesText);
+            
+            // Documents display
+            const documentsText = new PIXI.Text('DOCS: 0/0', {
+                fontFamily: 'Arial',
+                fontSize: 24,
+                fill: 0xFFFFFF
+            });
+            documentsText.x = GAME_WIDTH / 2 - 60;
+            documentsText.y = 20;
+            uiContainer.addChild(documentsText);
+            
+            // Update UI function
+            world.updateUI = function() {
+                scoreText.text = `SCORE: ${world.score}`;
+                livesText.text = `LIVES: ${world.lives}`;
+                
+                // Count total documents
+                let totalDocs = 0;
+                for (const door of world.doors) {
+                    if (door.hasDocument) {
+                        totalDocs++;
+                    }
+                }
+                
+                documentsText.text = `DOCS: ${world.player.documentCount}/${totalDocs}`;
+            };
+            
+            // Create menu screen
+            if (world.gameState === 'menu') {
+                const menuContainer = new PIXI.Container();
+                
+                const titleText = new PIXI.Text('ELEVATOR ACTION', {
+                    fontFamily: 'Arial',
+                    fontSize: 48,
+                    fontWeight: 'bold',
+                    fill: 0xFFFFFF
+                });
+                titleText.x = GAME_WIDTH / 2 - titleText.width / 2;
+                titleText.y = 150;
+                menuContainer.addChild(titleText);
+                
+                const instructionsText = new PIXI.Text(
+                    'Arrow Keys - Move\n' +
+                    'Space - Shoot\n' +
+                    'Enter doors to collect secret documents!\n' +
+                    'Shoot lights to turn them off and hide from enemies.',
+                    {
+                        fontFamily: 'Arial',
+                        fontSize: 24,
+                        align: 'center',
+                        fill: 0xFFFFFF
+                    }
+                );
+                instructionsText.x = GAME_WIDTH / 2 - instructionsText.width / 2;
+                instructionsText.y = 250;
+                menuContainer.addChild(instructionsText);
+                
+                const startButton = new PIXI.Graphics();
+                startButton.beginFill(0x5D5CDE);
+                startButton.drawRoundedRect(0, 0, 200, 60, 10);
+                startButton.endFill();
+                startButton.x = GAME_WIDTH / 2 - 100;
+                startButton.y = 400;
+                
+                const startText = new PIXI.Text('START GAME', {
+                    fontFamily: 'Arial',
+                    fontSize: 24,
+                    fill: 0xFFFFFF
+                });
+                startText.x = GAME_WIDTH / 2 - startText.width / 2;
+                startText.y = 415;
+                
+                startButton.interactive = true;
+                startButton.buttonMode = true;
+                startButton.on('pointerdown', startGame);
+                
+                menuContainer.addChild(startButton);
+                menuContainer.addChild(startText);
+                
+                uiContainer.addChild(menuContainer);
+            }
+            
+            // Create game over screen
+            if (world.gameState === 'gameOver') {
+                const gameOverContainer = new PIXI.Container();
+                
+                const gameOverText = new PIXI.Text('GAME OVER', {
+                    fontFamily: 'Arial',
+                    fontSize: 48,
+                    fontWeight: 'bold',
+                    fill: 0xFF0000
+                });
+                gameOverText.x = GAME_WIDTH / 2 - gameOverText.width / 2;
+                gameOverText.y = 200;
+                gameOverContainer.addChild(gameOverText);
+                
+                const finalScoreText = new PIXI.Text(`Final Score: ${world.score}`, {
+                    fontFamily: 'Arial',
+                    fontSize: 36,
+                    fill: 0xFFFFFF
+                });
+                finalScoreText.x = GAME_WIDTH / 2 - finalScoreText.width / 2;
+                finalScoreText.y = 280;
+                gameOverContainer.addChild(finalScoreText);
+                
+                const restartButton = new PIXI.Graphics();
+                restartButton.beginFill(0x5D5CDE);
+                restartButton.drawRoundedRect(0, 0, 200, 60, 10);
+                restartButton.endFill();
+                restartButton.x = GAME_WIDTH / 2 - 100;
+                restartButton.y = 350;
+                
+                const restartText = new PIXI.Text('PLAY AGAIN', {
+                    fontFamily: 'Arial',
+                    fontSize: 24,
+                    fill: 0xFFFFFF
+                });
+                restartText.x = GAME_WIDTH / 2 - restartText.width / 2;
+                restartText.y = 365;
+                
+                restartButton.interactive = true;
+                restartButton.buttonMode = true;
+                restartButton.on('pointerdown', resetGame);
+                
+                gameOverContainer.addChild(restartButton);
+                gameOverContainer.addChild(restartText);
+                
+                uiContainer.addChild(gameOverContainer);
+            }
+        }
+        
+        // Handle keyboard input
+        const keys = {};
+        
+        document.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            
+            // Handle space bar for shooting
+            if (e.key === ' ' && world.gameState === 'playing') {
+                world.player.shoot();
+            }
+            
+            // Handle Enter key for starting game
+            if (e.key === 'Enter' && world.gameState === 'menu') {
+                startGame();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+        
+        // Handle mobile controls
+        const mobileControls = {
+            up: false,
+            down: false,
+            left: false,
+            right: false,
+            fire: false
+        };
+        
+        document.getElementById('up-btn').addEventListener('pointerdown', () => mobileControls.up = true);
+        document.getElementById('up-btn').addEventListener('pointerup', () => mobileControls.up = false);
+        document.getElementById('up-btn').addEventListener('pointerout', () => mobileControls.up = false);
+        
+        document.getElementById('down-btn').addEventListener('pointerdown', () => mobileControls.down = true);
+        document.getElementById('down-btn').addEventListener('pointerup', () => mobileControls.down = false);
+        document.getElementById('down-btn').addEventListener('pointerout', () => mobileControls.down = false);
+        
+        document.getElementById('left-btn').addEventListener('pointerdown', () => mobileControls.left = true);
+        document.getElementById('left-btn').addEventListener('pointerup', () => mobileControls.left = false);
+        document.getElementById('left-btn').addEventListener('pointerout', () => mobileControls.left = false);
+        
+        document.getElementById('right-btn').addEventListener('pointerdown', () => mobileControls.right = true);
+        document.getElementById('right-btn').addEventListener('pointerup', () => mobileControls.right = false);
+        document.getElementById('right-btn').addEventListener('pointerout', () => mobileControls.right = false);
+        
+        document.getElementById('fire-btn').addEventListener('pointerdown', () => {
+            mobileControls.fire = true;
+            if (world.gameState === 'playing') {
+                world.player.shoot();
+            } else if (world.gameState === 'menu') {
+                startGame();
+            } else if (world.gameState === 'gameOver') {
+                resetGame();
+            }
+        });
+        document.getElementById('fire-btn').addEventListener('pointerup', () => mobileControls.fire = false);
+        document.getElementById('fire-btn').addEventListener('pointerout', () => mobileControls.fire = false);
+        
+        // Game loop
+        function gameLoop(delta) {
+            if (world.gameState === 'playing') {
+                // Handle player controls
+                const isLeft = keys['ArrowLeft'] || mobileControls.left;
+                const isRight = keys['ArrowRight'] || mobileControls.right;
+                const isUp = keys['ArrowUp'] || mobileControls.up;
+                const isDown = keys['ArrowDown'] || mobileControls.down;
+                
+                // Reset velocity
+                world.player.vx = 0;
+                
+                // Handle movement
+                if (isLeft) {
+                    world.player.vx = -MOVE_SPEED;
+                    world.player.direction = -1;
+                }
+                if (isRight) {
+                    world.player.vx = MOVE_SPEED;
+                    world.player.direction = 1;
+                }
+                
+                // Handle elevator interaction
+                if (world.player.isOnElevator) {
+                    if (isUp) {
+                        world.player.currentElevator.direction = -1;
+                    } else if (isDown) {
+                        world.player.currentElevator.direction = 1;
+                    }
+                }
+                
+                // Update player
+                world.player.update(delta);
+                
+                // Update elevators
+                for (const elevator of world.elevators) {
+                    elevator.update();
+                    
+                    // Check if player is on elevator
+                    if (checkCollision(
+                        {
+                            x: world.player.x,
+                            y: world.player.y + PLAYER_HEIGHT - 5,
+                            width: PLAYER_WIDTH,
+                            height: 10
+                        },
+                        {
+                            x: elevator.x,
+                            y: elevator.y,
+                            width: elevator.width,
+                            height: 10
+                        }
+                    )) {
+                        world.player.isOnElevator = true;
+                        world.player.currentElevator = elevator;
+                        world.player.isOnGround = true;
+                        world.player.isJumping = false;
+                        world.player.vy = 0;
+                        world.player.y = elevator.y - PLAYER_HEIGHT;
+                        
+                        // Play elevator sound occasionally
+                        if (Math.random() < 0.01) {
+                            sounds.elevatorMove.play();
+                        }
+                    }
+                }
+                
+                // Check floor collisions
+                world.player.isOnGround = false;
+                
+                if (!world.player.isOnElevator) {
+                    for (const floor of world.floors) {
+                        if (checkCollision(
+                            {
+                                x: world.player.x,
+                                y: world.player.y + PLAYER_HEIGHT,
+                                width: PLAYER_WIDTH,
+                                height: 1
+                            },
+                            {
+                                x: floor.x,
+                                y: floor.y,
+                                width: floor.width,
+                                height: 1
+                            }
+                        ) && world.player.vy > 0) {
+                            world.player.isOnGround = true;
+                            world.player.isJumping = false;
+                            world.player.vy = 0;
+                            world.player.y = floor.y - PLAYER_HEIGHT;
+                        }
+                    }
+                }
+                
+                // Reset elevator state if not on any elevator
+                if (!world.player.isOnElevator && world.player.currentElevator) {
+                    world.player.currentElevator = null;
+                }
+                
+                // Door interaction
+                for (const door of world.doors) {
+                    if (checkCollision(world.player, door) && isUp) {
+                        if (!door.isOpen) {
+                            door.isOpen = true;
+                            
+                            // If the door has a document, collect it
+                            if (door.hasDocument) {
+                                world.player.documentCount++;
+                                world.score += 500;
+                                door.hasDocument = false;
+                                
+                                // Change door color
+                                door.clear();
+                                door.beginFill(0x8B4513);
+                                door.drawRect(0, 0, 40, 70);
+                                door.endFill();
+                                
+                                // Add design details
+                                door.lineStyle(2, 0x000000);
+                                door.drawRect(5, 5, 30, 60);
+                                
+                                // Add doorknob
+                                door.beginFill(0xFFD700);
+                                door.drawCircle(30, 35, 3);
+                                door.endFill();
+                                
+                                // Play pickup sound
+                                sounds.pickup.play();
+                            } else {
+                                // Play door sound
+                                sounds.door.play();
+                            }
+                            
+                            // Make player temporarily hidden inside the door
+                            world.player.visible = false;
+                            setTimeout(() => {
+                                world.player.visible = true;
+                                door.isOpen = false;
+                            }, 1000);
+                        }
+                    }
+                }
+                
+                // Update bullets
+                for (let i = world.bullets.length - 1; i >= 0; i--) {
+                    const bullet = world.bullets[i];
+                    bullet.x += bullet.vx;
+                    
+                    // Remove bullets that go off-screen
+                    if (bullet.x < 0 || bullet.x > GAME_WIDTH) {
+                        gameContainer.removeChild(bullet);
+                        world.bullets.splice(i, 1);
+                        continue;
+                    }
+                    
+                    // Check bullet collisions with enemies
+                    if (bullet.fromPlayer) {
+                        for (let j = world.enemies.length - 1; j >= 0; j--) {
+                            const enemy = world.enemies[j];
+                            if (checkCollision(bullet, enemy)) {
+                                // Remove bullet and enemy
+                                gameContainer.removeChild(bullet);
+                                world.bullets.splice(i, 1);
+                                
+                                gameContainer.removeChild(enemy);
+                                world.enemies.splice(j, 1);
+                                
+                                // Add score
+                                world.score += 100;
+                                
+                                // Play death sound
+                                sounds.death.play();
+                                
+                                break;
+                            }
+                        }
+                    } 
+                    // Check bullet collisions with player
+                    else if (!bullet.fromPlayer && !world.player.dead) {
+                        if (checkCollision(bullet, world.player) && world.player.invulnerable <= 0) {
+                            // Remove bullet
+                            gameContainer.removeChild(bullet);
+                            world.bullets.splice(i, 1);
+                            
+                            // Reduce player lives
+                            world.lives--;
+                            
+                            if (world.lives <= 0) {
+                                world.player.dead = true;
+                                setTimeout(() => {
+                                    world.gameState = 'gameOver';
+                                    createUI();
+                                }, 1000);
+                                
+                                // Play death sound
+                                sounds.death.play();
+                            } else {
+                                // Make player invulnerable briefly
+                                world.player.invulnerable = 120;
+                                world.player.blinkTime = 5;
+                                
+                                // Play death sound
+                                sounds.death.play();
+                            }
+                            
+                            break;
+                        }
+                    }
+                    
+                    // Check bullet collisions with lights
+                    for (const light of world.lights) {
+                        if (light.isOn && checkCollision(bullet, light)) {
+                            // Turn off the light
+                            light.isOn = false;
+                            light.clear();
+                            light.beginFill(0x333333); // Darker color when off
+                            light.drawRect(0, 0, 40, 10);
+                            light.endFill();
+                            
+                            // Add fixture
+                            light.lineStyle(1, 0x666666);
+                            light.drawRect(0, 0, 40, 10);
+                            
+                            // Remove bullet
+                            gameContainer.removeChild(bullet);
+                            world.bullets.splice(i, 1);
+                            
+                            // Add score
+                            world.score += 50;
+                            
+                            // Play sound
+                            sounds.shoot.play();
+                            
+                            break;
+                        }
+                    }
+                }
+                
+                // Update enemies
+                for (const enemy of world.enemies) {
+                    enemy.isOnGround = false;
+                    
+                    // Check floor collisions for enemies
+                    for (const floor of world.floors) {
+                        if (checkCollision(
+                            {
+                                x: enemy.x,
+                                y: enemy.y + PLAYER_HEIGHT,
+                                width: PLAYER_WIDTH,
+                                height: 1
+                            },
+                            {
+                                x: floor.x,
+                                y: floor.y,
+                                width: floor.width,
+                                height: 1
+                            }
+                        ) && enemy.vy > 0) {
+                            enemy.isOnGround = true;
+                            enemy.vy = 0;
+                            enemy.y = floor.y - PLAYER_HEIGHT;
+                        }
+                    }
+                    
+                    enemy.update(delta);
+                    
+                    // Check collision with player
+                    if (checkCollision(enemy, world.player) && world.player.invulnerable <= 0 && !world.player.dead) {
+                        // Reduce player lives
+                        world.lives--;
+                        
+                        if (world.lives <= 0) {
+                            world.player.dead = true;
+                            setTimeout(() => {
+                                world.gameState = 'gameOver';
+                                createUI();
+                            }, 1000);
+                            
+                            // Play death sound
+                            sounds.death.play();
+                        } else {
+                            // Make player invulnerable briefly
+                            world.player.invulnerable = 120;
+                            world.player.blinkTime = 5;
+                            
+                            // Play death sound
+                            sounds.death.play();
+                        }
+                    }
+                }
+                
+                // Spawn enemies randomly
+                if (Math.random() < ENEMY_SPAWN_RATE && world.enemies.length < 10) {
+                    // Find a random floor to spawn on
+                    const floorIndex = Math.floor(Math.random() * world.floors.length);
+                    const floor = world.floors[floorIndex];
+                    
+                    // Create enemy on the floor
+                    const enemy = createEnemy(
+                        Math.random() * (floor.width - PLAYER_WIDTH) + floor.x,
+                        floor.y - PLAYER_HEIGHT
+                    );
+                    
+                    world.enemies.push(enemy);
+                }
+                
+                // Update UI
+                world.updateUI();
+                
+                // Check for level completion
+                let requiredDocs = 0;
+                for (const door of world.doors) {
+                    if (door.hasDocument) {
+                        requiredDocs++;
+                    }
+                }
+                
+                if (requiredDocs === 0) {
+                    startNextLevel();
+                }
+            }
+        }
+        
+        // Start game function
+        function startGame() {
+            world.gameState = 'playing';
+            resetGame();
+        }
+        
+        // Reset game
+        function resetGame() {
+            // Clear game containers
+            gameContainer.removeChildren();
+            uiContainer.removeChildren();
+            
+            // Reset game state
+            world.score = 0;
+            world.lives = 3;
+            world.level = 1;
+            world.gameState = 'playing';
+            world.gameOver = false;
+            
+            // Create game elements
+            createBuilding();
+            world.player = createPlayer();
+            createUI();
+            
+            // Start background music
+            if (!sounds.bgm.playing()) {
+                sounds.bgm.play();
+                sounds.bgm.loop(true);
+            }
+        }
+        
+        // Start next level
+        function startNextLevel() {
+            // Increase level
+            world.level++;
+            
+            // Bonus points for completing level
+            world.score += 1000;
+            
+            // Clear game container except player
+            const player = world.player;
+            gameContainer.removeChildren();
+            
+            // Create new building
+            createBuilding();
+            
+            // Re-add player
+            gameContainer.addChild(player);
+            world.player = player;
+            
+            // Reset player position
+            player.x = GAME_WIDTH / 2;
+            player.y = 100;
+            player.isOnElevator = false;
+            player.currentElevator = null;
+            player.documentCount = 0;
+        }
+        
+        // Start the game loop
+        app.ticker.add(gameLoop);
+        
+        // Create initial menu
+        world.gameState = 'menu';
+        createUI();
+    </script>
+</body>
+</html>
