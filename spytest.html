@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Spy Hunter HTML5</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            touch-action: none;
+            background-color: #222;
+            font-family: Arial, sans-serif;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        #gameCanvas {
+            background-color: #333;
+            max-width: 100%;
+            max-height: 90vh;
+            touch-action: none;
+        }
+        #scoreDisplay {
+            color: white;
+            font-size: 20px;
+            margin-top: 10px;
+        }
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            background-color: rgba(255, 255, 255, 0.2);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            color: white;
+            user-select: none;
+            touch-action: manipulation;
+        }
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            z-index: 10;
+        }
+        #startScreen h1 {
+            font-size: 3rem;
+            margin-bottom: 2rem;
+        }
+        #startButton {
+            padding: 1rem 2rem;
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        #gameOverScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            z-index: 10;
+        }
+        #gameOverScreen h2 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+        #finalScore {
+            font-size: 2rem;
+            margin-bottom: 2rem;
+        }
+        #restartButton {
+            padding: 1rem 2rem;
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            font-size: 1.5rem;
+            cursor: pointer;
+            border-radius: 5px;
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="scoreDisplay">Score: 0</div>
+        
+        <div id="controls" class="hidden">
+            <div id="leftBtn" class="control-btn">←</div>
+            <div id="fireBtn" class="control-btn">🔫</div>
+            <div id="rightBtn" class="control-btn">→</div>
+        </div>
+        
+        <div id="startScreen">
+            <h1>SPY HUNTER</h1>
+            <button id="startButton">START GAME</button>
+        </div>
+        
+        <div id="gameOverScreen">
+            <h2>GAME OVER</h2>
+            <div id="finalScore">Score: 0</div>
+            <button id="restartButton">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        // Game variables
+        let canvas, ctx;
+        let gameRunning = false;
+        let score = 0;
+        let lives = 3;
+        let roadSpeed = 3;
+        let roadWidth, roadLeftEdge, roadRightEdge;
+        let roadSegments = [];
+        let cars = [];
+        let bullets = [];
+        let explosions = [];
+        let player = {
+            width: 30,
+            height: 50,
+            x: 0,
+            y: 0,
+            speed: 5,
+            bullets: 10,
+            isShooting: false,
+            lastShootTime: 0,
+            shootDelay: 300
+        };
+        
+        // Game colors
+        const COLORS = {
+            road: '#444',
+            roadLine: '#FFF',
+            grass: '#385',
+            player: '#57F',
+            enemyCar: '#F00',
+            civilianCar: '#0F0',
+            bullet: '#FF0',
+            explosion: '#F90'
+        };
+        
+        // Key states for keyboard controls
+        const keys = {
+            left: false,
+            right: false,
+            shoot: false
+        };
+        
+        // Touch states for mobile controls
+        const touch = {
+            left: false,
+            right: false,
+            shoot: false
+        };
+        
+        // Game initialization
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+            
+            // Set canvas size
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Setup road dimensions
+            roadWidth = canvas.width * 0.5;
+            roadLeftEdge = canvas.width / 2 - roadWidth / 2;
+            roadRightEdge = roadLeftEdge + roadWidth;
+            
+            // Initialize player position
+            player.x = canvas.width / 2 - player.width / 2;
+            player.y = canvas.height - player.height - 20;
+            
+            // Setup keyboard controls
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            
+            // Setup touch controls
+            setupTouchControls();
+            
+            // Setup start and restart buttons
+            document.getElementById('startButton').addEventListener('click', startGame);
+            document.getElementById('restartButton').addEventListener('click', startGame);
+        }
+        
+        function resizeCanvas() {
+            // Make the canvas responsive but maintain aspect ratio
+            const containerWidth = window.innerWidth;
+            const containerHeight = window.innerHeight;
+            
+            // Target aspect ratio of 3:4
+            const aspectRatio = 3/4;
+            
+            let newWidth, newHeight;
+            
+            if (containerWidth / containerHeight > aspectRatio) {
+                // Container is wider than needed
+                newHeight = containerHeight * 0.9;
+                newWidth = newHeight * aspectRatio;
+            } else {
+                // Container is taller than needed
+                newWidth = containerWidth * 0.9;
+                newHeight = newWidth / aspectRatio;
+            }
+            
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+            
+            // Recalculate road dimensions
+            roadWidth = canvas.width * 0.5;
+            roadLeftEdge = canvas.width / 2 - roadWidth / 2;
+            roadRightEdge = roadLeftEdge + roadWidth;
+            
+            // Reposition player
+            if (player) {
+                player.x = canvas.width / 2 - player.width / 2;
+                player.y = canvas.height - player.height - 20;
+            }
+        }
+        
+        function setupTouchControls() {
+            const leftBtn = document.getElementById('leftBtn');
+            const rightBtn = document.getElementById('rightBtn');
+            const fireBtn = document.getElementById('fireBtn');
+            
+            // Left button
+            leftBtn.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                touch.left = true;
+            });
+            
+            leftBtn.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                touch.left = false;
+            });
+            
+            // Right button
+            rightBtn.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                touch.right = true;
+            });
+            
+            rightBtn.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                touch.right = false;
+            });
+            
+            // Fire button
+            fireBtn.addEventListener('touchstart', function(e) {
+                e.preventDefault();
+                touch.shoot = true;
+            });
+            
+            fireBtn.addEventListener('touchend', function(e) {
+                e.preventDefault();
+                touch.shoot = false;
+            });
+        }
+        
+        function handleKeyDown(e) {
+            if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = true;
+            if (e.key === 'ArrowRight' || e.key === 'd') keys.right = true;
+            if (e.key === ' ' || e.key === 'f') keys.shoot = true;
+        }
+        
+        function handleKeyUp(e) {
+            if (e.key === 'ArrowLeft' || e.key === 'a') keys.left = false;
+            if (e.key === 'ArrowRight' || e.key === 'd') keys.right = false;
+            if (e.key === ' ' || e.key === 'f') keys.shoot = false;
+        }
+        
+        function startGame() {
+            // Reset game state
+            gameRunning = true;
+            score = 0;
+            lives = 3;
+            roadSpeed = 3;
+            roadSegments = [];
+            cars = [];
+            bullets = [];
+            explosions = [];
+            
+            // Reset player
+            player.x = canvas.width / 2 - player.width / 2;
+            player.y = canvas.height - player.height - 20;
+            player.bullets = 10;
+            
+            // Initialize road segments
+            for (let i = 0; i < canvas.height / 20; i++) {
+                roadSegments.push({
+                    y: i * 20,
+                    type: i % 3 === 0 ? 'solid' : 'dashed'
+                });
+            }
+            
+            // Hide start screen, show controls
+            document.getElementById('startScreen').classList.add('hidden');
+            document.getElementById('gameOverScreen').style.display = 'none';
+            document.getElementById('controls').classList.remove('hidden');
+            document.getElementById('scoreDisplay').textContent = 'Score: 0';
+            
+            // Start game loop
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function gameLoop(timestamp) {
+            if (!gameRunning) return;
+            
+            update();
+            render();
+            
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function update() {
+            // Move road
+            for (let i = 0; i < roadSegments.length; i++) {
+                roadSegments[i].y += roadSpeed;
+                
+                // If segment moves off screen, reset it to the top
+                if (roadSegments[i].y > canvas.height) {
+                    roadSegments[i].y = -20;
+                    score++;
+                    // Increase difficulty as score increases
+                    if (score % 50 === 0 && roadSpeed < 10) {
+                        roadSpeed += 0.5;
+                    }
+                }
+            }
+            
+            // Move player based on input
+            if ((keys.left || touch.left) && player.x > roadLeftEdge) {
+                player.x -= player.speed;
+            }
+            if ((keys.right || touch.right) && player.x < roadRightEdge - player.width) {
+                player.x += player.speed;
+            }
+            
+            // Shooting
+            if ((keys.shoot || touch.shoot) && !player.isShooting) {
+                const currentTime = Date.now();
+                if (currentTime - player.lastShootTime > player.shootDelay && player.bullets > 0) {
+                    bullets.push({
+                        x: player.x + player.width / 2 - 2,
+                        y: player.y,
+                        width: 4,
+                        height: 10,
+                        speed: 10
+                    });
+                    player.bullets--;
+                    player.lastShootTime = currentTime;
+                }
+            }
+            
+            // Move bullets
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].y -= bullets[i].speed;
+                
+                // Remove bullets that go off screen
+                if (bullets[i].y < 0) {
+                    bullets.splice(i, 1);
+                }
+            }
+            
+            // Spawn enemies
+            if (Math.random() < 0.02) {
+                const type = Math.random() < 0.7 ? 'enemy' : 'civilian';
+                const width = 30;
+                const height = 50;
+                
+                // Random position on the road
+                const x = roadLeftEdge + Math.random() * (roadWidth - width);
+                
+                cars.push({
+                    x: x,
+                    y: -height,
+                    width: width,
+                    height: height,
+                    speed: roadSpeed * (type === 'civilian' ? 0.8 : 1.2),
+                    type: type
+                });
+            }
+            
+            // Move cars
+            for (let i = cars.length - 1; i >= 0; i--) {
+                cars[i].y += cars[i].speed;
+                
+                // Remove cars that go off screen
+                if (cars[i].y > canvas.height) {
+                    cars.splice(i, 1);
+                    continue;
+                }
+                
+                // Check collision with player
+                if (checkCollision(player, cars[i])) {
+                    if (cars[i].type === 'enemy') {
+                        // Create explosion
+                        createExplosion(cars[i].x, cars[i].y);
+                        cars.splice(i, 1);
+                        
+                        // Lose a life
+                        lives--;
+                        if (lives <= 0) {
+                            gameOver();
+                        }
+                    } else {
+                        // Get extra bullets from civilian cars
+                        createExplosion(cars[i].x, cars[i].y);
+                        cars.splice(i, 1);
+                        player.bullets += 5;
+                    }
+                    continue;
+                }
+                
+                // Check bullet collisions
+                for (let j = bullets.length - 1; j >= 0; j--) {
+                    if (checkCollision(bullets[j], cars[i])) {
+                        bullets.splice(j, 1);
+                        
+                        if (cars[i].type === 'enemy') {
+                            createExplosion(cars[i].x, cars[i].y);
+                            cars.splice(i, 1);
+                            score += 10;
+                        } else {
+                            // Penalty for shooting civilians
+                            createExplosion(cars[i].x, cars[i].y);
+                            cars.splice(i, 1);
+                            score -= 20;
+                            if (score < 0) score = 0;
+                        }
+                        
+                        break;
+                    }
+                }
+            }
+            
+            // Update explosions
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                explosions[i].life--;
+                if (explosions[i].life <= 0) {
+                    explosions.splice(i, 1);
+                }
+            }
+            
+            // Update score display
+            document.getElementById('scoreDisplay').textContent = `Score: ${score} | Lives: ${lives} | Bullets: ${player.bullets}`;
+        }
+        
+        function render() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grass
+            ctx.fillStyle = COLORS.grass;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw road
+            ctx.fillStyle = COLORS.road;
+            ctx.fillRect(roadLeftEdge, 0, roadWidth, canvas.height);
+            
+            // Draw road lines
+            ctx.fillStyle = COLORS.roadLine;
+            for (const segment of roadSegments) {
+                if (segment.type === 'solid') {
+                    // Draw solid lines at edges
+                    ctx.fillRect(roadLeftEdge - 2, segment.y, 4, 15);
+                    ctx.fillRect(roadRightEdge - 2, segment.y, 4, 15);
+                } else if (segment.type === 'dashed') {
+                    // Draw dashed center line
+                    ctx.fillRect(canvas.width / 2 - 2, segment.y, 4, 10);
+                }
+            }
+            
+            // Draw bullets
+            ctx.fillStyle = COLORS.bullet;
+            for (const bullet of bullets) {
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            }
+            
+            // Draw cars
+            for (const car of cars) {
+                ctx.fillStyle = car.type === 'enemy' ? COLORS.enemyCar : COLORS.civilianCar;
+                ctx.fillRect(car.x, car.y, car.width, car.height);
+                
+                // Draw windshield
+                ctx.fillStyle = '#000';
+                ctx.fillRect(car.x + 5, car.y + 10, car.width - 10, 8);
+                
+                // Draw lights
+                ctx.fillStyle = '#FF0';
+                if (car.type === 'enemy') {
+                    ctx.fillRect(car.x + 3, car.y, 4, 4);
+                    ctx.fillRect(car.x + car.width - 7, car.y, 4, 4);
+                } else {
+                    ctx.fillRect(car.x + 3, car.y + car.height - 4, 4, 4);
+                    ctx.fillRect(car.x + car.width - 7, car.y + car.height - 4, 4, 4);
+                }
+            }
+            
+            // Draw player car
+            ctx.fillStyle = COLORS.player;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Draw windshield
+            ctx.fillStyle = '#000';
+            ctx.fillRect(player.x + 5, player.y + 10, player.width - 10, 8);
+            
+            // Draw lights
+            ctx.fillStyle = '#FF0';
+            ctx.fillRect(player.x + 3, player.y, 4, 4);
+            ctx.fillRect(player.x + player.width - 7, player.y, 4, 4);
+            
+            // Draw explosions
+            for (const exp of explosions) {
+                const alpha = exp.life / 10;
+                ctx.fillStyle = `rgba(255, 150, 0, ${alpha})`;
+                
+                // Draw explosion as expanding circle
+                ctx.beginPath();
+                ctx.arc(exp.x, exp.y, (10 - exp.life) * 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        function checkCollision(a, b) {
+            return (
+                a.x < b.x + b.width &&
+                a.x + a.width > b.x &&
+                a.y < b.y + b.height &&
+                a.y + a.height > b.y
+            );
+        }
+        
+        function createExplosion(x, y) {
+            explosions.push({
+                x: x + 15, // Center of car
+                y: y + 25,
+                life: 10
+            });
+        }
+        
+        function gameOver() {
+            gameRunning = false;
+            document.getElementById('finalScore').textContent = `Final Score: ${score}`;
+            document.getElementById('gameOverScreen').style.display = 'flex';
+            document.getElementById('controls').classList.add('hidden');
+        }
+        
+        // Initialize the game when the page loads
+        window.onload = init;
+    </script>
+</body>
+</html>
