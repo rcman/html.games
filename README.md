@@ -48,7 +48,7 @@ Game Link:[Mobile Test App](http://htmlpreview.github.io/?https://github.com/rcm
 <br>
 Game Link:[Mobile Boscanian](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/poe_bos.html)
 <br>
-Game Link:[Mobile Rick Dangerous](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/poe_rickdangerous.html)
+Game Link:[Mobile Spelunker](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/poe_spelunker.html)
 <br>
 Game Link:[Mobile Galaga](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/poe_galaga.html)
 <br>
