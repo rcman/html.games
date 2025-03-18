@@ -1,0 +1,1794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bosconian Clone</title>
+    <style>
+        :root {
+            --primary-color: #5D5CDE;
+            --text-color: #333;
+            --bg-color: #FFFFFF;
+            --ui-bg-color: rgba(0, 0, 0, 0.7);
+            --ui-text-color: #FFFFFF;
+            --green-condition: #00FF00;
+            --yellow-condition: #FFFF00;
+            --red-condition: #FF0000;
+        }
+
+        .dark {
+            --text-color: #EEE;
+            --bg-color: #181818;
+            --ui-bg-color: rgba(50, 50, 50, 0.8);
+            --ui-text-color: #FFFFFF;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow: hidden;
+            transition: background-color 0.3s ease;
+        }
+
+        .game-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            overflow: hidden;
+        }
+
+        .game-canvas {
+            display: block;
+            background-color: #000;
+            width: 100%;
+            height: auto;
+            image-rendering: pixelated;
+            border-radius: 4px;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+        }
+
+        .controls {
+            margin-top: 15px;
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+            transform: translateY(-1px);
+        }
+
+        button:active {
+            transform: translateY(1px);
+        }
+
+        .game-title {
+            font-size: 2.5rem;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: var(--primary-color);
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.2);
+        }
+
+        .menu {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background-color: rgba(0, 0, 0, 0.8);
+            z-index: 100;
+        }
+
+        .menu-content {
+            background-color: var(--ui-bg-color);
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 80%;
+            text-align: center;
+        }
+
+        .menu h2 {
+            font-size: 2rem;
+            color: var(--ui-text-color);
+            margin-bottom: 20px;
+        }
+
+        .game-over {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+        }
+
+        .game-over h2 {
+            font-size: 2.5rem;
+            margin-bottom: 15px;
+        }
+
+        .game-over p {
+            font-size: 1.5rem;
+            margin-bottom: 25px;
+        }
+
+        .radar-container {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 150px;
+            height: 150px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 2px solid var(--primary-color);
+            border-radius: 50%;
+            overflow: hidden;
+            z-index: 5;
+        }
+
+        .radar-canvas {
+            width: 100%;
+            height: 100%;
+        }
+
+        .hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 1.2rem;
+            z-index: 5;
+            text-shadow: 1px 1px 2px #000;
+        }
+
+        .condition-indicator {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            margin-left: 10px;
+            vertical-align: middle;
+        }
+
+        .condition-green {
+            background-color: var(--green-condition);
+        }
+
+        .condition-yellow {
+            background-color: var(--yellow-condition);
+        }
+
+        .condition-red {
+            background-color: var(--red-condition);
+        }
+
+        .touch-controls {
+            display: none;
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            justify-content: space-between;
+            padding: 0 20px;
+            z-index: 5;
+        }
+
+        .joystick-container {
+            position: relative;
+            width: 150px;
+            height: 150px;
+            background-color: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            touch-action: none;
+        }
+
+        .joystick-thumb {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 60px;
+            height: 60px;
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            transition: all 0.1s ease;
+        }
+
+        .fire-btn {
+            width: 80px;
+            height: 80px;
+            background-color: var(--primary-color);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none;
+            font-size: 16px;
+            color: white;
+        }
+
+        .paused-overlay {
+            display: none;
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 20;
+        }
+
+        .instructions {
+            margin-top: 20px;
+            font-size: 0.9rem;
+            color: var(--ui-text-color);
+            text-align: left;
+            max-width: 100%;
+        }
+
+        .instructions h3 {
+            text-align: center;
+            margin-bottom: 10px;
+        }
+
+        .instructions ul {
+            list-style-type: none;
+            padding: 0 20px;
+        }
+
+        .instructions li {
+            margin-bottom: 5px;
+        }
+
+        /* Media Queries for Responsive Design */
+        @media (max-width: 768px) {
+            .game-title {
+                font-size: 2rem;
+                margin-bottom: 15px;
+            }
+            
+            .touch-controls {
+                display: flex;
+            }
+            
+            .radar-container {
+                width: 100px;
+                height: 100px;
+            }
+            
+            .instructions {
+                font-size: 0.8rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .game-title {
+                font-size: 1.8rem;
+                margin-top: 10px;
+            }
+            
+            .menu-content {
+                padding: 15px;
+            }
+            
+            .radar-container {
+                width: 80px;
+                height: 80px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="game-title">BOSCONIAN</div>
+    
+    <div class="game-container">
+        <canvas id="gameCanvas" class="game-canvas" width="800" height="600"></canvas>
+        
+        <div class="hud">
+            <div>SCORE: <span id="score">0</span></div>
+            <div>LIVES: <span id="lives">3</span></div>
+            <div>ROUND: <span id="round">1</span></div>
+            <div>
+                CONDITION: <span id="condition">GREEN</span>
+                <span id="conditionIndicator" class="condition-indicator condition-green"></span>
+            </div>
+        </div>
+        
+        <div class="radar-container">
+            <canvas id="radarCanvas" class="radar-canvas" width="150" height="150"></canvas>
+        </div>
+        
+        <div id="menu" class="menu">
+            <div class="menu-content">
+                <h2>BOSCONIAN</h2>
+                <p>A multi-directional space shooter</p>
+                
+                <button id="startGame">Start Game</button>
+                
+                <div class="instructions">
+                    <h3>Controls</h3>
+                    <ul>
+                        <li>Arrow keys: Move ship</li>
+                        <li>Space: Fire weapons</li>
+                        <li>P: Pause game</li>
+                        <li>Touch controls available on mobile devices</li>
+                    </ul>
+                    <h3>Objective</h3>
+                    <ul>
+                        <li>Destroy all space stations in each round</li>
+                        <li>Each station has multiple cannons that must be eliminated</li>
+                        <li>Avoid mines and enemy patrol ships</li>
+                        <li>Watch the radar to track enemies</li>
+                        <li>Pay attention to condition status (Green, Yellow, Red)</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        
+        <div id="gameOver" class="game-over" style="display: none;">
+            <h2>GAME OVER</h2>
+            <p>Score: <span id="finalScore">0</span></p>
+            <button id="restartGame">Play Again</button>
+        </div>
+        
+        <div id="pausedOverlay" class="paused-overlay" style="display: none;">
+            <h2>PAUSED</h2>
+            <button id="resumeGame">Resume</button>
+        </div>
+        
+        <div class="touch-controls">
+            <div class="joystick-container" id="joystickContainer">
+                <div class="joystick-thumb" id="joystickThumb"></div>
+            </div>
+            <div class="fire-btn" id="fireBtn">FIRE</div>
+        </div>
+    </div>
+    
+    <div class="controls">
+        <button id="pauseBtn">Pause</button>
+        <button id="muteBtn">Mute Sound</button>
+    </div>
+
+    <script>
+        // Check for dark mode preference
+        if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+            document.documentElement.classList.add('dark');
+        }
+        
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+            if (event.matches) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        });
+
+        // Game Constants
+        const CANVAS_WIDTH = 800;
+        const CANVAS_HEIGHT = 600;
+        const WORLD_WIDTH = 3000;
+        const WORLD_HEIGHT = 3000;
+        const PLAYER_SPEED = 4;
+        const PLAYER_ROTATION_SPEED = 0.1;
+        const PLAYER_SIZE = 20;
+        const BULLET_SPEED = 10;
+        const PATROL_SPEED = 2;
+        const PATROL_DETECTION_RADIUS = 200;
+        const STATION_SIZE = 150;
+        const MINE_SIZE = 15;
+        const CONDITION_TIMER = {
+            GREEN: 600,   // 10 seconds
+            YELLOW: 300,  // 5 seconds
+            RED: 180      // 3 seconds
+        };
+
+        // Game State
+        let gameRunning = false;
+        let gamePaused = false;
+        let score = 0;
+        let lives = 3;
+        let round = 1;
+        let frameCount = 0;
+        let muted = false;
+        let condition = "GREEN";
+        let conditionTimer = CONDITION_TIMER.GREEN;
+        let camera = { x: 0, y: 0 };
+        let worldRect = { x: 0, y: 0, width: WORLD_WIDTH, height: WORLD_HEIGHT };
+        
+        // Canvas and Context
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const radarCanvas = document.getElementById('radarCanvas');
+        const radarCtx = radarCanvas.getContext('2d');
+        
+        // Set actual canvas dimensions based on CSS dimensions to prevent stretching
+        function resizeCanvas() {
+            const containerWidth = canvas.parentElement.clientWidth;
+            const containerHeight = (containerWidth / CANVAS_WIDTH) * CANVAS_HEIGHT;
+            
+            // Set canvas display size (CSS pixels)
+            canvas.style.width = `${containerWidth}px`;
+            canvas.style.height = `${containerHeight}px`;
+            
+            // Calculate pixel ratio
+            const dpr = window.devicePixelRatio || 1;
+            
+            // Set canvas actual size in memory (scaled for DPI)
+            canvas.width = containerWidth * dpr;
+            canvas.height = containerHeight * dpr;
+            
+            // Scale the context to ensure correct drawing operations
+            ctx.scale(dpr, dpr);
+            
+            // Scale all drawing operations by the same ratio to maintain aspect ratio
+            gameScale = containerWidth / CANVAS_WIDTH;
+            ctx.scale(gameScale, gameScale);
+        }
+        
+        // Handle window resize
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Game Entities
+        const player = {
+            x: WORLD_WIDTH / 2,
+            y: WORLD_HEIGHT / 2,
+            width: PLAYER_SIZE,
+            height: PLAYER_SIZE,
+            angle: 0, // radians
+            speed: 0,
+            maxSpeed: PLAYER_SPEED,
+            rotationSpeed: PLAYER_ROTATION_SPEED,
+            bullets: [],
+            fireCooldown: 0,
+            isInvulnerable: false,
+            invulnerabilityTime: 0,
+            
+            update: function() {
+                if (!gameRunning || gamePaused) return;
+                
+                // Move player
+                const dx = Math.cos(this.angle) * this.speed;
+                const dy = Math.sin(this.angle) * this.speed;
+                this.x += dx;
+                this.y += dy;
+                
+                // Constrain player to world boundaries
+                if (this.x < 0) this.x = 0;
+                if (this.x > WORLD_WIDTH) this.x = WORLD_WIDTH;
+                if (this.y < 0) this.y = 0;
+                if (this.y > WORLD_HEIGHT) this.y = WORLD_HEIGHT;
+                
+                // Update camera position to follow player
+                camera.x = this.x - CANVAS_WIDTH / 2;
+                camera.y = this.y - CANVAS_HEIGHT / 2;
+                
+                // Constrain camera to world boundaries
+                if (camera.x < 0) camera.x = 0;
+                if (camera.x > WORLD_WIDTH - CANVAS_WIDTH) camera.x = WORLD_WIDTH - CANVAS_WIDTH;
+                if (camera.y < 0) camera.y = 0;
+                if (camera.y > WORLD_HEIGHT - CANVAS_HEIGHT) camera.y = WORLD_HEIGHT - CANVAS_HEIGHT;
+                
+                // Update bullets
+                for (let i = this.bullets.length - 1; i >= 0; i--) {
+                    const bullet = this.bullets[i];
+                    bullet.x += Math.cos(bullet.angle) * BULLET_SPEED;
+                    bullet.y += Math.sin(bullet.angle) * BULLET_SPEED;
+                    
+                    // Remove bullets that go off-screen
+                    if (bullet.x < 0 || bullet.x > WORLD_WIDTH || 
+                        bullet.y < 0 || bullet.y > WORLD_HEIGHT) {
+                        this.bullets.splice(i, 1);
+                    }
+                }
+                
+                // Reduce firing cooldown
+                if (this.fireCooldown > 0) {
+                    this.fireCooldown--;
+                }
+                
+                // Handle invulnerability
+                if (this.isInvulnerable) {
+                    this.invulnerabilityTime--;
+                    if (this.invulnerabilityTime <= 0) {
+                        this.isInvulnerable = false;
+                    }
+                }
+            },
+            
+            draw: function() {
+                // Skip drawing if player is blinking during invulnerability
+                if (this.isInvulnerable && frameCount % 8 < 4) {
+                    return;
+                }
+                
+                ctx.save();
+                
+                // Calculate screen position
+                const screenX = this.x - camera.x;
+                const screenY = this.y - camera.y;
+                
+                // Translate to player position and rotate
+                ctx.translate(screenX, screenY);
+                ctx.rotate(this.angle);
+                
+                // Draw player ship
+                ctx.fillStyle = '#5D5CDE';
+                ctx.beginPath();
+                ctx.moveTo(PLAYER_SIZE, 0);
+                ctx.lineTo(-PLAYER_SIZE / 2, -PLAYER_SIZE / 2);
+                ctx.lineTo(-PLAYER_SIZE / 2, PLAYER_SIZE / 2);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Draw engine flame
+                if (this.speed > 0) {
+                    ctx.fillStyle = frameCount % 6 < 3 ? '#FF4500' : '#FFA500';
+                    ctx.beginPath();
+                    ctx.moveTo(-PLAYER_SIZE / 2, 0);
+                    ctx.lineTo(-PLAYER_SIZE, -PLAYER_SIZE / 4);
+                    ctx.lineTo(-PLAYER_SIZE, PLAYER_SIZE / 4);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+                
+                ctx.restore();
+                
+                // Draw bullets
+                ctx.fillStyle = '#FFF';
+                for (const bullet of this.bullets) {
+                    ctx.fillRect(
+                        bullet.x - camera.x - 2,
+                        bullet.y - camera.y - 2,
+                        4, 4
+                    );
+                }
+            },
+            
+            fire: function() {
+                if (this.fireCooldown > 0) return;
+                
+                this.bullets.push({
+                    x: this.x + Math.cos(this.angle) * PLAYER_SIZE,
+                    y: this.y + Math.sin(this.angle) * PLAYER_SIZE,
+                    angle: this.angle
+                });
+                
+                playSound('shoot');
+                this.fireCooldown = 10;
+            },
+            
+            hit: function() {
+                if (this.isInvulnerable) return;
+                
+                lives--;
+                updateHUD();
+                
+                playSound('playerHit');
+                
+                // Create explosion at player position
+                explosions.push({
+                    x: this.x,
+                    y: this.y,
+                    size: 30,
+                    frame: 0,
+                    maxFrame: 20
+                });
+                
+                if (lives <= 0) {
+                    gameOver();
+                    return;
+                }
+                
+                // Make player invulnerable for a short time
+                this.isInvulnerable = true;
+                this.invulnerabilityTime = 180; // 3 seconds at 60 FPS
+                
+                // Reset player position
+                this.x = WORLD_WIDTH / 2;
+                this.y = WORLD_HEIGHT / 2;
+                this.speed = 0;
+                this.angle = 0;
+            }
+        };
+        
+        // Space Stations
+        const stations = [];
+        
+        function createStation(x, y) {
+            stations.push({
+                x: x || Math.random() * (WORLD_WIDTH - STATION_SIZE * 2) + STATION_SIZE,
+                y: y || Math.random() * (WORLD_HEIGHT - STATION_SIZE * 2) + STATION_SIZE,
+                size: STATION_SIZE,
+                cannons: [
+                    { x: -STATION_SIZE/2, y: 0, active: true },
+                    { x: STATION_SIZE/2, y: 0, active: true },
+                    { x: 0, y: -STATION_SIZE/2, active: true },
+                    { x: 0, y: STATION_SIZE/2, active: true }
+                ],
+                core: { active: true },
+                fireCooldown: Math.floor(Math.random() * 180) + 60,
+                bullets: []
+            });
+        }
+        
+        function generateLevel() {
+            stations.length = 0;
+            mines.length = 0;
+            patrolShips.length = 0;
+            explosions.length = 0;
+            
+            // Create space stations based on round number
+            const stationCount = Math.min(3 + round, 8);
+            
+            for (let i = 0; i < stationCount; i++) {
+                let x, y, validPosition;
+                
+                // Make sure stations aren't too close to each other or the player
+                do {
+                    validPosition = true;
+                    x = Math.random() * (WORLD_WIDTH - STATION_SIZE * 2) + STATION_SIZE;
+                    y = Math.random() * (WORLD_HEIGHT - STATION_SIZE * 2) + STATION_SIZE;
+                    
+                    // Check minimum distance from player
+                    const playerDist = Math.hypot(x - WORLD_WIDTH/2, y - WORLD_HEIGHT/2);
+                    if (playerDist < STATION_SIZE * 2) {
+                        validPosition = false;
+                        continue;
+                    }
+                    
+                    // Check minimum distance from other stations
+                    for (const station of stations) {
+                        const dist = Math.hypot(x - station.x, y - station.y);
+                        if (dist < STATION_SIZE * 3) {
+                            validPosition = false;
+                            break;
+                        }
+                    }
+                } while (!validPosition);
+                
+                createStation(x, y);
+            }
+            
+            // Create mines based on round number
+            const mineCount = 10 + round * 5;
+            
+            for (let i = 0; i < mineCount; i++) {
+                let x, y, validPosition;
+                
+                // Make sure mines aren't too close to the player
+                do {
+                    validPosition = true;
+                    x = Math.random() * WORLD_WIDTH;
+                    y = Math.random() * WORLD_HEIGHT;
+                    
+                    // Check minimum distance from player
+                    const playerDist = Math.hypot(x - WORLD_WIDTH/2, y - WORLD_HEIGHT/2);
+                    if (playerDist < MINE_SIZE * 10) {
+                        validPosition = false;
+                    }
+                } while (!validPosition);
+                
+                mines.push({
+                    x: x,
+                    y: y,
+                    size: MINE_SIZE,
+                    pulseTimer: Math.random() * 100
+                });
+            }
+            
+            // Create patrol ships based on round number
+            const patrolCount = Math.min(2 + round, 10);
+            
+            for (let i = 0; i < patrolCount; i++) {
+                let x, y, validPosition;
+                
+                // Make sure patrols aren't too close to the player
+                do {
+                    validPosition = true;
+                    x = Math.random() * WORLD_WIDTH;
+                    y = Math.random() * WORLD_HEIGHT;
+                    
+                    // Check minimum distance from player
+                    const playerDist = Math.hypot(x - WORLD_WIDTH/2, y - WORLD_HEIGHT/2);
+                    if (playerDist < 200) {
+                        validPosition = false;
+                    }
+                } while (!validPosition);
+                
+                patrolShips.push({
+                    x: x,
+                    y: y,
+                    size: PLAYER_SIZE * 0.8,
+                    angle: Math.random() * Math.PI * 2,
+                    speed: PATROL_SPEED * (1 + 0.1 * round),
+                    state: 'patrol', // patrol, chase, fire
+                    fireCooldown: 0,
+                    bullets: []
+                });
+            }
+            
+            // Reset condition
+            condition = "GREEN";
+            conditionTimer = CONDITION_TIMER.GREEN;
+            updateHUD();
+        }
+        
+        function updateStations() {
+            if (!gameRunning || gamePaused) return;
+            
+            for (let i = stations.length - 1; i >= 0; i--) {
+                const station = stations[i];
+                
+                // Station firing logic
+                if (station.fireCooldown > 0) {
+                    station.fireCooldown--;
+                } else {
+                    // Only fire if player is nearby and some cannons are active
+                    const dist = Math.hypot(player.x - station.x, player.y - station.y);
+                    const hasActiveCannons = station.cannons.some(cannon => cannon.active);
+                    
+                    if (dist < CANVAS_WIDTH && hasActiveCannons) {
+                        // Find an active cannon to fire from
+                        const activeCannons = station.cannons.filter(cannon => cannon.active);
+                        if (activeCannons.length > 0) {
+                            const cannon = activeCannons[Math.floor(Math.random() * activeCannons.length)];
+                            const cannonX = station.x + cannon.x;
+                            const cannonY = station.y + cannon.y;
+                            
+                            // Calculate angle to player
+                            const dx = player.x - cannonX;
+                            const dy = player.y - cannonY;
+                            const angle = Math.atan2(dy, dx);
+                            
+                            station.bullets.push({
+                                x: cannonX,
+                                y: cannonY,
+                                angle: angle,
+                                speed: 3 + round * 0.2
+                            });
+                            
+                            playSound('enemyShoot');
+                        }
+                        
+                        station.fireCooldown = 120;
+                    } else {
+                        station.fireCooldown = 60;
+                    }
+                }
+                
+                // Update station bullets
+                for (let j = station.bullets.length - 1; j >= 0; j--) {
+                    const bullet = station.bullets[j];
+                    bullet.x += Math.cos(bullet.angle) * bullet.speed;
+                    bullet.y += Math.sin(bullet.angle) * bullet.speed;
+                    
+                    // Remove bullets that go off-screen
+                    if (bullet.x < 0 || bullet.x > WORLD_WIDTH || 
+                        bullet.y < 0 || bullet.y > WORLD_HEIGHT) {
+                        station.bullets.splice(j, 1);
+                        continue;
+                    }
+                    
+                    // Check for collision with player
+                    if (!player.isInvulnerable && 
+                        Math.hypot(bullet.x - player.x, bullet.y - player.y) < PLAYER_SIZE) {
+                        station.bullets.splice(j, 1);
+                        player.hit();
+                    }
+                }
+                
+                // Check player bullet collisions with station
+                for (let j = player.bullets.length - 1; j >= 0; j--) {
+                    const bullet = player.bullets[j];
+                    let hit = false;
+                    
+                    // Check collision with cannons
+                    for (let k = 0; k < station.cannons.length; k++) {
+                        const cannon = station.cannons[k];
+                        if (!cannon.active) continue;
+                        
+                        const cannonX = station.x + cannon.x;
+                        const cannonY = station.y + cannon.y;
+                        const dist = Math.hypot(bullet.x - cannonX, bullet.y - cannonY);
+                        
+                        if (dist < 15) {
+                            cannon.active = false;
+                            hit = true;
+                            
+                            // Create small explosion
+                            explosions.push({
+                                x: cannonX,
+                                y: cannonY,
+                                size: 20,
+                                frame: 0,
+                                maxFrame: 15
+                            });
+                            
+                            score += 100;
+                            playSound('hit');
+                            break;
+                        }
+                    }
+                    
+                    // Check collision with station core
+                    if (!hit && station.core.active) {
+                        const dist = Math.hypot(bullet.x - station.x, bullet.y - station.y);
+                        if (dist < 30) {
+                            station.core.active = false;
+                            hit = true;
+                            
+                            // Create big explosion
+                            explosions.push({
+                                x: station.x,
+                                y: station.y,
+                                size: 60,
+                                frame: 0,
+                                maxFrame: 30
+                            });
+                            
+                            score += 500;
+                            playSound('explosion');
+                        }
+                    }
+                    
+                    if (hit) {
+                        player.bullets.splice(j, 1);
+                    }
+                }
+                
+                // Check if station is destroyed (all cannons and core)
+                const allDestroyed = !station.core.active && 
+                                    station.cannons.every(cannon => !cannon.active);
+                if (allDestroyed) {
+                    stations.splice(i, 1);
+                    
+                    // Check if all stations are destroyed
+                    if (stations.length === 0) {
+                        nextRound();
+                    }
+                }
+            }
+        }
+        
+        function drawStations() {
+            stations.forEach(station => {
+                // Calculate screen position
+                const screenX = station.x - camera.x;
+                const screenY = station.y - camera.y;
+                
+                // Only draw if station is visible on screen
+                if (screenX + STATION_SIZE/2 < 0 || screenX - STATION_SIZE/2 > CANVAS_WIDTH ||
+                    screenY + STATION_SIZE/2 < 0 || screenY - STATION_SIZE/2 > CANVAS_HEIGHT) {
+                    return;
+                }
+                
+                // Draw station base
+                ctx.fillStyle = '#444';
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, STATION_SIZE/2, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw inner circle
+                if (station.core.active) {
+                    ctx.fillStyle = '#900';
+                    ctx.beginPath();
+                    ctx.arc(screenX, screenY, 30, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                // Draw cannons
+                station.cannons.forEach(cannon => {
+                    if (cannon.active) {
+                        ctx.fillStyle = '#C33';
+                        ctx.beginPath();
+                        ctx.arc(
+                            screenX + cannon.x,
+                            screenY + cannon.y,
+                            15, 0, Math.PI * 2
+                        );
+                        ctx.fill();
+                    }
+                });
+                
+                // Draw station bullets
+                ctx.fillStyle = '#F66';
+                station.bullets.forEach(bullet => {
+                    ctx.fillRect(
+                        bullet.x - camera.x - 2,
+                        bullet.y - camera.y - 2,
+                        4, 4
+                    );
+                });
+            });
+        }
+        
+        // Mines
+        const mines = [];
+        
+        function updateMines() {
+            if (!gameRunning || gamePaused) return;
+            
+            for (let i = mines.length - 1; i >= 0; i--) {
+                const mine = mines[i];
+                
+                // Update pulse animation
+                mine.pulseTimer = (mine.pulseTimer + 1) % 100;
+                
+                // Check collision with player
+                if (!player.isInvulnerable && 
+                    Math.hypot(mine.x - player.x, mine.y - player.y) < mine.size + PLAYER_SIZE/2) {
+                    // Remove mine
+                    mines.splice(i, 1);
+                    
+                    // Create explosion
+                    explosions.push({
+                        x: mine.x,
+                        y: mine.y,
+                        size: 40,
+                        frame: 0,
+                        maxFrame: 20
+                    });
+                    
+                    player.hit();
+                    playSound('explosion');
+                    continue;
+                }
+                
+                // Check collision with player bullets
+                for (let j = player.bullets.length - 1; j >= 0; j--) {
+                    const bullet = player.bullets[j];
+                    const dist = Math.hypot(bullet.x - mine.x, bullet.y - mine.y);
+                    
+                    if (dist < mine.size) {
+                        // Remove mine and bullet
+                        mines.splice(i, 1);
+                        player.bullets.splice(j, 1);
+                        
+                        // Create explosion
+                        explosions.push({
+                            x: mine.x,
+                            y: mine.y,
+                            size: 30,
+                            frame: 0,
+                            maxFrame: 15
+                        });
+                        
+                        score += 50;
+                        playSound('hit');
+                        break;
+                    }
+                }
+            }
+        }
+        
+        function drawMines() {
+            mines.forEach(mine => {
+                // Calculate screen position
+                const screenX = mine.x - camera.x;
+                const screenY = mine.y - camera.y;
+                
+                // Only draw if mine is visible on screen
+                if (screenX + mine.size < 0 || screenX - mine.size > CANVAS_WIDTH ||
+                    screenY + mine.size < 0 || screenY - mine.size > CANVAS_HEIGHT) {
+                    return;
+                }
+                
+                // Draw mine with pulsing effect
+                const pulseSize = mine.size * (0.8 + 0.2 * Math.sin(mine.pulseTimer * 0.1));
+                
+                ctx.fillStyle = '#FFA500';
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, pulseSize, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Draw spikes
+                ctx.strokeStyle = '#FFA500';
+                ctx.lineWidth = 2;
+                for (let i = 0; i < 8; i++) {
+                    const angle = i * Math.PI / 4;
+                    ctx.beginPath();
+                    ctx.moveTo(
+                        screenX + Math.cos(angle) * pulseSize,
+                        screenY + Math.sin(angle) * pulseSize
+                    );
+                    ctx.lineTo(
+                        screenX + Math.cos(angle) * (pulseSize + 5),
+                        screenY + Math.sin(angle) * (pulseSize + 5)
+                    );
+                    ctx.stroke();
+                }
+            });
+        }
+        
+        // Patrol Ships
+        const patrolShips = [];
+        
+        function updatePatrolShips() {
+            if (!gameRunning || gamePaused) return;
+            
+            for (let i = patrolShips.length - 1; i >= 0; i--) {
+                const ship = patrolShips[i];
+                
+                // Distance to player
+                const dx = player.x - ship.x;
+                const dy = player.y - ship.y;
+                const distToPlayer = Math.hypot(dx, dy);
+                
+                // Update ship state based on distance to player
+                if (distToPlayer < PATROL_DETECTION_RADIUS) {
+                    ship.state = 'chase';
+                    
+                    // Condition becomes at least yellow when player is detected
+                    if (condition === "GREEN") {
+                        condition = "YELLOW";
+                        conditionTimer = CONDITION_TIMER.YELLOW;
+                        updateHUD();
+                    }
+                    
+                    // Condition becomes red if multiple patrols are chasing
+                    const chasingShips = patrolShips.filter(p => p.state === 'chase').length;
+                    if (chasingShips >= 2 && condition !== "RED") {
+                        condition = "RED";
+                        conditionTimer = CONDITION_TIMER.RED;
+                        updateHUD();
+                    }
+                } else {
+                    // Revert to patrol if player is far away
+                    ship.state = 'patrol';
+                    
+                    // Add some random rotation to make movement more interesting
+                    if (frameCount % 30 === 0) {
+                        ship.angle += (Math.random() - 0.5) * 0.5;
+                    }
+                }
+                
+                // Update ship movement based on state
+                if (ship.state === 'patrol') {
+                    // Move forward in current direction
+                    ship.x += Math.cos(ship.angle) * ship.speed * 0.7;
+                    ship.y += Math.sin(ship.angle) * ship.speed * 0.7;
+                } else if (ship.state === 'chase') {
+                    // Chase player
+                    const angleToPlayer = Math.atan2(dy, dx);
+                    
+                    // Gradually rotate toward player
+                    const angleDiff = normalizeAngle(angleToPlayer - ship.angle);
+                    if (Math.abs(angleDiff) > 0.1) {
+                        ship.angle += Math.sign(angleDiff) * 0.05;
+                    } else {
+                        ship.angle = angleToPlayer;
+                    }
+                    
+                    // Move forward in updated direction
+                    ship.x += Math.cos(ship.angle) * ship.speed;
+                    ship.y += Math.sin(ship.angle) * ship.speed;
+                    
+                    // Fire at player if close enough
+                    if (distToPlayer < PATROL_DETECTION_RADIUS * 0.7 && ship.fireCooldown <= 0) {
+                        ship.bullets.push({
+                            x: ship.x + Math.cos(ship.angle) * ship.size,
+                            y: ship.y + Math.sin(ship.angle) * ship.size,
+                            angle: ship.angle,
+                            speed: 4
+                        });
+                        
+                        playSound('enemyShoot');
+                        ship.fireCooldown = 60;
+                    }
+                }
+                
+                // Keep ship in world bounds
+                if (ship.x < 0) ship.x = 0;
+                if (ship.x > WORLD_WIDTH) ship.x = WORLD_WIDTH;
+                if (ship.y < 0) ship.y = 0;
+                if (ship.y > WORLD_HEIGHT) ship.y = WORLD_HEIGHT;
+                
+                // Update ship bullets
+                for (let j = ship.bullets.length - 1; j >= 0; j--) {
+                    const bullet = ship.bullets[j];
+                    bullet.x += Math.cos(bullet.angle) * bullet.speed;
+                    bullet.y += Math.sin(bullet.angle) * bullet.speed;
+                    
+                    // Remove bullets that go off-screen
+                    if (bullet.x < 0 || bullet.x > WORLD_WIDTH || 
+                        bullet.y < 0 || bullet.y > WORLD_HEIGHT) {
+                        ship.bullets.splice(j, 1);
+                        continue;
+                    }
+                    
+                    // Check for collision with player
+                    if (!player.isInvulnerable && 
+                        Math.hypot(bullet.x - player.x, bullet.y - player.y) < PLAYER_SIZE) {
+                        ship.bullets.splice(j, 1);
+                        player.hit();
+                    }
+                }
+                
+                // Reduce firing cooldown
+                if (ship.fireCooldown > 0) {
+                    ship.fireCooldown--;
+                }
+                
+                // Check collision with player
+                if (!player.isInvulnerable && 
+                    Math.hypot(ship.x - player.x, ship.y - player.y) < ship.size + PLAYER_SIZE/2) {
+                    // Remove ship
+                    patrolShips.splice(i, 1);
+                    
+                    // Create explosion
+                    explosions.push({
+                        x: ship.x,
+                        y: ship.y,
+                        size: 30,
+                        frame: 0,
+                        maxFrame: 20
+                    });
+                    
+                    player.hit();
+                    playSound('explosion');
+                    continue;
+                }
+                
+                // Check collision with player bullets
+                for (let j = player.bullets.length - 1; j >= 0; j--) {
+                    const bullet = player.bullets[j];
+                    const dist = Math.hypot(bullet.x - ship.x, bullet.y - ship.y);
+                    
+                    if (dist < ship.size) {
+                        // Remove ship and bullet
+                        patrolShips.splice(i, 1);
+                        player.bullets.splice(j, 1);
+                        
+                        // Create explosion
+                        explosions.push({
+                            x: ship.x,
+                            y: ship.y,
+                            size: 30,
+                            frame: 0,
+                            maxFrame: 15
+                        });
+                        
+                        score += 200;
+                        playSound('explosion');
+                        break;
+                    }
+                }
+            }
+        }
+        
+        function drawPatrolShips() {
+            patrolShips.forEach(ship => {
+                // Calculate screen position
+                const screenX = ship.x - camera.x;
+                const screenY = ship.y - camera.y;
+                
+                // Only draw if ship is visible on screen
+                if (screenX + ship.size < 0 || screenX - ship.size > CANVAS_WIDTH ||
+                    screenY + ship.size < 0 || screenY - ship.size > CANVAS_HEIGHT) {
+                    return;
+                }
+                
+                ctx.save();
+                
+                // Translate to ship position and rotate
+                ctx.translate(screenX, screenY);
+                ctx.rotate(ship.angle);
+                
+                // Draw patrol ship
+                ctx.fillStyle = ship.state === 'chase' ? '#FF0000' : '#CC6600';
+                ctx.beginPath();
+                ctx.moveTo(ship.size, 0);
+                ctx.lineTo(-ship.size / 2, -ship.size / 2);
+                ctx.lineTo(-ship.size / 2, ship.size / 2);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Draw engine flame
+                ctx.fillStyle = frameCount % 6 < 3 ? '#FF4500' : '#FFA500';
+                ctx.beginPath();
+                ctx.moveTo(-ship.size / 2, 0);
+                ctx.lineTo(-ship.size, -ship.size / 4);
+                ctx.lineTo(-ship.size, ship.size / 4);
+                ctx.closePath();
+                ctx.fill();
+                
+                ctx.restore();
+                
+                // Draw ship bullets
+                ctx.fillStyle = '#F66';
+                ship.bullets.forEach(bullet => {
+                    ctx.fillRect(
+                        bullet.x - camera.x - 2,
+                        bullet.y - camera.y - 2,
+                        4, 4
+                    );
+                });
+            });
+        }
+        
+        // Explosions
+        const explosions = [];
+        
+        function updateExplosions() {
+            if (!gameRunning || gamePaused) return;
+            
+            for (let i = explosions.length - 1; i >= 0; i--) {
+                const explosion = explosions[i];
+                explosion.frame++;
+                
+                if (explosion.frame >= explosion.maxFrame) {
+                    explosions.splice(i, 1);
+                }
+            }
+        }
+        
+        function drawExplosions() {
+            explosions.forEach(explosion => {
+                // Calculate screen position
+                const screenX = explosion.x - camera.x;
+                const screenY = explosion.y - camera.y;
+                
+                // Only draw if explosion is visible on screen
+                if (screenX + explosion.size < 0 || screenX - explosion.size > CANVAS_WIDTH ||
+                    screenY + explosion.size < 0 || screenY - explosion.size > CANVAS_HEIGHT) {
+                    return;
+                }
+                
+                // Calculate size and opacity based on frame
+                const progress = explosion.frame / explosion.maxFrame;
+                const size = explosion.size * (1 + progress * 0.5);
+                const opacity = 1 - progress;
+                
+                // Draw explosion
+                const gradient = ctx.createRadialGradient(
+                    screenX, screenY, 0,
+                    screenX, screenY, size
+                );
+                gradient.addColorStop(0, `rgba(255, 255, 200, ${opacity})`);
+                gradient.addColorStop(0.4, `rgba(255, 150, 50, ${opacity})`);
+                gradient.addColorStop(1, `rgba(255, 50, 50, ${opacity * 0.5})`);
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(screenX, screenY, size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+        
+        // Draw stars (background)
+        const stars = [];
+        
+        function generateStars() {
+            for (let i = 0; i < 200; i++) {
+                stars.push({
+                    x: Math.random() * WORLD_WIDTH,
+                    y: Math.random() * WORLD_HEIGHT,
+                    size: Math.random() * 1.5 + 0.5,
+                    brightness: Math.random() * 0.5 + 0.5
+                });
+            }
+        }
+        
+        function drawStars() {
+            stars.forEach(star => {
+                // Calculate screen position
+                const screenX = star.x - camera.x * 0.2; // Parallax effect
+                const screenY = star.y - camera.y * 0.2;
+                
+                // Wrap around if off-screen
+                const wrappedX = ((screenX % CANVAS_WIDTH) + CANVAS_WIDTH) % CANVAS_WIDTH;
+                const wrappedY = ((screenY % CANVAS_HEIGHT) + CANVAS_HEIGHT) % CANVAS_HEIGHT;
+                
+                // Twinkle effect
+                const twinkle = Math.sin(frameCount * 0.05 + star.x + star.y) * 0.2 + 0.8;
+                
+                // Draw star
+                ctx.fillStyle = `rgba(255, 255, 255, ${star.brightness * twinkle})`;
+                ctx.beginPath();
+                ctx.arc(wrappedX, wrappedY, star.size, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+        
+        // Radar
+        function updateRadar() {
+            // Clear radar
+            radarCtx.fillStyle = 'rgba(0, 0, 0, 0.8)';
+            radarCtx.fillRect(0, 0, radarCanvas.width, radarCanvas.height);
+            
+            // Draw radar sweep
+            const sweepAngle = (frameCount * 0.03) % (Math.PI * 2);
+            radarCtx.fillStyle = `rgba(0, 255, 0, 0.1)`;
+            radarCtx.beginPath();
+            radarCtx.moveTo(radarCanvas.width / 2, radarCanvas.height / 2);
+            radarCtx.arc(
+                radarCanvas.width / 2,
+                radarCanvas.height / 2,
+                radarCanvas.width / 2,
+                sweepAngle - 0.2,
+                sweepAngle,
+                false
+            );
+            radarCtx.closePath();
+            radarCtx.fill();
+            
+            // Draw radar grid
+            radarCtx.strokeStyle = 'rgba(0, 255, 0, 0.3)';
+            radarCtx.lineWidth = 1;
+            radarCtx.beginPath();
+            radarCtx.arc(radarCanvas.width / 2, radarCanvas.height / 2, radarCanvas.width / 4, 0, Math.PI * 2);
+            radarCtx.stroke();
+            radarCtx.beginPath();
+            radarCtx.arc(radarCanvas.width / 2, radarCanvas.height / 2, radarCanvas.width / 2, 0, Math.PI * 2);
+            radarCtx.stroke();
+            
+            // Calculate the scale from world to radar
+            const radarScale = radarCanvas.width / WORLD_WIDTH;
+            
+            // Draw player on radar
+            radarCtx.fillStyle = '#5D5CDE';
+            radarCtx.fillRect(
+                player.x * radarScale - 2,
+                player.y * radarScale - 2,
+                4, 4
+            );
+            
+            // Draw stations on radar
+            stations.forEach(station => {
+                radarCtx.fillStyle = '#F00';
+                radarCtx.fillRect(
+                    station.x * radarScale - 3,
+                    station.y * radarScale - 3,
+                    6, 6
+                );
+            });
+            
+            // Draw patrol ships on radar (only if they're chasing)
+            patrolShips.forEach(ship => {
+                if (ship.state === 'chase') {
+                    radarCtx.fillStyle = '#F90';
+                    radarCtx.beginPath();
+                    radarCtx.arc(
+                        ship.x * radarScale,
+                        ship.y * radarScale,
+                        2, 0, Math.PI * 2
+                    );
+                    radarCtx.fill();
+                }
+            });
+        }
+        
+        // Condition Status
+        function updateCondition() {
+            if (!gameRunning || gamePaused) return;
+            
+            if (conditionTimer > 0) {
+                conditionTimer--;
+            } else {
+                // Possibly change condition based on current state
+                if (condition === "RED") {
+                    condition = "YELLOW";
+                    conditionTimer = CONDITION_TIMER.YELLOW;
+                } else if (condition === "YELLOW") {
+                    condition = "GREEN";
+                    conditionTimer = CONDITION_TIMER.GREEN;
+                }
+                updateHUD();
+            }
+            
+            // Check if all patrol ships are in patrol mode
+            const allPatrolling = patrolShips.every(ship => ship.state === 'patrol');
+            if (allPatrolling && condition !== "GREEN" && frameCount % 60 === 0) {
+                // Gradually return to GREEN condition
+                if (condition === "RED") {
+                    condition = "YELLOW";
+                    conditionTimer = CONDITION_TIMER.YELLOW;
+                } else if (condition === "YELLOW") {
+                    condition = "GREEN";
+                    conditionTimer = CONDITION_TIMER.GREEN;
+                }
+                updateHUD();
+            }
+        }
+        
+        // Sound effects
+        const sounds = {
+            shoot: { volume: 0.3 },
+            enemyShoot: { volume: 0.2 },
+            explosion: { volume: 0.5 },
+            hit: { volume: 0.3 },
+            playerHit: { volume: 0.5 },
+            levelUp: { volume: 0.4 },
+            conditionChange: { volume: 0.3 }
+        };
+        
+        function playSound(name) {
+            if (muted) return;
+            
+            // Create oscillator for sound
+            const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            const oscillator = audioCtx.createOscillator();
+            const gainNode = audioCtx.createGain();
+            
+            oscillator.connect(gainNode);
+            gainNode.connect(audioCtx.destination);
+            
+            // Set sound properties based on name
+            if (name === 'shoot') {
+                oscillator.type = 'sawtooth';
+                oscillator.frequency.setValueAtTime(500, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(sounds[name].volume, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.1);
+            } else if (name === 'enemyShoot') {
+                oscillator.type = 'sawtooth';
+                oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(100, audioCtx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(sounds[name].volume, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.1);
+            } else if (name === 'explosion') {
+                oscillator.type = 'square';
+                oscillator.frequency.setValueAtTime(100, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(20, audioCtx.currentTime + 0.3);
+                gainNode.gain.setValueAtTime(sounds[name].volume, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.3);
+            } else if (name === 'hit') {
+                oscillator.type = 'triangle';
+                oscillator.frequency.setValueAtTime(400, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(200, audioCtx.currentTime + 0.1);
+                gainNode.gain.setValueAtTime(sounds[name].volume, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.1);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.1);
+            } else if (name === 'playerHit') {
+                oscillator.type = 'sawtooth';
+                oscillator.frequency.setValueAtTime(200, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(50, audioCtx.currentTime + 0.3);
+                gainNode.gain.setValueAtTime(sounds[name].volume, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.3);
+            } else if (name === 'levelUp') {
+                oscillator.type = 'sine';
+                oscillator.frequency.setValueAtTime(600, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(1200, audioCtx.currentTime + 0.3);
+                gainNode.gain.setValueAtTime(sounds[name].volume, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.3);
+            } else if (name === 'conditionChange') {
+                oscillator.type = 'square';
+                oscillator.frequency.setValueAtTime(300, audioCtx.currentTime);
+                oscillator.frequency.exponentialRampToValueAtTime(500, audioCtx.currentTime + 0.2);
+                gainNode.gain.setValueAtTime(sounds[name].volume, audioCtx.currentTime);
+                gainNode.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                oscillator.start();
+                oscillator.stop(audioCtx.currentTime + 0.2);
+            }
+        }
+        
+        // Utility functions
+        function normalizeAngle(angle) {
+            while (angle > Math.PI) angle -= Math.PI * 2;
+            while (angle < -Math.PI) angle += Math.PI * 2;
+            return angle;
+        }
+        
+        // Next round
+        function nextRound() {
+            round++;
+            updateHUD();
+            playSound('levelUp');
+            
+            // Generate new level after a short delay
+            setTimeout(() => {
+                generateLevel();
+            }, 2000);
+        }
+        
+        // Control state
+        const keys = {
+            up: false,
+            down: false,
+            left: false,
+            right: false,
+            fire: false
+        };
+        
+        // Keyboard controls
+        window.addEventListener('keydown', function(e) {
+            if (e.key === 'ArrowUp') keys.up = true;
+            if (e.key === 'ArrowDown') keys.down = true;
+            if (e.key === 'ArrowLeft') keys.left = true;
+            if (e.key === 'ArrowRight') keys.right = true;
+            if (e.key === ' ') keys.fire = true;
+            
+            // Pause game with 'p'
+            if (e.key === 'p' && gameRunning) {
+                togglePause();
+            }
+        });
+        
+        window.addEventListener('keyup', function(e) {
+            if (e.key === 'ArrowUp') keys.up = false;
+            if (e.key === 'ArrowDown') keys.down = false;
+            if (e.key === 'ArrowLeft') keys.left = false;
+            if (e.key === 'ArrowRight') keys.right = false;
+            if (e.key === ' ') keys.fire = false;
+        });
+        
+        // Touch joystick controls
+        const joystickContainer = document.getElementById('joystickContainer');
+        const joystickThumb = document.getElementById('joystickThumb');
+        const fireBtn = document.getElementById('fireBtn');
+        
+        let joystickActive = false;
+        let joystickOrigin = { x: 0, y: 0 };
+        
+        function handleJoystickStart(e) {
+            e.preventDefault();
+            joystickActive = true;
+            
+            const touch = e.type === 'touchstart' ? e.touches[0] : e;
+            const rect = joystickContainer.getBoundingClientRect();
+            
+            joystickOrigin.x = rect.left + rect.width / 2;
+            joystickOrigin.y = rect.top + rect.height / 2;
+            
+            handleJoystickMove(e);
+        }
+        
+        function handleJoystickMove(e) {
+            if (!joystickActive) return;
+            
+            const touch = e.type === 'touchmove' ? e.touches[0] : e;
+            
+            // Calculate joystick position
+            const dx = touch.clientX - joystickOrigin.x;
+            const dy = touch.clientY - joystickOrigin.y;
+            const distance = Math.min(joystickContainer.offsetWidth / 3, Math.hypot(dx, dy));
+            const angle = Math.atan2(dy, dx);
+            
+            // Set joystick thumb position
+            const thumbX = distance * Math.cos(angle);
+            const thumbY = distance * Math.sin(angle);
+            joystickThumb.style.transform = `translate(calc(-50% + ${thumbX}px), calc(-50% + ${thumbY}px))`;
+            
+            // Update player input based on joystick position
+            if (distance > 10) {
+                // Set player rotation
+                player.angle = angle;
+                
+                // Set player speed based on distance from center
+                player.speed = (distance / (joystickContainer.offsetWidth / 3)) * player.maxSpeed;
+            } else {
+                player.speed = 0;
+            }
+        }
+        
+        function handleJoystickEnd() {
+            joystickActive = false;
+            joystickThumb.style.transform = 'translate(-50%, -50%)';
+            player.speed = 0;
+        }
+        
+        joystickContainer.addEventListener('touchstart', handleJoystickStart);
+        joystickContainer.addEventListener('touchmove', handleJoystickMove);
+        joystickContainer.addEventListener('touchend', handleJoystickEnd);
+        joystickContainer.addEventListener('touchcancel', handleJoystickEnd);
+        
+        // Fire button touch event
+        fireBtn.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            keys.fire = true;
+        });
+        
+        fireBtn.addEventListener('touchend', function() {
+            keys.fire = false;
+        });
+        
+        // Handle player input
+        function handleInput() {
+            if (!gameRunning || gamePaused) return;
+            
+            // Handle keyboard controls
+            if (keys.up) {
+                player.speed = player.maxSpeed;
+            } else if (keys.down) {
+                player.speed = -player.maxSpeed / 2;
+            } else if (!joystickActive) {
+                // Only reset speed if joystick isn't being used
+                player.speed = 0;
+            }
+            
+            if (keys.left) {
+                player.angle -= player.rotationSpeed;
+            }
+            if (keys.right) {
+                player.angle += player.rotationSpeed;
+            }
+            
+            if (keys.fire) {
+                player.fire();
+            }
+        }
+        
+        // UI Controls
+        document.getElementById('startGame').addEventListener('click', startGame);
+        document.getElementById('restartGame').addEventListener('click', restartGame);
+        document.getElementById('pauseBtn').addEventListener('click', togglePause);
+        document.getElementById('resumeGame').addEventListener('click', togglePause);
+        document.getElementById('muteBtn').addEventListener('click', toggleMute);
+        
+        function startGame() {
+            // Clear game data
+            player.x = WORLD_WIDTH / 2;
+            player.y = WORLD_HEIGHT / 2;
+            player.angle = 0;
+            player.speed = 0;
+            player.bullets = [];
+            player.isInvulnerable = false;
+            
+            // Reset game stats
+            score = 0;
+            lives = 3;
+            round = 1;
+            frameCount = 0;
+            condition = "GREEN";
+            conditionTimer = CONDITION_TIMER.GREEN;
+            updateHUD();
+            
+            // Generate level
+            generateLevel();
+            
+            // Hide menu, show game
+            document.getElementById('menu').style.display = 'none';
+            document.getElementById('gameOver').style.display = 'none';
+            
+            gameRunning = true;
+            gamePaused = false;
+        }
+        
+        function restartGame() {
+            document.getElementById('gameOver').style.display = 'none';
+            document.getElementById('menu').style.display = 'flex';
+        }
+        
+        function togglePause() {
+            if (!gameRunning) return;
+            
+            gamePaused = !gamePaused;
+            document.getElementById('pausedOverlay').style.display = gamePaused ? 'flex' : 'none';
+            document.getElementById('pauseBtn').textContent = gamePaused ? 'Resume' : 'Pause';
+        }
+        
+        function toggleMute() {
+            muted = !muted;
+            document.getElementById('muteBtn').textContent = muted ? 'Unmute Sound' : 'Mute Sound';
+        }
+        
+        // Game over function
+        function gameOver() {
+            gameRunning = false;
+            document.getElementById('gameOver').style.display = 'flex';
+            document.getElementById('finalScore').textContent = score;
+        }
+        
+        // Update the HUD
+        function updateHUD() {
+            document.getElementById('score').textContent = score;
+            document.getElementById('lives').textContent = lives;
+            document.getElementById('round').textContent = round;
+            document.getElementById('condition').textContent = condition;
+            
+            // Update condition indicator
+            const indicator = document.getElementById('conditionIndicator');
+            indicator.className = 'condition-indicator';
+            
+            if (condition === "GREEN") {
+                indicator.classList.add('condition-green');
+            } else if (condition === "YELLOW") {
+                indicator.classList.add('condition-yellow');
+            } else if (condition === "RED") {
+                indicator.classList.add('condition-red');
+            }
+            
+            playSound('conditionChange');
+        }
+        
+        // Initialize stars
+        generateStars();
+        
+        // Game loop
+        function gameLoop() {
+            // Clear canvas
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            // Draw stars
+            drawStars();
+            
+            // Handle player input
+            handleInput();
+            
+            // Update game objects
+            if (gameRunning) {
+                player.update();
+                updateStations();
+                updateMines();
+                updatePatrolShips();
+                updateExplosions();
+                updateCondition();
+                
+                if (!gamePaused) {
+                    frameCount++;
+                }
+            }
+            
+            // Draw game objects
+            drawStations();
+            drawMines();
+            drawPatrolShips();
+            player.draw();
+            drawExplosions();
+            
+            // Update radar
+            updateRadar();
+            
+            // Request next frame
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Start game loop
+        gameLoop();
+    </script>
+</body>
+</html>
