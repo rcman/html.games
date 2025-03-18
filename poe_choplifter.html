@@ -6,12 +6,17 @@
     <title>Choplifter</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
-        tailwind.config = {
-            darkMode: 'class',
-            theme: {
-                extend: {
-                    colors: {
-                        primary: '#5D5CDE',
+        // Wait for Tailwind to load before configuring
+        window.onload = function() {
+            if (typeof tailwind !== 'undefined') {
+                tailwind.config = {
+                    darkMode: 'class',
+                    theme: {
+                        extend: {
+                            colors: {
+                                primary: '#5D5CDE',
+                            }
+                        }
                     }
                 }
             }
@@ -240,6 +245,10 @@
             bomb: false
         };
 
+        // Create an image for sprites
+        const spriteImage = new Image();
+        spriteImage.src = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAQAAAABABAMAAAAHc7SNAAAAMFBMVEUAAAD/AAD//wD/AP//AP8A//8A/////wAA/wD///8A//8A/wD/AAAAAAAAAAAAAADlxgJVAAAAAXRSTlMAQObYZgAAAiVJREFUeNrtmr1twzAQRilkgBRZIMgGLjJAkA2EbMBWNzDYDYRsYCsLGNlASBeokQ3EfBkU9XlH8o4OqBf4qgjex8N9R0qSJP0EtSmgNgXUpoD6rwJOptKgCLyrCLyrCLyrCLyrCLyrCLyrCLyrCPyU9r7rZnNAGYzwp+HHg2UwImDl1wuWwUjdyq/XLIORupVf2yyDkcqV39QsgyC/TQYjdZLfJoORupPfKIORClCbAmpTQG0KqE0B9c8BvNKgKHhSw0uColCrYaVBUajUsJCgKJQSjFIUhVKCQYqiUErQC1EUKhFaKYpCJUIrRREoROjEKAKFCJ0YRaAQoZeiIilk6MQoSAoZOjEKkkKGTo6CopDiBRgqCinegKGikOIVGCoKKV6B4YqgBDhIMJwRJMALMJwQpMArMOwJUuAVGHYEKfACDO8EKfAKDGuQPQWegWENsqdAtGxEaZA1BaJlI0qDrCnwvG5EaZA1BZ7XjSgNsqXA/XpAaZAtBe7XA0qDbClwvx5QGvQsBW7XA1KDnqXA7XpAatCTFLheD0gNepICl+sBrUEPUuByPaA16EEKXK4HtAatpsD5ekBs0GoKnK8HxAatpsDxekBs0JwC5+8BsUFzCpy/B8QGXafA9fuA2qDrFLh+H1AbdJkC1/cBtUGXKXB9H1AbdJ4Ct/cBuUHnKXB7H5AbdJoCt/8H5AadpkAkDTpLgUgadJYCkTToRwoUSYEiKVAkBYqkQJEUKNLvAPwF/rFZsWgzcJQAAAAASUVORK5CYII=';
+
         // Sprite images and animations
         const sprites = {
             chopperRight: [
@@ -293,7 +302,16 @@
         // Game initialization
         function init() {
             canvas = document.getElementById('gameCanvas');
+            if (!canvas) {
+                console.error('Canvas element not found');
+                return;
+            }
+            
             ctx = canvas.getContext('2d');
+            if (!ctx) {
+                console.error('Could not get 2D context');
+                return;
+            }
             
             // Resize canvas
             resizeCanvas();
@@ -417,7 +435,7 @@
             // Handle player movement
             handleInput();
             
-            // Apply gravity if flying
+          // Apply gravity if flying
             if (chopper.flying && !chopper.landing) {
                 chopper.velY += GRAVITY;
                 
@@ -650,7 +668,7 @@
                         }
                     }
                     
-                    // Check for nearby buildings (careful not to destroy buildings with hostages)
+                    // Check for nearby buildings
                     for (let j = buildings.length - 1; j >= 0; j--) {
                         let building = buildings[j];
                         let dx = Math.abs((bomb.x + bomb.width / 2) - (building.x + building.width / 2));
@@ -1008,20 +1026,30 @@
         }
         
         function drawBase() {
-            // Draw the base/landing pad
-            ctx.fillStyle = '#808080'; // Gray
-            ctx.fillRect(base.x, base.y, base.width, base.height);
-            
-            // Landing pad markings
-            ctx.fillStyle = '#FFFF00'; // Yellow
-            ctx.fillRect(base.x + 20, base.y + 10, base.width - 40, 5);
-            ctx.fillRect(base.x + 20, base.y + base.height - 15, base.width - 40, 5);
-            
-            // Helipad H
-            ctx.fillStyle = '#FFFFFF';
-            ctx.fillRect(base.x + base.width/2 - 15, base.y + 25, 10, 30);
-            ctx.fillRect(base.x + base.width/2 + 5, base.y + 25, 10, 30);
-            ctx.fillRect(base.x + base.width/2 - 15, base.y + 40, 30, 5);
+            // Use the sprite if available
+            if (spriteImage.complete) {
+                let sprite = sprites.basepad;
+                ctx.drawImage(
+                    spriteImage,
+                    sprite.x, sprite.y, sprite.width, sprite.height,
+                    base.x, base.y, base.width, base.height
+                );
+            } else {
+                // Fallback if sprite not loaded
+                ctx.fillStyle = '#808080'; // Gray
+                ctx.fillRect(base.x, base.y, base.width, base.height);
+                
+                // Landing pad markings
+                ctx.fillStyle = '#FFFF00'; // Yellow
+                ctx.fillRect(base.x + 20, base.y + 10, base.width - 40, 5);
+                ctx.fillRect(base.x + 20, base.y + base.height - 15, base.width - 40, 5);
+                
+                // Helipad H
+                ctx.fillStyle = '#FFFFFF';
+                ctx.fillRect(base.x + base.width/2 - 15, base.y + 25, 10, 30);
+                ctx.fillRect(base.x + base.width/2 + 5, base.y + 25, 10, 30);
+                ctx.fillRect(base.x + base.width/2 - 15, base.y + 40, 30, 5);
+            }
         }
         
         function drawBuildings() {
@@ -1044,31 +1072,77 @@
                     }
                 } else {
                     // Draw intact building
-                    ctx.fillStyle = '#D2B48C'; // Tan
-                    ctx.fillRect(building.x, building.y, building.width, building.height);
-                    
-                    // Windows
-                    ctx.fillStyle = '#4682B4'; // Steel blue
-                    for (let row = 0; row < 2; row++) {
-                        for (let col = 0; col < 3; col++) {
-                            ctx.fillRect(
-                                building.x + 10 + col * 25,
-                                building.y + 10 + row * 25,
-                                15,
-                                15
-                            );
+                    if (spriteImage.complete) {
+                        let sprite = sprites.building;
+                        ctx.drawImage(
+                            spriteImage,
+                            sprite.x, sprite.y, sprite.width, sprite.height,
+                            building.x, building.y, building.width, building.height
+                        );
+                    } else {
+                        // Fallback if sprite not loaded
+                        ctx.fillStyle = '#D2B48C'; // Tan
+                        ctx.fillRect(building.x, building.y, building.width, building.height);
+                        
+                        // Windows
+                        ctx.fillStyle = '#4682B4'; // Steel blue
+                        for (let row = 0; row < 2; row++) {
+                            for (let col = 0; col < 3; col++) {
+                                ctx.fillRect(
+                                    building.x + 10 + col * 25,
+                                    building.y + 10 + row * 25,
+                                    15,
+                                    15
+                                );
+                            }
                         }
+                        
+                        // Door
+                        ctx.fillStyle = '#8B4513'; // Brown
+                        ctx.fillRect(building.x + building.width / 2 - 10, building.y + building.height - 20, 20, 20);
                     }
-                    
-                    // Door
-                    ctx.fillStyle = '#8B4513'; // Brown
-                    ctx.fillRect(building.x + building.width / 2 - 10, building.y + building.height - 20, 20, 20);
                     
                     // Show hostage count
                     if (building.hostages > 0) {
                         ctx.fillStyle = '#FFFFFF';
                         ctx.font = '16px Arial';
                         ctx.fillText(building.hostages, building.x + building.width / 2, building.y - 5);
+                    }
+                }
+            }
+        }
+        
+        function drawHostages() {
+            for (let i = 0; i < hostages.length; i++) {
+                let hostage = hostages[i];
+                
+                if (spriteImage.complete) {
+                    let sprite = sprites.hostage[hostage.frame];
+                    ctx.drawImage(
+                        spriteImage,
+                        sprite.x, sprite.y, sprite.width, sprite.height,
+                        hostage.x, hostage.y, hostage.width, hostage.height
+                    );
+                } else {
+                    // Fallback if sprite not loaded
+                    // Draw hostage
+                    ctx.fillStyle = '#FFA500'; // Orange
+                    ctx.fillRect(hostage.x, hostage.y, hostage.width, hostage.height);
+                    
+                    // Draw head
+                    ctx.fillStyle = '#FFE4B5'; // Moccasin
+                    ctx.fillRect(hostage.x + 2, hostage.y, hostage.width - 4, hostage.height / 3);
+                    
+                    // Draw arms based on frame (for animation)
+                    if (hostage.frame === 0) { // Standing
+                        ctx.fillRect(hostage.x - 2, hostage.y + hostage.height / 3, 4, 2);
+                        ctx.fillRect(hostage.x + hostage.width - 2, hostage.y + hostage.height / 3, 4, 2);
+                    } else if (hostage.frame === 4) { // Waving
+                        ctx.fillRect(hostage.x - 2, hostage.y + hostage.height / 3, 4, 2);
+                        ctx.fillRect(hostage.x + hostage.width - 2, hostage.y + hostage.height / 3 - 5, 4, 7);
+                    } else { // Walking/running
+                        ctx.fillRect(hostage.x - 2 + (hostage.frame % 2) * 4, hostage.y + hostage.height / 3, 4, 2);
+                        ctx.fillRect(hostage.x + hostage.width - 2 - (hostage.frame % 2) * 4, hostage.y + hostage.height / 3, 4, 2);
                     }
                 }
             }
@@ -1084,19 +1158,28 @@
             let chopperSprites = chopper.direction > 0 ? sprites.chopperRight : sprites.chopperLeft;
             let sprite = chopperSprites[chopper.frame];
             
-            // Draw helicopter body
-            ctx.fillStyle = '#FF0000'; // Red
-            ctx.fillRect(chopper.x, chopper.y, chopper.width, chopper.height);
-            
-            // Draw rotor
-            ctx.fillStyle = '#000000';
-            ctx.fillRect(chopper.x + chopper.width / 2 - 30, chopper.y - 4, 60, 4);
-            
-            // Draw tail
-            if (chopper.direction > 0) {
-                ctx.fillRect(chopper.x - 20, chopper.y + chopper.height / 2, 20, 4);
+            // Draw helicopter using sprite image
+            if (spriteImage.complete) {
+                ctx.drawImage(
+                    spriteImage,
+                    sprite.x, sprite.y, sprite.width, sprite.height,
+                    chopper.x, chopper.y, chopper.width, chopper.height
+                );
             } else {
-                ctx.fillRect(chopper.x + chopper.width, chopper.y + chopper.height / 2, 20, 4);
+                // Fallback if sprite not loaded
+                ctx.fillStyle = '#FF0000'; // Red
+                ctx.fillRect(chopper.x, chopper.y, chopper.width, chopper.height);
+                
+                // Draw rotor
+                ctx.fillStyle = '#000000';
+                ctx.fillRect(chopper.x + chopper.width / 2 - 30, chopper.y - 4, 60, 4);
+                
+                // Draw tail
+                if (chopper.direction > 0) {
+                    ctx.fillRect(chopper.x - 20, chopper.y + chopper.height / 2, 20, 4);
+                } else {
+                    ctx.fillRect(chopper.x + chopper.width, chopper.y + chopper.height / 2, 20, 4);
+                }
             }
             
             // Show carried hostages
@@ -1108,23 +1191,58 @@
         }
         
         function drawBullets() {
-            ctx.fillStyle = '#FFFF00'; // Yellow
-            for (let i = 0; i < bullets.length; i++) {
-                ctx.fillRect(bullets[i].x, bullets[i].y, bullets[i].width, bullets[i].height);
+            if (spriteImage.complete) {
+                let sprite = sprites.bullet;
+                for (let i = 0; i < bullets.length; i++) {
+                    ctx.drawImage(
+                        spriteImage,
+                        sprite.x, sprite.y, sprite.width, sprite.height,
+                        bullets[i].x, bullets[i].y, bullets[i].width, bullets[i].height
+                    );
+                }
+            } else {
+                ctx.fillStyle = '#FFFF00'; // Yellow
+                for (let i = 0; i < bullets.length; i++) {
+                    ctx.fillRect(bullets[i].x, bullets[i].y, bullets[i].width, bullets[i].height);
+                }
             }
         }
         
         function drawBombs() {
-            ctx.fillStyle = '#000000'; // Black
-            for (let i = 0; i < bombs.length; i++) {
-                ctx.fillRect(bombs[i].x, bombs[i].y, bombs[i].width, bombs[i].height);
+            if (spriteImage.complete) {
+                let sprite = sprites.bomb;
+                for (let i = 0; i < bombs.length; i++) {
+                    ctx.drawImage(
+                        spriteImage,
+                        sprite.x, sprite.y, sprite.width, sprite.height,
+                        bombs[i].x, bombs[i].y, bombs[i].width, bombs[i].height
+                    );
+                }
+            } else {
+                ctx.fillStyle = '#000000'; // Black
+                for (let i = 0; i < bombs.length; i++) {
+                    ctx.fillRect(bombs[i].x, bombs[i].y, bombs[i].width, bombs[i].height);
+                }
             }
         }
         
         function drawEnemyBullets() {
-            ctx.fillStyle = '#FF0000'; // Red
-            for (let i = 0; i < enemyBullets.length; i++) {
-                ctx.fillRect(enemyBullets[i].x, enemyBullets[i].y, enemyBullets[i].width, enemyBullets[i].height);
+            if (spriteImage.complete) {
+                let sprite = sprites.bullet;
+                for (let i = 0; i < enemyBullets.length; i++) {
+                    ctx.drawImage(
+                        spriteImage,
+                        sprite.x, sprite.y, sprite.width, sprite.height,ctx.drawImage(
+                        spriteImage,
+                        sprite.x, sprite.y, sprite.width, sprite.height,
+                        enemyBullets[i].x, enemyBullets[i].y, enemyBullets[i].width, enemyBullets[i].height
+                    );
+                }
+            } else {
+                ctx.fillStyle = '#FF0000'; // Red
+                for (let i = 0; i < enemyBullets.length; i++) {
+                    ctx.fillRect(enemyBullets[i].x, enemyBullets[i].y, enemyBullets[i].width, enemyBullets[i].height);
+                }
             }
         }
         
@@ -1132,78 +1250,68 @@
             for (let i = 0; i < enemies.length; i++) {
                 let enemy = enemies[i];
                 
-                if (enemy.type === 'tank') {
-                    // Draw tank
-                    ctx.fillStyle = '#006400'; // Dark green
-                    ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                if (spriteImage.complete) {
+                    let sprite;
+                    if (enemy.type === 'tank') {
+                        sprite = sprites.tank[enemy.frame];
+                    } else if (enemy.type === 'jet') {
+                        sprite = sprites.jet[enemy.frame];
+                    }
                     
-                    // Tank turret
-                    ctx.fillStyle = '#008000'; // Green
-                    ctx.fillRect(
-                        enemy.x + enemy.width / 2 - 5,
-                        enemy.y - 5,
-                        10,
-                        5
+                    ctx.drawImage(
+                        spriteImage,
+                        sprite.x, sprite.y, sprite.width, sprite.height,
+                        enemy.x, enemy.y, enemy.width, enemy.height
                     );
-                    
-                    // Tank barrel
-                    ctx.fillRect(
-                        enemy.x + (enemy.direction > 0 ? enemy.width - 5 : 0),
-                        enemy.y + 8,
-                        5,
-                        4
-                    );
-                    
-                    // Tank treads
-                    ctx.fillStyle = '#000000';
-                    ctx.fillRect(enemy.x, enemy.y + enemy.height - 4, enemy.width, 4);
-                } else if (enemy.type === 'jet') {
-                    // Draw jet
-                    ctx.fillStyle = '#4682B4'; // Steel blue
-                    ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
-                    
-                    // Jet wings
-                    ctx.fillStyle = '#1E90FF'; // Dodger blue
-                    ctx.fillRect(
-                        enemy.x + enemy.width / 4,
-                        enemy.y - 4,
-                        enemy.width / 2,
-                        4
-                    );
-                    
-                    // Jet tail
-                    ctx.fillRect(
-                        enemy.x + (enemy.direction > 0 ? 0 : enemy.width - 6),
-                        enemy.y - 2,
-                        6,
-                        enemy.height + 4
-                    );
-                }
-            }
-        }
-        
-        function drawHostages() {
-            for (let i = 0; i < hostages.length; i++) {
-                let hostage = hostages[i];
-                
-                // Draw hostage
-                ctx.fillStyle = '#FFA500'; // Orange
-                ctx.fillRect(hostage.x, hostage.y, hostage.width, hostage.height);
-                
-                // Draw head
-                ctx.fillStyle = '#FFE4B5'; // Moccasin
-                ctx.fillRect(hostage.x + 2, hostage.y, hostage.width - 4, hostage.height / 3);
-                
-                // Draw arms based on frame (for animation)
-                if (hostage.frame === 0) { // Standing
-                    ctx.fillRect(hostage.x - 2, hostage.y + hostage.height / 3, 4, 2);
-                    ctx.fillRect(hostage.x + hostage.width - 2, hostage.y + hostage.height / 3, 4, 2);
-                } else if (hostage.frame === 4) { // Waving
-                    ctx.fillRect(hostage.x - 2, hostage.y + hostage.height / 3, 4, 2);
-                    ctx.fillRect(hostage.x + hostage.width - 2, hostage.y + hostage.height / 3 - 5, 4, 7);
-                } else { // Walking/running
-                    ctx.fillRect(hostage.x - 2 + (hostage.frame % 2) * 4, hostage.y + hostage.height / 3, 4, 2);
-                    ctx.fillRect(hostage.x + hostage.width - 2 - (hostage.frame % 2) * 4, hostage.y + hostage.height / 3, 4, 2);
+                } else {
+                    // Fallback if sprite not loaded
+                    if (enemy.type === 'tank') {
+                        // Draw tank
+                        ctx.fillStyle = '#006400'; // Dark green
+                        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                        
+                        // Tank turret
+                        ctx.fillStyle = '#008000'; // Green
+                        ctx.fillRect(
+                            enemy.x + enemy.width / 2 - 5,
+                            enemy.y - 5,
+                            10,
+                            5
+                        );
+                        
+                        // Tank barrel
+                        ctx.fillRect(
+                            enemy.x + (enemy.direction > 0 ? enemy.width - 5 : 0),
+                            enemy.y + 8,
+                            5,
+                            4
+                        );
+                        
+                        // Tank treads
+                        ctx.fillStyle = '#000000';
+                        ctx.fillRect(enemy.x, enemy.y + enemy.height - 4, enemy.width, 4);
+                    } else if (enemy.type === 'jet') {
+                        // Draw jet
+                        ctx.fillStyle = '#4682B4'; // Steel blue
+                        ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                        
+                        // Jet wings
+                        ctx.fillStyle = '#1E90FF'; // Dodger blue
+                        ctx.fillRect(
+                            enemy.x + enemy.width / 4,
+                            enemy.y - 4,
+                            enemy.width / 2,
+                            4
+                        );
+                        
+                        // Jet tail
+                        ctx.fillRect(
+                            enemy.x + (enemy.direction > 0 ? 0 : enemy.width - 6),
+                            enemy.y - 2,
+                            6,
+                            enemy.height + 4
+                        );
+                    }
                 }
             }
         }
@@ -1212,21 +1320,31 @@
             for (let i = 0; i < explosions.length; i++) {
                 let explosion = explosions[i];
                 
-                // Change colors based on frame
-                let colors = ['#FF0000', '#FFA500', '#FFFF00', '#FFFFFF'];
-                ctx.fillStyle = colors[Math.min(explosion.frame, colors.length - 1)];
-                
-                // Draw explosion as expanding circle
-                let size = explosion.width * (1 + explosion.frame * 0.5);
-                ctx.beginPath();
-                ctx.arc(
-                    explosion.x + explosion.width / 2,
-                    explosion.y + explosion.height / 2,
-                    size / 2,
-                    0,
-                    Math.PI * 2
-                );
-                ctx.fill();
+                if (spriteImage.complete && explosion.frame < sprites.explosion.length) {
+                    let sprite = sprites.explosion[explosion.frame];
+                    ctx.drawImage(
+                        spriteImage,
+                        sprite.x, sprite.y, sprite.width, sprite.height,
+                        explosion.x, explosion.y, explosion.width * 2, explosion.height * 2
+                    );
+                } else {
+                    // Fallback if sprite not loaded
+                    // Change colors based on frame
+                    let colors = ['#FF0000', '#FFA500', '#FFFF00', '#FFFFFF'];
+                    ctx.fillStyle = colors[Math.min(explosion.frame, colors.length - 1)];
+                    
+                    // Draw explosion as expanding circle
+                    let size = explosion.width * (1 + explosion.frame * 0.5);
+                    ctx.beginPath();
+                    ctx.arc(
+                        explosion.x + explosion.width / 2,
+                        explosion.y + explosion.height / 2,
+                        size / 2,
+                        0,
+                        Math.PI * 2
+                    );
+                    ctx.fill();
+                }
             }
         }
         
@@ -1296,9 +1414,13 @@
         }
         
         function updateUI() {
-            document.getElementById('lives').textContent = 'Lives: ' + lives;
-            document.getElementById('rescued').textContent = 'Hostages: ' + rescuedHostages + '/' + MAX_HOSTAGES + ' (Carrying: ' + carriedHostages + ')';
-            document.getElementById('score').textContent = 'Score: ' + score;
+            const livesElement = document.getElementById('lives');
+            const rescuedElement = document.getElementById('rescued');
+            const scoreElement = document.getElementById('score');
+            
+            if (livesElement) livesElement.textContent = 'Lives: ' + lives;
+            if (rescuedElement) rescuedElement.textContent = 'Hostages: ' + rescuedHostages + '/' + MAX_HOSTAGES + ' (Carrying: ' + carriedHostages + ')';
+            if (scoreElement) scoreElement.textContent = 'Score: ' + score;
         }
         
         function collision(obj1, obj2) {
@@ -1309,72 +1431,118 @@
         }
         
         function setupTouchControls() {
-            // Direction buttons
-            document.getElementById('leftBtn').addEventListener('touchstart', function(e) {
-                e.preventDefault();
-                touchControls.left = true;
-            }, { passive: false });
-            
-            document.getElementById('leftBtn').addEventListener('touchend', function() {
-                touchControls.left = false;
-            });
-            
-            document.getElementById('rightBtn').addEventListener('touchstart', function(e) {
-                e.preventDefault();
-                touchControls.right = true;
-            }, { passive: false });
-            
-            document.getElementById('rightBtn').addEventListener('touchend', function() {
-                touchControls.right = false;
-            });
-            
-            document.getElementById('upBtn').addEventListener('touchstart', function(e) {
-                e.preventDefault();
-                touchControls.up = true;
-            }, { passive: false });
-            
-            document.getElementById('upBtn').addEventListener('touchend', function() {
-                touchControls.up = false;
-            });
-            
-            document.getElementById('downBtn').addEventListener('touchstart', function(e) {
-                e.preventDefault();
-                touchControls.down = true;
-            }, { passive: false });
-            
-            document.getElementById('downBtn').addEventListener('touchend', function() {
-                touchControls.down = false;
-            });
-            
-            // Action buttons
-            document.getElementById('shootBtn').addEventListener('touchstart', function(e) {
-                e.preventDefault();
-                touchControls.shoot = true;
-            }, { passive: false });
-            
-            document.getElementById('shootBtn').addEventListener('touchend', function() {
-                touchControls.shoot = false;
-            });
-            
-            document.getElementById('bombBtn').addEventListener('touchstart', function(e) {
-                e.preventDefault();
-                touchControls.bomb = true;
-            }, { passive: false });
-            
-            document.getElementById('bombBtn').addEventListener('touchend', function() {
-                touchControls.bomb = false;
-            });
-            
-            // Start/restart game on touch for title/game-over screens
-            canvas.addEventListener('touchstart', function(e) {
-                if (gameState === "title" || gameState === "game-over" || gameState === "win") {
-                    startGame();
+            try {
+                // Direction buttons
+                const leftBtn = document.getElementById('leftBtn');
+                if (leftBtn) {
+                    leftBtn.addEventListener('touchstart', function(e) {
+                        e.preventDefault();
+                        touchControls.left = true;
+                    }, { passive: false });
+                    
+                    leftBtn.addEventListener('touchend', function() {
+                        touchControls.left = false;
+                    });
                 }
-            });
+                
+                const rightBtn = document.getElementById('rightBtn');
+                if (rightBtn) {
+                    rightBtn.addEventListener('touchstart', function(e) {
+                        e.preventDefault();
+                        touchControls.right = true;
+                    }, { passive: false });
+                    
+                    rightBtn.addEventListener('touchend', function() {
+                        touchControls.right = false;
+                    });
+                }
+                
+                const upBtn = document.getElementById('upBtn');
+                if (upBtn) {
+                    upBtn.addEventListener('touchstart', function(e) {
+                        e.preventDefault();
+                        touchControls.up = true;
+                    }, { passive: false });
+                    
+                    upBtn.addEventListener('touchend', function() {
+                        touchControls.up = false;
+                    });
+                }
+                
+                const downBtn = document.getElementById('downBtn');
+                if (downBtn) {
+                    downBtn.addEventListener('touchstart', function(e) {
+                        e.preventDefault();
+                        touchControls.down = true;
+                    }, { passive: false });
+                    
+                    downBtn.addEventListener('touchend', function() {
+                        touchControls.down = false;
+                    });
+                }
+                
+                // Action buttons
+                const shootBtn = document.getElementById('shootBtn');
+                if (shootBtn) {
+                    shootBtn.addEventListener('touchstart', function(e) {
+                        e.preventDefault();
+                        touchControls.shoot = true;
+                    }, { passive: false });
+                    
+                    shootBtn.addEventListener('touchend', function() {
+                        touchControls.shoot = false;
+                    });
+                }
+                
+                const bombBtn = document.getElementById('bombBtn');
+                if (bombBtn) {
+                    bombBtn.addEventListener('touchstart', function(e) {
+                        e.preventDefault();
+                        touchControls.bomb = true;
+                    }, { passive: false });
+                    
+                    bombBtn.addEventListener('touchend', function() {
+                        touchControls.bomb = false;
+                    });
+                }
+                
+                // Start/restart game on touch for title/game-over screens
+                if (canvas) {
+                    canvas.addEventListener('touchstart', function(e) {
+                        if (gameState === "title" || gameState === "game-over" || gameState === "win") {
+                            startGame();
+                        }
+                    });
+                }
+            } catch (error) {
+                console.error("Error setting up touch controls:", error);
+            }
+        }
+        
+        // Add error handling for game initialization
+        function safeInit() {
+            try {
+                init();
+            } catch (error) {
+                console.error("Error initializing game:", error);
+                // Add visible error message to the page
+                const gameContainer = document.querySelector('.game-container');
+                if (gameContainer) {
+                    const errorMsg = document.createElement('div');
+                    errorMsg.style.color = 'red';
+                    errorMsg.style.padding = '10px';
+                    errorMsg.textContent = 'Error loading game: ' + error.message;
+                    gameContainer.appendChild(errorMsg);
+                }
+            }
         }
         
         // Initialize the game when the window loads
-        window.onload = init;
+        if (document.readyState === 'loading') {
+            window.addEventListener('DOMContentLoaded', safeInit);
+        } else {
+            safeInit();
+        }
     </script>
 </body>
 </html>
