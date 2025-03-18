@@ -354,16 +354,24 @@
             // Apply gravity
             player.vy += GRAVITY;
             
-            // Check for collisions with the level
-            handleCollisions();
-            
-            // Update player position
+            // Update player position horizontally first
             player.x += player.vx;
-            player.y += player.vy;
             
-            // Keep player within bounds
+            // Check for horizontal collisions
+            handleHorizontalCollisions();
+            
+            // Keep player within horizontal bounds
             if (player.x < 0) player.x = 0;
             if (player.x > canvas.width - player.width) player.x = canvas.width - player.width;
+            
+            // Update player position vertically
+            player.y += player.vy;
+            
+            // Check for vertical collisions
+            handleVerticalCollisions();
+            
+            // Keep player within vertical bounds
+            if (player.y < 0) player.y = 0;
             
             // Update bullets
             updateBullets();
@@ -426,8 +434,48 @@
             }
         }
         
-        // Handle collisions with the level
-        function handleCollisions() {
+        // Handle horizontal collisions with the level
+        function handleHorizontalCollisions() {
+            // Collision detection with level tiles
+            let playerLeft = Math.floor(player.x / TILE_SIZE);
+            let playerRight = Math.floor((player.x + player.width - 1) / TILE_SIZE);
+            let playerTop = Math.floor(player.y / TILE_SIZE);
+            let playerBottom = Math.floor((player.y + player.height - 1) / TILE_SIZE);
+            
+            // Ensure player tile coordinates are within bounds
+            playerLeft = Math.max(0, Math.min(level[0].length - 1, playerLeft));
+            playerRight = Math.max(0, Math.min(level[0].length - 1, playerRight));
+            playerTop = Math.max(0, Math.min(level.length - 1, playerTop));
+            playerBottom = Math.max(0, Math.min(level.length - 1, playerBottom));
+            
+            // Check surrounding tiles
+            for (let y = playerTop; y <= playerBottom; y++) {
+                for (let x = playerLeft; x <= playerRight; x++) {
+                    // Ensure we don't check out of bounds
+                    if (y >= 0 && y < level.length && x >= 0 && x < level[0].length) {
+                        if (level[y][x] === 1) {
+                            // Calculate tile boundaries
+                            let tileLeft = x * TILE_SIZE;
+                            let tileRight = tileLeft + TILE_SIZE;
+                            
+                            // Collision from right
+                            if (player.vx < 0 && player.x < tileRight && player.x + player.width > tileRight) {
+                                player.x = tileRight;
+                                player.vx = 0;
+                            }
+                            // Collision from left
+                            else if (player.vx > 0 && player.x + player.width > tileLeft && player.x < tileLeft) {
+                                player.x = tileLeft - player.width;
+                                player.vx = 0;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Handle vertical collisions with the level
+        function handleVerticalCollisions() {
             player.grounded = false;
             
             // Collision detection with level tiles
@@ -448,33 +496,21 @@
                     // Ensure we don't check out of bounds
                     if (y >= 0 && y < level.length && x >= 0 && x < level[0].length) {
                         if (level[y][x] === 1) {
-                            // Collision detected, handle response
-                            // Calculate overlap
-                            let tileLeft = x * TILE_SIZE;
-                            let tileRight = tileLeft + TILE_SIZE;
+                            // Calculate tile boundaries
                             let tileTop = y * TILE_SIZE;
                             let tileBottom = tileTop + TILE_SIZE;
                             
-                            // Vertical collisions first (prioritize ground detection)
+                            // Collision from bottom (ground)
                             if (player.vy > 0 && player.y + player.height > tileTop && player.y < tileTop) {
                                 player.y = tileTop - player.height;
                                 player.vy = 0;
                                 player.grounded = true;
                                 player.jumping = false;
                             }
-                            // Collision from top
+                            // Collision from top (ceiling)
                             else if (player.vy < 0 && player.y < tileBottom && player.y + player.height > tileBottom) {
                                 player.y = tileBottom;
                                 player.vy = 0;
-                            }
-                            // Horizontal collisions
-                            else if (player.vx < 0 && player.x < tileRight && player.x + player.width > tileRight) {
-                                player.x = tileRight;
-                                player.vx = 0;
-                            }
-                            else if (player.vx > 0 && player.x + player.width > tileLeft && player.x < tileLeft) {
-                                player.x = tileLeft - player.width;
-                                player.vx = 0;
                             }
                         }
                     }
@@ -486,6 +522,8 @@
                 loseLife();
             }
         }
+        
+
         
         // Shoot a bullet
         function shoot() {
