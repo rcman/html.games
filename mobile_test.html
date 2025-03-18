@@ -3,552 +3,415 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Mobile Shooting Game</title>
+    <title>Simple Mobile Shooting Game</title>
     <style>
-        body {
+        * {
             margin: 0;
             padding: 0;
-            overflow: hidden;
-            background-color: #111;
-            touch-action: none;
-            -webkit-touch-callout: none;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-            position: fixed;
+            box-sizing: border-box;
+        }
+        
+        html, body {
             width: 100%;
             height: 100%;
-        }
-        #gameCanvas {
-            display: block;
+            overflow: hidden;
+            touch-action: none;
             background-color: #222;
         }
-        #mobileControls {
-            position: fixed;
-            bottom: 20px;
-            left: 0;
+        
+        #gameCanvas {
+            display: block;
             width: 100%;
-            display: flex;
-            justify-content: space-between;
-            padding: 0 20px;
-            box-sizing: border-box;
-            opacity: 0.7;
-            z-index: 100;
-            pointer-events: auto;
+            height: 100%;
+            background-color: #222;
         }
-        .controlArea {
-            width: 120px;
-            height: 120px;
-            background-color: rgba(255, 255, 255, 0.2);
-            border-radius: 60px;
-            position: relative;
-            border: 2px solid rgba(255, 255, 255, 0.5);
+        
+        #leftControl, #rightControl {
+            position: fixed;
+            width: 100px;
+            height: 100px;
+            background-color: rgba(255, 255, 255, 0.3);
+            border-radius: 50px;
+            bottom: 30px;
         }
-        #joystick, #shootButton {
-            width: 50px;
-            height: 50px;
-            background-color: rgba(255, 255, 255, 0.7);
-            border-radius: 25px;
-            position: absolute;
-            top: 35px;
-            left: 35px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        
+        #leftControl {
+            left: 30px;
         }
-        #shootButton {
-            background-color: rgba(255, 0, 0, 0.7);
+        
+        #rightControl {
+            right: 30px;
+            background-color: rgba(255, 0, 0, 0.3);
         }
-        #scoreDisplay {
+        
+        #score {
             position: fixed;
             top: 10px;
             left: 10px;
             color: white;
             font-family: Arial, sans-serif;
+            font-size: 20px;
+        }
+        
+        #startScreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        
+        #startButton {
+            margin-top: 20px;
+            padding: 10px 20px;
+            background-color: #3498db;
+            color: white;
+            border: none;
+            border-radius: 5px;
             font-size: 18px;
+            cursor: pointer;
         }
     </style>
 </head>
 <body>
     <canvas id="gameCanvas"></canvas>
-    <div id="scoreDisplay">Score: 0</div>
+    <div id="leftControl"></div>
+    <div id="rightControl"></div>
+    <div id="score">Score: 0</div>
     
-    <div id="mobileControls">
-        <div class="controlArea" id="joystickArea">
-            <div id="joystick"></div>
-        </div>
-        <div class="controlArea" id="shootArea">
-            <div id="shootButton"></div>
-        </div>
+    <div id="startScreen">
+        <h1>Mobile Shooting Game</h1>
+        <p>Left side: Move | Right side: Shoot</p>
+        <button id="startButton">Start Game</button>
     </div>
-
+    
     <script>
-        // Game variables
+        // Game elements
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
-        const scoreDisplay = document.getElementById('scoreDisplay');
+        const scoreDisplay = document.getElementById('score');
+        const leftControl = document.getElementById('leftControl');
+        const rightControl = document.getElementById('rightControl');
+        const startScreen = document.getElementById('startScreen');
+        const startButton = document.getElementById('startButton');
         
-        // Mobile elements
-        const joystickArea = document.getElementById('joystickArea');
-        const joystick = document.getElementById('joystick');
-        const shootArea = document.getElementById('shootArea');
-        const shootButton = document.getElementById('shootButton');
-        const mobileControls = document.getElementById('mobileControls');
-
-        // Game state
+        // Set canvas size
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+        
+        // Game variables
+        let gameRunning = false;
         let score = 0;
-        let isMobile = false;
-        let gameOver = false;
+        let lastFrameTime = 0;
         
-        // Check if device is mobile
-        function checkMobile() {
-            return /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        }
-        
-        // Player properties
+        // Player
         const player = {
-            x: 0,
-            y: 0,
-            width: 30,
-            height: 30,
-            speed: 5,
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            radius: 20,
             color: '#3498db',
-            moveX: 0,
-            moveY: 0,
-            shooting: false,
-            lastShot: 0,
-            shotDelay: 300 // ms between shots
+            speed: 5,
+            dx: 0,
+            dy: 0
         };
         
-        // Bullet properties
+        // Bullets
         const bullets = [];
         const bulletSpeed = 10;
-        const bulletSize = 5;
+        const bulletRadius = 5;
         
-        // Enemy properties
+        // Enemies
         const enemies = [];
-        const enemySize = 25;
+        const enemyRadius = 15;
         const enemySpeed = 2;
-        let enemySpawnRate = 1500; // ms between enemy spawns
+        const enemySpawnRate = 1000; // ms
         let lastEnemySpawn = 0;
         
-        // Resize canvas to fit window
-        function resizeCanvas() {
+        // Start the game
+        startButton.addEventListener('click', function() {
+            startScreen.style.display = 'none';
+            gameRunning = true;
+            requestAnimationFrame(gameLoop);
+        });
+        
+        // Handle window resize
+        window.addEventListener('resize', function() {
             canvas.width = window.innerWidth;
             canvas.height = window.innerHeight;
-            player.x = canvas.width / 2 - player.width / 2;
-            player.y = canvas.height / 2 - player.height / 2;
-        }
-        
-        // Initialize the game
-        function init() {
-            isMobile = true; // Force mobile controls for testing
-            resizeCanvas();
-            window.addEventListener('resize', resizeCanvas);
             
-            // Always show mobile controls for testing
-            mobileControls.style.display = 'flex';
-            
-            // Setup keyboard controls for desktop
-            window.addEventListener('keydown', handleKeyDown);
-            window.addEventListener('keyup', handleKeyUp);
-            
-            // Mouse shooting for desktop
-            canvas.addEventListener('mousedown', () => {
-                player.shooting = true;
-            });
-            canvas.addEventListener('mouseup', () => {
-                player.shooting = false;
-            });
-            canvas.addEventListener('mousemove', (e) => {
-                // Update player aim direction based on mouse position
-                player.aimX = e.clientX;
-                player.aimY = e.clientY;
-            });
-            
-            // Setup mobile touch controls
-            setupMobileControls();
-            
-            // Debug message
-            console.log("Game initialized, mobile:", isMobile);
-            
-            // Start game loop
-            requestAnimationFrame(gameLoop);
-        }
-        
-        // Handle keyboard input
-        function handleKeyDown(e) {
-            switch(e.key) {
-                case 'ArrowUp':
-                case 'w':
-                    player.moveY = -1;
-                    break;
-                case 'ArrowDown':
-                case 's':
-                    player.moveY = 1;
-                    break;
-                case 'ArrowLeft':
-                case 'a':
-                    player.moveX = -1;
-                    break;
-                case 'ArrowRight':
-                case 'd':
-                    player.moveX = 1;
-                    break;
-                case ' ':
-                    player.shooting = true;
-                    break;
+            // Reset player position on resize
+            if (!gameRunning) {
+                player.x = canvas.width / 2;
+                player.y = canvas.height / 2;
             }
-        }
+        });
         
-        function handleKeyUp(e) {
-            switch(e.key) {
-                case 'ArrowUp':
-                case 'w':
-                    if (player.moveY < 0) player.moveY = 0;
-                    break;
-                case 'ArrowDown':
-                case 's':
-                    if (player.moveY > 0) player.moveY = 0;
-                    break;
-                case 'ArrowLeft':
-                case 'a':
-                    if (player.moveX < 0) player.moveX = 0;
-                    break;
-                case 'ArrowRight':
-                case 'd':
-                    if (player.moveX > 0) player.moveX = 0;
-                    break;
-                case ' ':
-                    player.shooting = false;
-                    break;
-            }
-        }
+        // Touch controls - Left control (movement)
+        let leftTouching = false;
+        let leftTouchX = 0;
+        let leftTouchY = 0;
         
-        // Setup mobile controls
-        function setupMobileControls() {
-            // Joystick variables
-            let joystickActive = false;
-            let joystickStartX = 0;
-            let joystickStartY = 0;
-            
-            // Joystick touch events
-            joystickArea.addEventListener('touchstart', (e) => {
-                e.preventDefault();
+        leftControl.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            leftTouching = true;
+            const touch = e.touches[0];
+            leftTouchX = touch.clientX;
+            leftTouchY = touch.clientY;
+        }, { passive: false });
+        
+        leftControl.addEventListener('touchmove', function(e) {
+            e.preventDefault();
+            if (leftTouching) {
                 const touch = e.touches[0];
-                const rect = joystickArea.getBoundingClientRect();
-                joystickStartX = rect.left + rect.width / 2;
-                joystickStartY = rect.top + rect.height / 2;
-                joystickActive = true;
-                updateJoystick(touch.clientX, touch.clientY);
-                console.log("Joystick touch start", touch.clientX, touch.clientY);
-            }, { passive: false });
-            
-            joystickArea.addEventListener('touchmove', (e) => {
-                e.preventDefault();
-                if (joystickActive) {
-                    const touch = e.touches[0];
-                    updateJoystick(touch.clientX, touch.clientY);
-                    console.log("Joystick moving", touch.clientX, touch.clientY);
+                const dx = touch.clientX - leftTouchX;
+                const dy = touch.clientY - leftTouchY;
+                
+                // Normalize and scale movement
+                const length = Math.sqrt(dx * dx + dy * dy);
+                if (length > 0) {
+                    player.dx = (dx / length) * player.speed;
+                    player.dy = (dy / length) * player.speed;
                 }
-            }, { passive: false });
-            
-            joystickArea.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                joystickActive = false;
-                resetJoystick();
-                console.log("Joystick touch end");
-            }, { passive: false });
-            
-            // Shoot button touch events
-            shootArea.addEventListener('touchstart', (e) => {
-                e.preventDefault();
-                player.shooting = true;
-                console.log("Shoot button pressed");
-            }, { passive: false });
-            
-            shootArea.addEventListener('touchend', (e) => {
-                e.preventDefault();
-                player.shooting = false;
-                console.log("Shoot button released");
-            }, { passive: false });
-            
-            // Update joystick position and player movement
-            function updateJoystick(touchX, touchY) {
-                // Calculate distance from center
-                let deltaX = touchX - joystickStartX;
-                let deltaY = touchY - joystickStartY;
-                const distance = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
-                
-                // Limit joystick to control area radius
-                const maxDistance = 35;
-                if (distance > maxDistance) {
-                    deltaX = deltaX * maxDistance / distance;
-                    deltaY = deltaY * maxDistance / distance;
-                }
-                
-                // Update joystick position
-                joystick.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
-                
-                // Update player movement - scale values to ensure good responsiveness
-                player.moveX = deltaX / maxDistance;
-                player.moveY = deltaY / maxDistance;
-                
-                // Update player aim direction
-                player.aimX = player.x + player.width / 2 + deltaX * 10;
-                player.aimY = player.y + player.height / 2 + deltaY * 10;
-                
-                console.log("Player movement updated:", player.moveX, player.moveY);
             }
-            
-            // Reset joystick position and player movement
-            function resetJoystick() {
-                joystick.style.transform = 'translate(0px, 0px)';
-                player.moveX = 0;
-                player.moveY = 0;
+        }, { passive: false });
+        
+        leftControl.addEventListener('touchend', function(e) {
+            e.preventDefault();
+            leftTouching = false;
+            player.dx = 0;
+            player.dy = 0;
+        }, { passive: false });
+        
+        // Touch controls - Right control (shooting)
+        rightControl.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            shoot();
+        }, { passive: false });
+        
+        // Keyboard controls for testing
+        window.addEventListener('keydown', function(e) {
+            switch(e.key) {
+                case 'ArrowUp':
+                case 'w':
+                    player.dy = -player.speed;
+                    break;
+                case 'ArrowDown':
+                case 's':
+                    player.dy = player.speed;
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                    player.dx = -player.speed;
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                    player.dx = player.speed;
+                    break;
+                case ' ':
+                    shoot();
+                    break;
             }
-        }
+        });
+        
+        window.addEventListener('keyup', function(e) {
+            switch(e.key) {
+                case 'ArrowUp':
+                case 'w':
+                case 'ArrowDown':
+                case 's':
+                    player.dy = 0;
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                case 'ArrowRight':
+                case 'd':
+                    player.dx = 0;
+                    break;
+            }
+        });
         
         // Shoot a bullet
         function shoot() {
-            const now = Date.now();
-            if (now - player.lastShot < player.shotDelay) return;
-            
-            player.lastShot = now;
-            
-            // Calculate bullet direction
-            let dirX = 1;
-            let dirY = 0;
-            
-            // If aiming with mouse/touch
-            if (player.aimX !== undefined && player.aimY !== undefined) {
-                const playerCenterX = player.x + player.width / 2;
-                const playerCenterY = player.y + player.height / 2;
-                const angle = Math.atan2(player.aimY - playerCenterY, player.aimX - playerCenterX);
-                dirX = Math.cos(angle);
-                dirY = Math.sin(angle);
+            // Create 8 bullets in different directions
+            for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 4) {
+                bullets.push({
+                    x: player.x,
+                    y: player.y,
+                    radius: bulletRadius,
+                    color: '#f39c12',
+                    dx: Math.cos(angle) * bulletSpeed,
+                    dy: Math.sin(angle) * bulletSpeed
+                });
             }
-            
-            bullets.push({
-                x: player.x + player.width / 2 - bulletSize / 2,
-                y: player.y + player.height / 2 - bulletSize / 2,
-                dirX: dirX,
-                dirY: dirY,
-                size: bulletSize,
-                color: '#F39C12'
-            });
         }
         
-        // Spawn enemies
-        function spawnEnemy() {
-            const now = Date.now();
-            if (now - lastEnemySpawn < enemySpawnRate) return;
-            
-            lastEnemySpawn = now;
-            
-            // Spawn from a random edge of the screen
-            let x, y;
-            const side = Math.floor(Math.random() * 4);
-            
-            switch(side) {
-                case 0: // Top
-                    x = Math.random() * canvas.width;
-                    y = -enemySize;
-                    break;
-                case 1: // Right
-                    x = canvas.width + enemySize;
-                    y = Math.random() * canvas.height;
-                    break;
-                case 2: // Bottom
-                    x = Math.random() * canvas.width;
-                    y = canvas.height + enemySize;
-                    break;
-                case 3: // Left
-                    x = -enemySize;
-                    y = Math.random() * canvas.height;
-                    break;
+        // Spawn an enemy
+        function spawnEnemy(timestamp) {
+            if (timestamp - lastEnemySpawn > enemySpawnRate) {
+                lastEnemySpawn = timestamp;
+                
+                // Decide which edge to spawn from
+                const edge = Math.floor(Math.random() * 4);
+                let x, y;
+                
+                switch(edge) {
+                    case 0: // Top
+                        x = Math.random() * canvas.width;
+                        y = -enemyRadius;
+                        break;
+                    case 1: // Right
+                        x = canvas.width + enemyRadius;
+                        y = Math.random() * canvas.height;
+                        break;
+                    case 2: // Bottom
+                        x = Math.random() * canvas.width;
+                        y = canvas.height + enemyRadius;
+                        break;
+                    case 3: // Left
+                        x = -enemyRadius;
+                        y = Math.random() * canvas.height;
+                        break;
+                }
+                
+                enemies.push({
+                    x: x,
+                    y: y,
+                    radius: enemyRadius,
+                    color: '#e74c3c'
+                });
             }
-            
-            enemies.push({
-                x: x,
-                y: y,
-                size: enemySize,
-                color: '#E74C3C',
-                health: 1
-            });
-            
-            // Increase difficulty over time
-            enemySpawnRate = Math.max(300, enemySpawnRate - 10);
+        }
+        
+        // Check collision between two circles
+        function checkCollision(x1, y1, r1, x2, y2, r2) {
+            const dx = x2 - x1;
+            const dy = y2 - y1;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            return distance < r1 + r2;
         }
         
         // Update game state
-        function update() {
-            // Player movement
-            player.x += player.moveX * player.speed;
-            player.y += player.moveY * player.speed;
+        function update(timestamp) {
+            const deltaTime = timestamp - lastFrameTime;
+            lastFrameTime = timestamp;
+            
+            // Update player position
+            player.x += player.dx;
+            player.y += player.dy;
             
             // Keep player within canvas bounds
-            player.x = Math.max(0, Math.min(canvas.width - player.width, player.x));
-            player.y = Math.max(0, Math.min(canvas.height - player.height, player.y));
+            player.x = Math.max(player.radius, Math.min(canvas.width - player.radius, player.x));
+            player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
             
-            // Shooting
-            if (player.shooting) {
-                shoot();
-            }
+            // Spawn enemies
+            spawnEnemy(timestamp);
             
             // Update bullets
             for (let i = bullets.length - 1; i >= 0; i--) {
                 const bullet = bullets[i];
-                bullet.x += bullet.dirX * bulletSpeed;
-                bullet.y += bullet.dirY * bulletSpeed;
+                bullet.x += bullet.dx;
+                bullet.y += bullet.dy;
                 
-                // Remove bullets that are out of bounds
-                if (bullet.x < -bullet.size || bullet.x > canvas.width + bullet.size ||
-                    bullet.y < -bullet.size || bullet.y > canvas.height + bullet.size) {
+                // Remove bullets that are off-screen
+                if (bullet.x < -bullet.radius || bullet.x > canvas.width + bullet.radius ||
+                    bullet.y < -bullet.radius || bullet.y > canvas.height + bullet.radius) {
                     bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check for bullet collisions with enemies
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    if (checkCollision(bullet.x, bullet.y, bullet.radius, enemy.x, enemy.y, enemy.radius)) {
+                        bullets.splice(i, 1);
+                        enemies.splice(j, 1);
+                        score += 10;
+                        scoreDisplay.textContent = `Score: ${score}`;
+                        break;
+                    }
                 }
             }
-            
-            // Spawn enemies
-            spawnEnemy();
             
             // Update enemies
             for (let i = enemies.length - 1; i >= 0; i--) {
                 const enemy = enemies[i];
                 
                 // Move enemy towards player
-                const playerCenterX = player.x + player.width / 2;
-                const playerCenterY = player.y + player.height / 2;
-                const enemyCenterX = enemy.x + enemy.size / 2;
-                const enemyCenterY = enemy.y + enemy.size / 2;
+                const dx = player.x - enemy.x;
+                const dy = player.y - enemy.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
                 
-                const angle = Math.atan2(playerCenterY - enemyCenterY, playerCenterX - enemyCenterX);
-                enemy.x += Math.cos(angle) * enemySpeed;
-                enemy.y += Math.sin(angle) * enemySpeed;
-                
-                // Check for collision with bullets
-                for (let j = bullets.length - 1; j >= 0; j--) {
-                    const bullet = bullets[j];
-                    
-                    if (collision(
-                        bullet.x, bullet.y, bullet.size, bullet.size,
-                        enemy.x, enemy.y, enemy.size, enemy.size
-                    )) {
-                        enemy.health--;
-                        bullets.splice(j, 1);
-                        
-                        if (enemy.health <= 0) {
-                            enemies.splice(i, 1);
-                            score += 10;
-                            scoreDisplay.textContent = `Score: ${score}`;
-                        }
-                        break;
-                    }
+                if (distance > 0) {
+                    enemy.x += (dx / distance) * enemySpeed;
+                    enemy.y += (dy / distance) * enemySpeed;
                 }
                 
-                // Check for collision with player (game over)
-                if (!gameOver && collision(
-                    player.x, player.y, player.width, player.height,
-                    enemy.x, enemy.y, enemy.size, enemy.size
-                )) {
-                    gameOver = true;
+                // Check for collision with player
+                if (checkCollision(player.x, player.y, player.radius, enemy.x, enemy.y, enemy.radius)) {
+                    // Game over
+                    gameRunning = false;
+                    enemies.length = 0;
+                    bullets.length = 0;
+                    score = 0;
+                    player.x = canvas.width / 2;
+                    player.y = canvas.height / 2;
+                    player.dx = 0;
+                    player.dy = 0;
+                    
+                    startScreen.style.display = 'flex';
+                    startScreen.querySelector('h1').textContent = 'Game Over';
+                    scoreDisplay.textContent = 'Score: 0';
+                    return;
                 }
             }
         }
         
-        // Collision detection
-        function collision(x1, y1, w1, h1, x2, y2, w2, h2) {
-            return x1 < x2 + w2 &&
-                   x1 + w1 > x2 &&
-                   y1 < y2 + h2 &&
-                   y1 + h1 > y2;
-        }
-        
-        // Render the game
+        // Render game
         function render() {
             // Clear canvas
             ctx.clearRect(0, 0, canvas.width, canvas.height);
             
             // Draw player
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
             ctx.fillStyle = player.color;
-            ctx.fillRect(player.x, player.y, player.width, player.height);
+            ctx.fill();
+            ctx.closePath();
             
             // Draw bullets
-            ctx.fillStyle = '#F39C12';
-            bullets.forEach(bullet => {
+            bullets.forEach(function(bullet) {
                 ctx.beginPath();
-                ctx.arc(bullet.x + bullet.size / 2, bullet.y + bullet.size / 2, bullet.size / 2, 0, Math.PI * 2);
+                ctx.arc(bullet.x, bullet.y, bullet.radius, 0, Math.PI * 2);
+                ctx.fillStyle = bullet.color;
                 ctx.fill();
+                ctx.closePath();
             });
             
             // Draw enemies
-            enemies.forEach(enemy => {
-                ctx.fillStyle = enemy.color;
+            enemies.forEach(function(enemy) {
                 ctx.beginPath();
-                ctx.arc(enemy.x + enemy.size / 2, enemy.y + enemy.size / 2, enemy.size / 2, 0, Math.PI * 2);
+                ctx.arc(enemy.x, enemy.y, enemy.radius, 0, Math.PI * 2);
+                ctx.fillStyle = enemy.color;
                 ctx.fill();
+                ctx.closePath();
             });
-            
-            // Game over screen
-            if (gameOver) {
-                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                ctx.fillRect(0, 0, canvas.width, canvas.height);
-                
-                ctx.fillStyle = 'white';
-                ctx.font = '48px Arial';
-                ctx.textAlign = 'center';
-                ctx.fillText('GAME OVER', canvas.width / 2, canvas.height / 2 - 24);
-                
-                ctx.font = '24px Arial';
-                ctx.fillText(`Score: ${score}`, canvas.width / 2, canvas.height / 2 + 24);
-                
-                ctx.font = '18px Arial';
-                ctx.fillText('Tap or click to restart', canvas.width / 2, canvas.height / 2 + 60);
-            }
         }
         
         // Game loop
-        function gameLoop() {
-            if (!gameOver) {
-                update();
+        function gameLoop(timestamp) {
+            if (gameRunning) {
+                update(timestamp);
+                render();
+                requestAnimationFrame(gameLoop);
             }
-            render();
-            requestAnimationFrame(gameLoop);
         }
-        
-        // Reset game
-        function resetGame() {
-            player.x = canvas.width / 2 - player.width / 2;
-            player.y = canvas.height / 2 - player.height / 2;
-            player.moveX = 0;
-            player.moveY = 0;
-            player.shooting = false;
-            
-            bullets.length = 0;
-            enemies.length = 0;
-            
-            score = 0;
-            scoreDisplay.textContent = `Score: ${score}`;
-            enemySpawnRate = 1500;
-            lastEnemySpawn = 0;
-            gameOver = false;
-        }
-        
-        // Restart game on click/tap when game over
-        canvas.addEventListener('click', () => {
-            if (gameOver) {
-                resetGame();
-            }
-        });
-        
-        canvas.addEventListener('touchstart', (e) => {
-            if (gameOver) {
-                e.preventDefault();
-                resetGame();
-            }
-        }, { passive: false });
-        
-        // Start the game when the page loads
-        window.onload = init;
     </script>
 </body>
 </html>
