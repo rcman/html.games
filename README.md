@@ -52,6 +52,8 @@ Game Link:[Mobile Rick Dangerous](http://htmlpreview.github.io/?https://github.c
 <br>
 Game Link:[Mobile Galaga](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/poe_galaga.html)
 <br>
-Game Link:[Mobile Silkworm](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/por_silkworm.html)
+Game Link:[Mobile Silkworm](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/poe_silkworm.html)
 <br>
-Game Link:[Mobile Rick Dangerous](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/por_rickdangerous.html)
+Game Link:[Mobile Rick Dangerous](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/poe_rickdangerous.html)
+<br>
+Game Link:[Mobile Chop Lifter](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/poe_choplifter.html)
