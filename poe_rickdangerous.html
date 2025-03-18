@@ -246,6 +246,10 @@
             canvas.width = level[0].length * TILE_SIZE;
             canvas.height = level.length * TILE_SIZE;
             
+            // Make canvas responsive
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
             // Initialize enemies
             enemies = [
                 { x: 300, y: 160, width: 24, height: 32, direction: -1, speed: 1 },
@@ -278,6 +282,7 @@
             gameWon = false;
             lives = MAX_LIVES;
             score = 0;
+            bullets = [];
             
             // Setup event listeners for keyboard input
             window.addEventListener('keydown', function(e) {
@@ -306,6 +311,22 @@
             
             // Update the UI
             updateUI();
+        }
+        
+        // Make canvas responsive while maintaining aspect ratio
+        function resizeCanvas() {
+            const container = canvas.parentElement;
+            const containerWidth = container.clientWidth;
+            const aspectRatio = canvas.width / canvas.height;
+            
+            // Set canvas display size (CSS pixels)
+            const containerStyle = window.getComputedStyle(container);
+            const paddingLeft = parseFloat(containerStyle.paddingLeft);
+            const paddingRight = parseFloat(containerStyle.paddingRight);
+            const availableWidth = containerWidth - paddingLeft - paddingRight;
+            
+            canvas.style.width = availableWidth + 'px';
+            canvas.style.height = (availableWidth / aspectRatio) + 'px';
         }
         
         // Game loop
@@ -411,9 +432,15 @@
             
             // Collision detection with level tiles
             let playerLeft = Math.floor(player.x / TILE_SIZE);
-            let playerRight = Math.floor((player.x + player.width) / TILE_SIZE);
+            let playerRight = Math.floor((player.x + player.width - 1) / TILE_SIZE);
             let playerTop = Math.floor(player.y / TILE_SIZE);
-            let playerBottom = Math.floor((player.y + player.height) / TILE_SIZE);
+            let playerBottom = Math.floor((player.y + player.height - 1) / TILE_SIZE);
+            
+            // Ensure player tile coordinates are within bounds
+            playerLeft = Math.max(0, Math.min(level[0].length - 1, playerLeft));
+            playerRight = Math.max(0, Math.min(level[0].length - 1, playerRight));
+            playerTop = Math.max(0, Math.min(level.length - 1, playerTop));
+            playerBottom = Math.max(0, Math.min(level.length - 1, playerBottom));
             
             // Check surrounding tiles
             for (let y = playerTop; y <= playerBottom; y++) {
@@ -428,7 +455,7 @@
                             let tileTop = y * TILE_SIZE;
                             let tileBottom = tileTop + TILE_SIZE;
                             
-                            // Collision from bottom
+                            // Vertical collisions first (prioritize ground detection)
                             if (player.vy > 0 && player.y + player.height > tileTop && player.y < tileTop) {
                                 player.y = tileTop - player.height;
                                 player.vy = 0;
@@ -440,12 +467,11 @@
                                 player.y = tileBottom;
                                 player.vy = 0;
                             }
-                            // Collision from right
+                            // Horizontal collisions
                             else if (player.vx < 0 && player.x < tileRight && player.x + player.width > tileRight) {
                                 player.x = tileRight;
                                 player.vx = 0;
                             }
-                            // Collision from left
                             else if (player.vx > 0 && player.x + player.width > tileLeft && player.x < tileLeft) {
                                 player.x = tileLeft - player.width;
                                 player.vx = 0;
@@ -524,15 +550,33 @@
                 enemy.x += enemy.speed * enemy.direction;
                 
                 // Simple AI - change direction at walls or edges
-                let enemyTileX = Math.floor((enemy.x + (enemy.direction > 0 ? enemy.width : 0)) / TILE_SIZE);
+                let nextX = enemy.x + (enemy.direction > 0 ? enemy.width : 0);
+                let enemyTileX = Math.floor(nextX / TILE_SIZE);
                 let enemyTileY = Math.floor((enemy.y + enemy.height) / TILE_SIZE);
                 let enemyTileYBelow = Math.floor((enemy.y + enemy.height + 1) / TILE_SIZE);
                 
+                // Ensure enemy tile coordinates are within bounds
+                enemyTileX = Math.max(0, Math.min(level[0].length - 1, enemyTileX));
+                enemyTileY = Math.max(0, Math.min(level.length - 1, enemyTileY));
+                enemyTileYBelow = Math.max(0, Math.min(level.length - 1, enemyTileYBelow));
+                
                 // Check if hitting a wall or there's no ground ahead
-                if (enemyTileX < 0 || enemyTileX >= level[0].length || 
-                    level[enemyTileY][enemyTileX] === 1 || 
-                    (enemyTileYBelow < level.length && level[enemyTileYBelow][enemyTileX] === 0)) {
+                let hitWall = level[enemyTileY][enemyTileX] === 1;
+                let noGround = enemyTileYBelow < level.length && 
+                               enemyTileX >= 0 && enemyTileX < level[0].length && 
+                               level[enemyTileYBelow][enemyTileX] === 0;
+                
+                if (hitWall || noGround) {
                     enemy.direction *= -1;
+                }
+                
+                // Keep enemy within bounds
+                if (enemy.x < 0) {
+                    enemy.x = 0;
+                    enemy.direction = 1;
+                } else if (enemy.x + enemy.width > canvas.width) {
+                    enemy.x = canvas.width - enemy.width;
+                    enemy.direction = -1;
                 }
                 
                 // Check for collision with player
@@ -544,8 +588,10 @@
         
         // Check for collisions with traps
         function checkTrapCollisions() {
+            if (invincible) return; // Skip trap collision if player is invincible
+            
             for (let i = 0; i < traps.length; i++) {
-                if (collision(player, traps[i]) && !invincible) {
+                if (collision(player, traps[i])) {
                     loseLife();
                     break;
                 }
@@ -857,9 +903,10 @@
             // Restart game on mobile
             canvas.addEventListener('touchstart', function(e) {
                 if (gameOver || gameWon) {
+                    e.preventDefault();
                     init();
                 }
-            });
+            }, { passive: false });
         }
         
         // Initialize the game when the window loads
