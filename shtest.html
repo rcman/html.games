@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Spy Hunter</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            overflow: hidden;
+            touch-action: none;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+        #gameCanvas {
+            display: block;
+            background-color: #333;
+            position: absolute;
+            left: 50%;
+            transform: translateX(-50%);
+            top: 0;
+        }
+        #gameControls {
+            position: fixed;
+            bottom: 10px;
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+        .control-btn {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.4);
+            border: none;
+            color: white;
+            font-size: 20px;
+            display: none;
+        }
+        #mobileControls {
+            position: fixed;
+            bottom: 10px;
+            width: 100%;
+            display: none;
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+        .direction-pad {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .direction-row {
+            display: flex;
+        }
+        .direction-btn {
+            width: 50px;
+            height: 50px;
+            background-color: rgba(255, 255, 255, 0.4);
+            border: none;
+            color: white;
+            font-size: 18px;
+            margin: 5px;
+            border-radius: 10px;
+        }
+        #fireBtn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background-color: rgba(255, 0, 0, 0.6);
+            border: none;
+            color: white;
+            font-size: 16px;
+        }
+        #speedControls {
+            display: flex;
+            flex-direction: column;
+        }
+        .speed-btn {
+            width: 50px;
+            height: 40px;
+            background-color: rgba(255, 255, 255, 0.4);
+            border: none;
+            color: white;
+            font-size: 14px;
+            margin: 5px;
+            border-radius: 10px;
+        }
+        #gameOver, #startScreen {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            display: none;
+        }
+        #startScreen {
+            display: block;
+        }
+        button {
+            cursor: pointer;
+        }
+        #scoreboard {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            z-index: 10;
+        }
+        #livesDisplay {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: white;
+            font-family: 'Courier New', monospace;
+            font-size: 16px;
+            z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    <div id="scoreboard">SCORE: 0</div>
+    <div id="livesDisplay">LIVES: 3</div>
+    
+    <div id="mobileControls">
+        <div class="direction-pad">
+            <div class="direction-row">
+                <button id="leftBtn" class="direction-btn">←</button>
+                <button id="rightBtn" class="direction-btn">→</button>
+            </div>
+        </div>
+        
+        <button id="fireBtn">FIRE</button>
+        
+        <div id="speedControls">
+            <button id="accelerateBtn" class="speed-btn">SPEED+</button>
+            <button id="brakeBtn" class="speed-btn">SPEED-</button>
+        </div>
+    </div>
+    
+    <div id="gameControls">
+        <button id="restartBtn" class="control-btn">RESTART</button>
+    </div>
+    
+    <div id="startScreen">
+        <h1>SPY HUNTER</h1>
+        <p>Use arrow keys to drive, SPACE to fire weapons</p>
+        <p>On mobile, use on-screen controls</p>
+        <button id="startBtn" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 18px;">START GAME</button>
+    </div>
+    
+    <div id="gameOver">
+        <h2>GAME OVER</h2>
+        <p id="finalScore">Your score: 0</p>
+        <button id="restartBtnGameOver" style="padding: 10px 20px; background-color: #4CAF50; color: white; border: none; border-radius: 5px; font-size: 18px;">PLAY AGAIN</button>
+    </div>
+
+    <script>
+        // Game constants and variables
+        const GAME_WIDTH = 480;
+        const GAME_HEIGHT = 640;
+        const ROAD_WIDTH = 280;
+        const LANE_WIDTH = ROAD_WIDTH / 3;
+        const PLAYER_WIDTH = 40;
+        const PLAYER_HEIGHT = 80;
+        const ENEMY_WIDTH = 40;
+        const ENEMY_HEIGHT = 80;
+        const BULLET_WIDTH = 4;
+        const BULLET_HEIGHT = 10;
+        const OIL_SLICK_WIDTH = 50;
+        const OIL_SLICK_HEIGHT = 20;
+        const SMOKE_SCREEN_WIDTH = 100;
+        const SMOKE_SCREEN_HEIGHT = 200;
+        const WEAPON_TRUCK_WIDTH = 50;
+        const WEAPON_TRUCK_HEIGHT = 100;
+        
+        // Game variables
+        let canvas, ctx;
+        let player;
+        let enemies = [];
+        let bullets = [];
+        let roadItems = [];
+        let roadScrollSpeed;
+        let score = 0;
+        let lives = 3;
+        let gameActive = false;
+        let animationFrameId;
+        let lastTime = 0;
+        let isPaused = false;
+        let isMobile = window.innerWidth <= 768;
+        let roadOffset = 0;
+        let grassSegments = [];
+        let nextEnemyTime = 0;
+        let isAccelerating = false;
+        let isBraking = false;
+        let isGoingLeft = false;
+        let isGoingRight = false;
+        let isFiring = false;
+        let roadLines = [];
+        let weaponInventory = {
+            oil: 0,
+            smoke: 0,
+            missile: 0
+        };
+        let currentWeapon = 'machine_gun';
+        let nextWeaponTruckTime = 0;
+        let weaponPickups = [];
+        let smokeScreens = [];
+        let oilSlicks = [];
+        let timeElapsed = 0;
+        let playerInvulnerable = false;
+        let invulnerableTime = 0;
+        let playerBlinkInterval;
+        let isBlinkedVisible = true;
+        
+        // Vehicle types
+        const VehicleTypes = {
+            PLAYER: 'player',
+            CIVILIAN: 'civilian',
+            ENEMY: 'enemy',
+            WEAPON_TRUCK: 'weapon_truck'
+        };
+        
+        // Enemy types with their behaviors
+        const EnemyTypes = {
+            ROAD_LORD: { color: 'red', speed: 2, aggression: 0.8, points: 100 },
+            ENFORCER: { color: 'blue', speed: 3, aggression: 0.6, points: 150 },
+            SWITCH_BLADE: { color: 'purple', speed: 3.5, aggression: 0.9, points: 200 },
+            BARREL_DUMPER: { color: 'green', speed: 1.5, aggression: 0.4, points: 120 }
+        };
+        
+        // Civilian types
+        const CivilianTypes = {
+            STATION_WAGON: { color: 'yellow', speed: 1, points: 50 },
+            SEDAN: { color: 'lightblue', speed: 1.5, points: 50 }
+        };
+        
+        // Setup functions
+        function init() {
+            canvas = document.getElementById('gameCanvas');
+            ctx = canvas.getContext('2d');
+            
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Create road lines
+            for (let i = 0; i < 20; i++) {
+                roadLines.push({
+                    x: GAME_WIDTH / 2 - ROAD_WIDTH / 2 + LANE_WIDTH,
+                    y: -i * 50,
+                    width: 10,
+                    height: 30
+                });
+                
+                roadLines.push({
+                    x: GAME_WIDTH / 2 + LANE_WIDTH / 2,
+                    y: -i * 50,
+                    width: 10,
+                    height: 30
+                });
+            }
+            
+            // Setup event listeners
+            document.addEventListener('keydown', handleKeyDown);
+            document.addEventListener('keyup', handleKeyUp);
+            
+            // Mobile control event listeners
+            setupMobileControls();
+            
+            // Start screen button
+            document.getElementById('startBtn').addEventListener('click', startGame);
+            document.getElementById('restartBtnGameOver').addEventListener('click', restartGame);
+            document.getElementById('restartBtn').addEventListener('click', restartGame);
+            
+            // Initialize grass segments
+            initGrassSegments();
+        }
+        
+        function resizeCanvas() {
+            isMobile = window.innerWidth <= 768;
+            
+            // Calculate appropriate canvas size
+            let canvasWidth = Math.min(window.innerWidth, GAME_WIDTH);
+            let scaleFactor = canvasWidth / GAME_WIDTH;
+            let canvasHeight = GAME_HEIGHT * scaleFactor;
+            
+            canvas.width = GAME_WIDTH;
+            canvas.height = GAME_HEIGHT;
+            
+            // Apply CSS scaling instead of changing canvas dimensions
+            canvas.style.width = `${canvasWidth}px`;
+            canvas.style.height = `${canvasHeight}px`;
+            
+            // Show/hide mobile controls based on device
+            document.getElementById('mobileControls').style.display = isMobile ? 'flex' : 'none';
+            
+            if (gameActive) {
+                // Re-render the game if it's active
+                render();
+            }
+        }
+        
+        function spawnWeaponTruck() {
+            const laneWidth = ROAD_WIDTH / 3;
+            const roadLeft = GAME_WIDTH / 2 - ROAD_WIDTH / 2;
+            
+            // Choose a random lane
+            const lane = Math.floor(Math.random() * 3);
+            const x = roadLeft + lane * laneWidth + (laneWidth - WEAPON_TRUCK_WIDTH) / 2;
+            
+            enemies.push({
+                x: x,
+                y: -WEAPON_TRUCK_HEIGHT,
+                width: WEAPON_TRUCK_WIDTH,
+                height: WEAPON_TRUCK_HEIGHT,
+                speed: 1.5,
+                lateralSpeed: 0,
+                type: VehicleTypes.WEAPON_TRUCK,
+                color: 'white',
+                points: 0,
+                aggression: 0
+            });
+        }
+        
+        function collectWeapons(weaponTruck) {
+            // Add weapons to inventory
+            weaponInventory.oil += 3;
+            weaponInventory.smoke += 2;
+            weaponInventory.missile += 1;
+            
+            // Add score
+            score += 200;
+            updateScore();
+        }
+        
+        function collectWeaponPickup(pickup) {
+            // Add the specific weapon to inventory
+            weaponInventory[pickup.weaponType]++;
+            
+            // Add score
+            score += 50;
+            updateScore();
+        }
+        
+        // UI functions
+        function updateScore() {
+            document.getElementById('scoreboard').textContent = `SCORE: ${score}`;
+        }
+        
+        function updateLives() {
+            document.getElementById('livesDisplay').textContent = `LIVES: ${lives}`;
+        }
+        
+        function gameOver() {
+            gameActive = false;
+            cancelAnimationFrame(animationFrameId);
+            document.getElementById('finalScore').textContent = `Your score: ${score}`;
+            document.getElementById('gameOver').style.display = 'block';
+            document.getElementById('restartBtn').style.display = 'block';
+        }
+        
+        // Rendering functions
+        function render() {
+            // Clear the canvas
+            ctx.clearRect(0, 0, GAME_WIDTH, GAME_HEIGHT);
+            
+            // Draw grass
+            drawGrass();
+            
+            // Draw road
+            drawRoad();
+            
+            // Draw road items
+            drawRoadItems();
+            
+            // Draw special weapons
+            drawOilSlicks();
+            drawSmokeScreens();
+            
+            // Draw enemies
+            drawEnemies();
+            
+            // Draw player
+            drawPlayer();
+            
+            // Draw bullets
+            drawBullets();
+            
+            // Draw weapon pickups
+            drawWeaponPickups();
+            
+            // Draw UI
+            drawUI();
+        }
+        
+        function drawRoad() {
+            // Road background
+            ctx.fillStyle = '#555555';
+            ctx.fillRect(GAME_WIDTH / 2 - ROAD_WIDTH / 2, 0, ROAD_WIDTH, GAME_HEIGHT);
+            
+            // Road lines
+            ctx.fillStyle = '#FFFFFF';
+            for (let line of roadLines) {
+                ctx.fillRect(line.x, line.y, line.width, line.height);
+            }
+        }
+        
+        function drawGrass() {
+            // Create alternating grass pattern
+            for (let segment of grassSegments) {
+                if (Math.floor(segment.y / 50) % 2 === 0) {
+                    ctx.fillStyle = '#228B22'; // Dark green
+                } else {
+                    ctx.fillStyle = '#32CD32'; // Light green
+                }
+                ctx.fillRect(segment.x, segment.y, segment.width, segment.height);
+            }
+        }
+        
+        function drawPlayer() {
+            if (playerInvulnerable && !isBlinkedVisible) {
+                return; // Skip drawing player when blinking
+            }
+            
+            ctx.fillStyle = player.color;
+            ctx.fillRect(player.x, player.y, player.width, player.height);
+            
+            // Draw car details
+            ctx.fillStyle = '#000000';
+            // Windshield
+            ctx.fillRect(player.x + 5, player.y + 10, player.width - 10, 15);
+            // Wheels
+            ctx.fillRect(player.x - 3, player.y + 10, 3, 15);
+            ctx.fillRect(player.x - 3, player.y + player.height - 25, 3, 15);
+            ctx.fillRect(player.x + player.width, player.y + 10, 3, 15);
+            ctx.fillRect(player.x + player.width, player.y + player.height - 25, 3, 15);
+        }
+        
+        function drawEnemies() {
+            for (const enemy of enemies) {
+                ctx.fillStyle = enemy.color;
+                ctx.fillRect(enemy.x, enemy.y, enemy.width, enemy.height);
+                
+                // Draw car details based on type
+                if (enemy.type === VehicleTypes.ENEMY) {
+                    ctx.fillStyle = '#000000';
+                    // Windshield
+                    ctx.fillRect(enemy.x + 5, enemy.y + 15, enemy.width - 10, 10);
+                    // Wheels
+                    ctx.fillRect(enemy.x - 3, enemy.y + 15, 3, 10);
+                    ctx.fillRect(enemy.x - 3, enemy.y + enemy.height - 25, 3, 10);
+                    ctx.fillRect(enemy.x + enemy.width, enemy.y + 15, 3, 10);
+                    ctx.fillRect(enemy.x + enemy.width, enemy.y + enemy.height - 25, 3, 10);
+                } else if (enemy.type === VehicleTypes.CIVILIAN) {
+                    ctx.fillStyle = '#000000';
+                    // Windshield
+                    ctx.fillRect(enemy.x + 5, enemy.y + 5, enemy.width - 10, 10);
+                    // Wheels
+                    ctx.fillRect(enemy.x - 2, enemy.y + 10, 2, 10);
+                    ctx.fillRect(enemy.x - 2, enemy.y + enemy.height - 20, 2, 10);
+                    ctx.fillRect(enemy.x + enemy.width, enemy.y + 10, 2, 10);
+                    ctx.fillRect(enemy.x + enemy.width, enemy.y + enemy.height - 20, 2, 10);
+                } else if (enemy.type === VehicleTypes.WEAPON_TRUCK) {
+                    ctx.fillStyle = '#000000';
+                    // Windshield
+                    ctx.fillRect(enemy.x + 10, enemy.y + 10, enemy.width - 20, 15);
+                    // Truck body
+                    ctx.fillStyle = '#DDDDDD';
+                    ctx.fillRect(enemy.x + 5, enemy.y + 30, enemy.width - 10, enemy.height - 40);
+                    ctx.fillStyle = '#888888';
+                    ctx.fillRect(enemy.x + 15, enemy.y + 40, enemy.width - 30, 10);
+                }
+            }
+        }
+        
+        function drawBullets() {
+            ctx.fillStyle = '#FFFF00';
+            for (const bullet of bullets) {
+                ctx.fillRect(bullet.x, bullet.y, bullet.width, bullet.height);
+            }
+        }
+        
+        function drawRoadItems() {
+            for (const item of roadItems) {
+                ctx.fillStyle = item.color;
+                ctx.fillRect(item.x, item.y, item.width, item.height);
+            }
+        }
+        
+        function drawOilSlicks() {
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            for (const oil of oilSlicks) {
+                ctx.fillRect(oil.x, oil.y, oil.width, oil.height);
+            }
+        }
+        
+        function drawSmokeScreens() {
+            ctx.fillStyle = 'rgba(200, 200, 200, 0.5)';
+            for (const smoke of smokeScreens) {
+                ctx.fillRect(smoke.x, smoke.y, smoke.width, smoke.height);
+            }
+        }
+        
+        function drawWeaponPickups() {
+            ctx.fillStyle = '#FF00FF';
+            for (const pickup of weaponPickups) {
+                ctx.fillRect(pickup.x, pickup.y, pickup.width, pickup.height);
+                
+                // Draw icon or text to indicate weapon type
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '10px Arial';
+                ctx.fillText(pickup.weaponType.charAt(0).toUpperCase(), pickup.x + 5, pickup.y + 15);
+            }
+        }
+        
+        function drawUI() {
+            // Draw weapon inventory
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '12px Arial';
+            ctx.fillText(`OIL: ${weaponInventory.oil}`, 10, 50);
+            ctx.fillText(`SMOKE: ${weaponInventory.smoke}`, 10, 70);
+            ctx.fillText(`MISSILE: ${weaponInventory.missile}`, 10, 90);
+        }
+        
+        // Initialize the game when the window loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>
