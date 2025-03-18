@@ -56,4 +56,4 @@ Game Link:[Mobile Silkworm](http://htmlpreview.github.io/?https://github.com/rcm
 <br>
 Game Link:[Mobile Rick Dangerous](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/poe_rickdangerous.html)
 <br>
-Game Link:[Mobile Spy Hunter](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/poe_spyhunter.html)
+
