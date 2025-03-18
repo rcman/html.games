@@ -16,6 +16,9 @@
             -moz-user-select: none;
             -ms-user-select: none;
             user-select: none;
+            position: fixed;
+            width: 100%;
+            height: 100%;
         }
         #gameCanvas {
             display: block;
@@ -31,6 +34,8 @@
             padding: 0 20px;
             box-sizing: border-box;
             opacity: 0.7;
+            z-index: 100;
+            pointer-events: auto;
         }
         .controlArea {
             width: 120px;
@@ -38,6 +43,7 @@
             background-color: rgba(255, 255, 255, 0.2);
             border-radius: 60px;
             position: relative;
+            border: 2px solid rgba(255, 255, 255, 0.5);
         }
         #joystick, #shootButton {
             width: 50px;
@@ -47,6 +53,7 @@
             position: absolute;
             top: 35px;
             left: 35px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
         }
         #shootButton {
             background-color: rgba(255, 0, 0, 0.7);
@@ -134,34 +141,35 @@
         
         // Initialize the game
         function init() {
-            isMobile = checkMobile();
+            isMobile = true; // Force mobile controls for testing
             resizeCanvas();
             window.addEventListener('resize', resizeCanvas);
             
-            // Show/hide mobile controls based on device
-            mobileControls.style.display = isMobile ? 'flex' : 'none';
+            // Always show mobile controls for testing
+            mobileControls.style.display = 'flex';
             
             // Setup keyboard controls for desktop
-            if (!isMobile) {
-                window.addEventListener('keydown', handleKeyDown);
-                window.addEventListener('keyup', handleKeyUp);
-                
-                // Mouse shooting for desktop
-                canvas.addEventListener('mousedown', () => {
-                    player.shooting = true;
-                });
-                canvas.addEventListener('mouseup', () => {
-                    player.shooting = false;
-                });
-                canvas.addEventListener('mousemove', (e) => {
-                    // Update player aim direction based on mouse position
-                    player.aimX = e.clientX;
-                    player.aimY = e.clientY;
-                });
-            } else {
-                // Setup mobile touch controls
-                setupMobileControls();
-            }
+            window.addEventListener('keydown', handleKeyDown);
+            window.addEventListener('keyup', handleKeyUp);
+            
+            // Mouse shooting for desktop
+            canvas.addEventListener('mousedown', () => {
+                player.shooting = true;
+            });
+            canvas.addEventListener('mouseup', () => {
+                player.shooting = false;
+            });
+            canvas.addEventListener('mousemove', (e) => {
+                // Update player aim direction based on mouse position
+                player.aimX = e.clientX;
+                player.aimY = e.clientY;
+            });
+            
+            // Setup mobile touch controls
+            setupMobileControls();
+            
+            // Debug message
+            console.log("Game initialized, mobile:", isMobile);
             
             // Start game loop
             requestAnimationFrame(gameLoop);
@@ -232,32 +240,37 @@
                 joystickStartY = rect.top + rect.height / 2;
                 joystickActive = true;
                 updateJoystick(touch.clientX, touch.clientY);
-            });
+                console.log("Joystick touch start", touch.clientX, touch.clientY);
+            }, { passive: false });
             
             joystickArea.addEventListener('touchmove', (e) => {
                 e.preventDefault();
                 if (joystickActive) {
                     const touch = e.touches[0];
                     updateJoystick(touch.clientX, touch.clientY);
+                    console.log("Joystick moving", touch.clientX, touch.clientY);
                 }
-            });
+            }, { passive: false });
             
             joystickArea.addEventListener('touchend', (e) => {
                 e.preventDefault();
                 joystickActive = false;
                 resetJoystick();
-            });
+                console.log("Joystick touch end");
+            }, { passive: false });
             
             // Shoot button touch events
             shootArea.addEventListener('touchstart', (e) => {
                 e.preventDefault();
                 player.shooting = true;
-            });
+                console.log("Shoot button pressed");
+            }, { passive: false });
             
             shootArea.addEventListener('touchend', (e) => {
                 e.preventDefault();
                 player.shooting = false;
-            });
+                console.log("Shoot button released");
+            }, { passive: false });
             
             // Update joystick position and player movement
             function updateJoystick(touchX, touchY) {
@@ -276,13 +289,15 @@
                 // Update joystick position
                 joystick.style.transform = `translate(${deltaX}px, ${deltaY}px)`;
                 
-                // Update player movement
+                // Update player movement - scale values to ensure good responsiveness
                 player.moveX = deltaX / maxDistance;
                 player.moveY = deltaY / maxDistance;
                 
                 // Update player aim direction
                 player.aimX = player.x + player.width / 2 + deltaX * 10;
                 player.aimY = player.y + player.height / 2 + deltaY * 10;
+                
+                console.log("Player movement updated:", player.moveX, player.moveY);
             }
             
             // Reset joystick position and player movement
@@ -530,7 +545,7 @@
                 e.preventDefault();
                 resetGame();
             }
-        });
+        }, { passive: false });
         
         // Start the game when the page loads
         window.onload = init;
