@@ -1,0 +1,9 @@
+For the image sizes, you would want to match the dimensions used in the current drawing code:
+
+Player helicopter: ~60×30 pixels
+Player jeep: ~60×30 pixels
+Enemy helicopter: ~50×25 pixels
+Enemy tank: ~60×25 pixels
+Enemy turret: ~40×30 pixels
+Power-ups: ~30×30 pixels
+Explosion animations: A spritesheet with multiple frames (~30×30 pixels each)
