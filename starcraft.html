@@ -1,0 +1,976 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>StarCraft Clone (Mobile Enabled)</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden; /* Prevent scroll bars */
+            background-color: #000;
+            color: #8cb3ff;
+            font-family: 'Arial', sans-serif;
+            /* Prevent text selection on UI elements */
+            user-select: none;
+            -webkit-user-select: none;
+            -ms-user-select: none;
+            -moz-user-select: none;
+            /* Improve touch interaction responsiveness */
+            touch-action: manipulation;
+        }
+        #selectionBox {
+            position: absolute;
+            border: 1px solid #00ff00;
+            background-color: rgba(0, 255, 0, 0.1);
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            /* Ensure canvas doesn't cause overflow */
+            overflow: hidden;
+        }
+        canvas { /* Style the Three.js canvas directly */
+             display: block; /* Remove potential extra space */
+        }
+
+        /* --- UI Styling --- */
+        .ui-panel { /* Common class for panels */
+            position: absolute;
+            background-color: rgba(0, 0, 0, 0.75); /* Slightly more opaque */
+            padding: 8px; /* Adjust padding */
+            border: 1px solid #8cb3ff;
+            box-sizing: border-box; /* Include padding/border in size */
+            font-size: 12px; /* Base font size */
+        }
+
+        .label {
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 10px; /* Slightly smaller labels */
+            padding: 1px 3px;
+            background-color: rgba(0, 0, 0, 0.6);
+            border: 1px solid #8cb3ff;
+            border-radius: 3px;
+            position: absolute;
+            pointer-events: none;
+            white-space: nowrap;
+            z-index: 5;
+            text-align: center;
+        }
+        /* Label colors remain the same */
+        .building-label { color: #8cb3ff; }
+        .unit-label { color: #ffffff; }
+        .resource-label { color: #00ffff; }
+        .enemy-label { color: #ff6666; }
+
+        #infoPanel {
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            display: flex;
+            flex-wrap: wrap; /* Allow wrapping on small screens */
+            justify-content: space-around; /* Better spacing */
+            gap: 5px; /* Reduced gap */
+            padding: 5px;
+        }
+        #resources {
+            display: flex;
+            gap: 10px; /* Reduced gap */
+            flex-wrap: wrap; /* Allow wrapping */
+        }
+        #resources div {
+            white-space: nowrap; /* Prevent wrapping within resource item */
+        }
+
+        #minimap {
+            /* Position bottom right, slightly offset */
+            bottom: 50px; /* Adjusted based on infoPanel changes */
+            right: 5px;
+            width: 120px;  /* Smaller minimap */
+            height: 120px;
+            border: 1px solid #8cb3ff;
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+
+        #buildMenu {
+            right: 5px;
+            top: 5px;
+            max-width: 150px; /* Limit width */
+        }
+        #buildMenu h3 {
+             margin-top: 0;
+             margin-bottom: 5px;
+             font-size: 14px;
+        }
+
+        button {
+            background-color: #0e2a5c;
+            color: #8cb3ff;
+            border: 1px solid #3a5e8c;
+            margin: 3px; /* Smaller margin */
+            padding: 6px 8px; /* Slightly more padding for touch */
+            cursor: pointer;
+            font-size: 11px; /* Slightly smaller font */
+            min-width: 44px; /* Minimum touch target size (accessibility guideline) */
+            min-height: 30px;
+        }
+        button:hover, button:active { /* Add :active for touch feedback */
+            background-color: #1e4a9c;
+        }
+
+        #unitInfo {
+            left: 5px;
+            top: 5px;
+            display: none;
+            max-width: 150px; /* Limit width */
+        }
+         #unitInfo h3 {
+             margin-top: 0;
+             margin-bottom: 5px;
+             font-size: 14px;
+         }
+         #unitInfo p {
+             margin: 2px 0;
+             font-size: 11px;
+         }
+
+        /* --- Loading Screen --- */
+        #loadingScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            padding: 10px;
+            box-sizing: border-box;
+            text-align: center;
+        }
+        #loadingScreen h1 {
+            font-size: 36px; /* Smaller heading */
+            color: #8cb3ff;
+            margin-bottom: 20px;
+        }
+        .race-selection {
+            display: flex;
+            flex-direction: column; /* Stack vertically on mobile */
+            gap: 15px;
+            margin-top: 20px;
+            width: 100%;
+            max-width: 300px; /* Limit width */
+        }
+        .race-card {
+            width: 100%; /* Full width */
+            padding: 15px;
+            background-color: rgba(14, 42, 92, 0.7);
+            border: 2px solid #3a5e8c;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.3s; /* Simpler transition */
+        }
+        .race-card:hover, .race-card:active {
+            background-color: rgba(30, 74, 156, 0.7);
+        }
+         .race-card h2 {
+            margin-top: 0;
+            margin-bottom: 8px;
+            font-size: 18px;
+         }
+         .race-card p {
+             font-size: 12px;
+             margin: 4px 0;
+         }
+        .selection-title {
+            font-size: 20px;
+            margin-bottom: 20px;
+            color: #8cb3ff;
+        }
+
+        /* --- Media Query for smaller screens --- */
+        @media (max-width: 600px) {
+             body {
+                 font-size: 11px; /* Adjust base font size */
+             }
+             .ui-panel {
+                 padding: 5px;
+                 font-size: 11px;
+             }
+             #minimap {
+                 width: 100px;
+                 height: 100px;
+                 bottom: 45px; /* Adjust */
+             }
+             button {
+                 padding: 5px 7px;
+                 font-size: 10px;
+                 min-width: 40px;
+                 min-height: 28px;
+             }
+             #infoPanel {
+                 justify-content: center; /* Center items when wrapped */
+                 padding: 3px;
+                 bottom: 0; /* Ensure it's at the very bottom */
+             }
+             #resources {
+                 gap: 8px;
+                 justify-content: center;
+             }
+        }
+
+    </style>
+</head>
+<body>
+    <div id="loadingScreen">
+        <h1>STARCRAFT CLONE</h1>
+        <div class="selection-title">Choose Your Race</div>
+        <div class="race-selection">
+            <div class="race-card" onclick="startGame('terran')">
+                <h2>Terran</h2>
+                <p>Human exiles with rugged machinery and adaptability.</p>
+                <p>Strengths: Versatility, defensive capabilities</p>
+            </div>
+            <div class="race-card" onclick="startGame('zerg')">
+                <h2>Zerg</h2>
+                <p>A hive-minded swarm that overwhelms foes with numbers.</p>
+                <p>Strengths: Fast production, mobility</p>
+            </div>
+            <div class="race-card" onclick="startGame('protoss')">
+                <h2>Protoss</h2>
+                <p>Ancient species with psionic abilities and advanced tech.</p>
+                <p>Strengths: Powerful units, shield regeneration</p>
+            </div>
+        </div>
+    </div>
+
+    <div id="gameContainer">
+        <div id="minimap" class="ui-panel"></div>
+        <div id="infoPanel" class="ui-panel">
+            <div id="resources">
+                <div>Minerals: <span id="minerals">500</span></div>
+                <div>Vespene Gas: <span id="gas">200</span></div>
+                <div>Supply: <span id="supplyUsed">0</span>/<span id="supplyTotal">10</span></div>
+            </div>
+            <div id="message"></div>
+        </div>
+        <div id="buildMenu" class="ui-panel">
+            <h3>Build Menu</h3>
+            <div id="buildButtons"></div>
+        </div>
+        <div id="unitInfo" class="ui-panel">
+            <h3 id="unitName"></h3>
+            <div id="unitStats"></div>
+            <div id="unitCommands"></div>
+        </div>
+         </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game variables (remain mostly the same)
+        let scene, camera, renderer, raycaster, mouse;
+        let playerRace, minerals, gas, supplyUsed, supplyTotal;
+        let selectedUnits = [];
+        let allUnits = [];
+        let allBuildings = [];
+        let terrain = [];
+        let resourceNodes = [];
+        let enemyUnits = [];
+        let gameTime = 0;
+        let labels = [];
+
+        // Selection box variables
+        let isSelecting = false;
+        let selectionStart = { x: 0, y: 0 };
+        let selectionBox = document.createElement('div');
+
+        // Camera controls
+        let cameraTarget = new THREE.Vector3(0, 0, 0);
+        const CAMERA_BASE_ZOOM = 10; // Base size for orthographic view
+        let currentZoomFactor = 1;   // Start at normal zoom
+        let isPanning = false;
+        let isPinching = false;
+        let lastPanPosition = { x: 0, y: 0 };
+        let initialPinchDistance = 0;
+
+        // Touch state variables
+        let touchStartTime = 0;
+        let touchStartPos = { x: 0, y: 0 };
+        const TAP_THRESHOLD_MS = 250; // Max time for a tap
+        const TAP_MOVE_THRESHOLD_PX = 10; // Max movement for a tap
+
+        // --- Initialization Functions (largely unchanged, minor adjustments) ---
+
+        function startGame(race) {
+            playerRace = race;
+            document.getElementById('loadingScreen').style.display = 'none';
+
+            minerals = 500;
+            gas = 200;
+            supplyUsed = 0;
+            supplyTotal = raceData[playerRace].buildings[Object.keys(raceData[playerRace].buildings)[0]].supply || 10; // Initial supply from base
+            updateResourceDisplay();
+
+            initScene(); // Setup scene, camera, renderer, event listeners
+            createTerrain();
+            populateResources();
+            createBaseBuildings(); // Creates initial base and potentially supply
+            createInitialUnits();
+            populateEnemies();
+            updateBuildMenu();
+
+            animate();
+        }
+
+        function initScene() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000022);
+
+            // Camera setup - Orthographic for consistent size regardless of distance
+            updateCameraProjection(); // Call a function to set initial projection
+
+            camera.position.set(10, 15, 10); // Slightly higher angle might be better
+            camera.lookAt(cameraTarget); // Look at the initial target (0,0,0)
+
+            const ambientLight = new THREE.AmbientLight(0x606060); // Slightly brighter ambient
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(5, 10, 7.5);
+            scene.add(directionalLight);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio); // Better quality on high-DPI screens
+            document.getElementById('gameContainer').prepend(renderer.domElement);
+
+            raycaster = new THREE.Raycaster();
+            mouse = new THREE.Vector2(); // Still use this for raycasting calculation
+
+            selectionBox.id = 'selectionBox';
+            document.getElementById('gameContainer').appendChild(selectionBox);
+
+            // --- Event Listeners ---
+            window.addEventListener('resize', onWindowResize);
+
+            // Add Touch Listeners
+            renderer.domElement.addEventListener('touchstart', onTouchStart, { passive: false });
+            renderer.domElement.addEventListener('touchmove', onTouchMove, { passive: false });
+            renderer.domElement.addEventListener('touchend', onTouchEnd, { passive: false });
+            renderer.domElement.addEventListener('touchcancel', onTouchEnd, { passive: false }); // Treat cancel like end
+
+             // Prevent context menu on long press (important for mobile)
+             renderer.domElement.addEventListener('contextmenu', (event) => event.preventDefault());
+
+            // Remove keyboard listeners (or make them optional)
+            // window.removeEventListener('keydown', ...);
+            // window.removeEventListener('keyup', ...);
+
+            // Map grid helper (optional, can remove for performance)
+            // const gridHelper = new THREE.GridHelper(50, 50);
+            // scene.add(gridHelper);
+        }
+
+        function updateCameraProjection() {
+            const aspect = window.innerWidth / window.innerHeight;
+            const zoom = CAMERA_BASE_ZOOM / currentZoomFactor; // Apply zoom factor
+            camera = new THREE.OrthographicCamera(
+                -zoom * aspect, zoom * aspect, zoom, -zoom, 0.1, 1000
+            );
+             // Re-apply position and lookAt after changing camera type/properties
+             camera.position.set(cameraTarget.x + 10, 15, cameraTarget.z + 10);
+             camera.lookAt(cameraTarget);
+        }
+
+
+        // --- Geometry/Object Creation (Unchanged, except maybe simplify for performance if needed) ---
+        // createTerrain, populateResources, createBaseBuildings, createInitialUnits,
+        // populateEnemies, createBuilding, createUnit functions remain the same.
+
+        // --- Event Handlers ---
+
+        function onWindowResize() {
+            const aspect = window.innerWidth / window.innerHeight;
+            const zoom = CAMERA_BASE_ZOOM / currentZoomFactor;
+            camera.left = -zoom * aspect;
+            camera.right = zoom * aspect;
+            camera.top = zoom;
+            camera.bottom = -zoom;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        // --- Touch Handling Logic ---
+
+        function onTouchStart(event) {
+            event.preventDefault(); // Prevent default browser actions like scrolling
+
+            const touches = event.changedTouches;
+
+            if (touches.length === 1) {
+                const touch = touches[0];
+                isPanning = false; // Reset panning state
+                isSelecting = false; // Reset selecting state
+
+                // Store start info for tap/drag detection
+                touchStartTime = Date.now();
+                touchStartPos = { x: touch.clientX, y: touch.clientY };
+                lastPanPosition = { x: touch.clientX, y: touch.clientY }; // For panning delta
+
+                // Check immediately if touch started on UI to prevent game interaction
+                if (isTouchOnUI(touch.clientX, touch.clientY)) {
+                     // Let UI elements handle their own clicks/touches
+                     return;
+                }
+
+                // Prepare for potential drag-select
+                selectionStart = { x: touch.clientX, y: touch.clientY };
+                // Don't show selection box immediately, wait for move
+
+            } else if (touches.length === 2) {
+                 // Start pinching
+                 isPinching = true;
+                 isSelecting = false; // Cancel selection if pinching starts
+                 isPanning = false; // Cancel panning
+                 initialPinchDistance = getPinchDistance(event.touches);
+            }
+        }
+
+        function onTouchMove(event) {
+            event.preventDefault();
+            const touches = event.touches; // Use event.touches for current touches on screen
+
+            if (isPinching && touches.length === 2) {
+                // Handle Pinch Zoom
+                const currentPinchDistance = getPinchDistance(touches);
+                if (initialPinchDistance > 0) { // Avoid division by zero
+                     const zoomAmount = currentPinchDistance / initialPinchDistance;
+                     currentZoomFactor *= zoomAmount;
+                     currentZoomFactor = Math.max(0.5, Math.min(currentZoomFactor, 3.0)); // Clamp zoom
+
+                     // Update camera projection based on new zoom
+                     updateCameraProjection();
+
+                     // Reset initial distance for continuous zoom
+                     initialPinchDistance = currentPinchDistance;
+                }
+
+            } else if (!isPinching && touches.length === 1) {
+                 const touch = touches[0];
+                 const currentX = touch.clientX;
+                 const currentY = touch.clientY;
+                 const deltaX = currentX - touchStartPos.x;
+                 const deltaY = currentY - touchStartPos.y;
+                 const distanceMoved = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+                 // Determine if it's a drag-select or a pan
+                 if (!isSelecting && !isPanning && distanceMoved > TAP_MOVE_THRESHOLD_PX) {
+                     // Check if the drag started on empty space (likely a pan)
+                     // or on something selectable (start drag-select)
+                     updateRaycaster(touchStartPos.x, touchStartPos.y); // Use start pos for check
+                     const intersects = raycaster.intersectObjects(scene.children, true); // Recursive check
+                     const didStartOnSelectable = intersects.length > 0 && (intersects[0].object.userData?.type === 'unit' || intersects[0].object.userData?.type === 'building');
+
+                     if (!didStartOnSelectable && !isTouchOnUI(touchStartPos.x, touchStartPos.y)) {
+                        isPanning = true;
+                     } else {
+                        isSelecting = true;
+                        // Show selection box now
+                        selectionBox.style.left = selectionStart.x + 'px';
+                        selectionBox.style.top = selectionStart.y + 'px';
+                        selectionBox.style.width = '0px';
+                        selectionBox.style.height = '0px';
+                        selectionBox.style.display = 'block';
+                     }
+                 }
+
+                 // --- Handle Drag Selection ---
+                 if (isSelecting) {
+                     const width = currentX - selectionStart.x;
+                     const height = currentY - selectionStart.y;
+
+                     selectionBox.style.left = (width >= 0 ? selectionStart.x : currentX) + 'px';
+                     selectionBox.style.width = Math.abs(width) + 'px';
+                     selectionBox.style.top = (height >= 0 ? selectionStart.y : currentY) + 'px';
+                     selectionBox.style.height = Math.abs(height) + 'px';
+                 }
+                 // --- Handle Camera Panning ---
+                 else if (isPanning) {
+                     const panDeltaX = currentX - lastPanPosition.x;
+                     const panDeltaY = currentY - lastPanPosition.y;
+
+                     // Convert screen pixels moved to world units moved
+                     // This depends on the current zoom level
+                     const worldUnitsPerPixelX = (camera.right - camera.left) / window.innerWidth;
+                     const worldUnitsPerPixelY = (camera.top - camera.bottom) / window.innerHeight; // Use Y for Z movement
+
+                     // Adjust target position (invert Y screen movement for Z world movement)
+                     cameraTarget.x -= panDeltaX * worldUnitsPerPixelX;
+                     cameraTarget.z -= panDeltaY * worldUnitsPerPixelY; // Use Y delta for Z
+
+                     // Clamp camera target
+                     cameraTarget.x = Math.max(-25, Math.min(25, cameraTarget.x)); // Adjust bounds if needed
+                     cameraTarget.z = Math.max(-25, Math.min(25, cameraTarget.z));
+
+                     // Update camera position to follow target
+                     camera.position.x = cameraTarget.x + 10; // Maintain offset
+                     camera.position.z = cameraTarget.z + 10;
+                     camera.lookAt(cameraTarget); // Keep looking at the target
+
+                     lastPanPosition = { x: currentX, y: currentY }; // Update last position for next move delta
+                 }
+            }
+        }
+
+        function onTouchEnd(event) {
+            event.preventDefault();
+            const touches = event.changedTouches; // Touches that were *removed*
+
+            if (isPinching) {
+                // If either finger is lifted, stop pinching
+                 if (event.touches.length < 2) {
+                     isPinching = false;
+                     initialPinchDistance = 0;
+                 }
+            } else if (isSelecting) {
+                 // --- Finalize Drag Selection ---
+                 isSelecting = false;
+                 selectionBox.style.display = 'none';
+                 selectUnitsInBox();
+            } else if (isPanning) {
+                 // --- Finalize Panning ---
+                 isPanning = false;
+            } else if (touches.length === 1) {
+                // --- Handle Tap ---
+                const touch = touches[0];
+                const timeElapsed = Date.now() - touchStartTime;
+                const deltaX = touch.clientX - touchStartPos.x;
+                const deltaY = touch.clientY - touchStartPos.y;
+                const distanceMoved = Math.sqrt(deltaX * deltaX + deltaY * deltaY);
+
+                if (timeElapsed < TAP_THRESHOLD_MS && distanceMoved < TAP_MOVE_THRESHOLD_PX) {
+                     if (!isTouchOnUI(touch.clientX, touch.clientY)) {
+                        handleTap(touch.clientX, touch.clientY);
+                     }
+                }
+            }
+
+             // Reset touch start state if no fingers are left
+             if (event.touches.length === 0) {
+                 isPanning = false;
+                 isSelecting = false;
+                 isPinching = false;
+             }
+        }
+
+        function getPinchDistance(touches) {
+             const dx = touches[0].clientX - touches[1].clientX;
+             const dy = touches[0].clientY - touches[1].clientY;
+             return Math.sqrt(dx * dx + dy * dy);
+        }
+
+        function isTouchOnUI(x, y) {
+             // Check if the touch coordinates fall within the bounding box of any UI element
+             const uiElements = document.querySelectorAll('.ui-panel, button'); // Add other UI selectors if needed
+             for (const element of uiElements) {
+                 const rect = element.getBoundingClientRect();
+                 if (x >= rect.left && x <= rect.right && y >= rect.top && y <= rect.bottom) {
+                     return true;
+                 }
+             }
+             return false;
+        }
+
+
+        function updateRaycaster(screenX, screenY) {
+            // Calculate mouse position in normalized device coordinates (-1 to +1)
+            mouse.x = (screenX / window.innerWidth) * 2 - 1;
+            mouse.y = -(screenY / window.innerHeight) * 2 + 1;
+            raycaster.setFromCamera(mouse, camera);
+        }
+
+        function handleTap(screenX, screenY) {
+            updateRaycaster(screenX, screenY);
+            const intersects = raycaster.intersectObjects(scene.children, true); // Recursive check
+
+            let tappedObject = null;
+            let tappedPoint = null;
+
+            if (intersects.length > 0) {
+                // Find the first relevant intersection (unit, building, resource, terrain)
+                for (const intersect of intersects) {
+                     // Prioritize interactive objects over terrain plane
+                     if (intersect.object.userData?.type || intersect.object.geometry instanceof THREE.PlaneGeometry) {
+                         tappedObject = intersect.object;
+                         tappedPoint = intersect.point;
+                         break;
+                     }
+                }
+            }
+
+            if (selectedUnits.length > 0) {
+                // --- Action Tap (Units are selected) ---
+                if (tappedObject?.userData?.type === 'unit' && tappedObject.userData.isEnemy) {
+                    // Attack Enemy
+                    selectedUnits.forEach(unit => {
+                        unit.userData.target = tappedObject;
+                        unit.userData.isGathering = false;
+                        unit.userData.resourceNode = null;
+                        unit.userData.path = []; // Clear path when targeting
+                    });
+                    showMessage("Attacking!");
+                } else if (tappedObject?.userData?.type === 'mineral' || tappedObject?.userData?.type === 'vespene') {
+                    // Gather Resource (only workers)
+                     const workers = selectedUnits.filter(unit =>
+                        unit.userData.name === 'SCV' ||
+                        unit.userData.name === 'Drone' ||
+                        unit.userData.name === 'Probe'
+                    );
+                     if (workers.length > 0) {
+                         workers.forEach(worker => {
+                             worker.userData.isGathering = true;
+                             worker.userData.resourceNode = tappedObject;
+                             worker.userData.target = null;
+                             worker.userData.path = []; // Path will be calculated by gathering logic
+                         });
+                         showMessage("Gathering " + tappedObject.userData.type + "!");
+                     } else if (selectedUnits.length > 0) {
+                         // Move non-workers to resource location
+                         selectedUnits.forEach(unit => {
+                            if (!unit.userData.isGathering) { // Don't interrupt workers unless explicitly told
+                                unit.userData.path = [new THREE.Vector3(tappedPoint.x, 0.4, tappedPoint.z)];
+                                unit.userData.path[0].x += (Math.random() - 0.5) * 1.5; // Spread out slightly
+                                unit.userData.path[0].z += (Math.random() - 0.5) * 1.5;
+                                unit.userData.target = null;
+                                unit.userData.isGathering = false;
+                            }
+                         });
+                          showMessage("Moving!");
+                     }
+                } else if (tappedPoint) {
+                    // Move to Point
+                    selectedUnits.forEach(unit => {
+                        unit.userData.path = [new THREE.Vector3(tappedPoint.x, 0.4, tappedPoint.z)];
+                         // Slightly offset each unit's destination to avoid stacking
+                        unit.userData.path[0].x += (Math.random() - 0.5) * 1.5; // Spread out slightly
+                        unit.userData.path[0].z += (Math.random() - 0.5) * 1.5;
+                        unit.userData.target = null;
+                        unit.userData.isGathering = false;
+                        unit.userData.resourceNode = null;
+                    });
+                    showMessage("Moving!");
+                }
+            } else {
+                // --- Selection Tap (No units selected) ---
+                 deselectAllUnits(); // Deselect first
+
+                 if (tappedObject?.userData?.type === 'unit' && !tappedObject.userData.isEnemy) {
+                     // Select Player Unit
+                     selectedUnits.push(tappedObject);
+                     tappedObject.material.color.setHex(0xffffff); // Highlight
+                     showUnitInfo(tappedObject);
+                 } else if (tappedObject?.userData?.type === 'building') {
+                     // Select Building
+                     // No visual highlight for buildings usually, just show info
+                     showBuildingInfo(tappedObject);
+                 } else {
+                     // Tapped empty space or enemy/resource with nothing selected
+                     hideUnitInfo();
+                 }
+            }
+        }
+
+        function selectUnitsInBox() {
+             // Get selection box dimensions in screen space
+             const selectionLeft = parseInt(selectionBox.style.left);
+             const selectionTop = parseInt(selectionBox.style.top);
+             const selectionWidth = parseInt(selectionBox.style.width);
+             const selectionHeight = parseInt(selectionBox.style.height);
+             const selectionRight = selectionLeft + selectionWidth;
+             const selectionBottom = selectionTop + selectionHeight;
+
+             // Clear previous selection
+             deselectAllUnits();
+
+             // Check each unit to see if it's in the selection box
+             allUnits.forEach(unit => {
+                 if (!unit.userData.isEnemy) {
+                     const vector = projectToScreen(unit);
+                     const x = vector.x;
+                     const y = vector.y;
+
+                     // Check if unit's screen position is within selection box bounds
+                     if (x >= selectionLeft && x <= selectionRight &&
+                         y >= selectionTop && y <= selectionBottom) {
+
+                         selectedUnits.push(unit);
+                         unit.material.color.setHex(0xffffff); // Highlight selected unit
+                     }
+                 }
+             });
+
+             // Show info for the first selected unit if any were selected
+             if (selectedUnits.length > 0) {
+                 showUnitInfo(selectedUnits[0]); // Show info for first unit in group
+             } else {
+                 hideUnitInfo();
+             }
+        }
+
+        function deselectAllUnits() {
+             selectedUnits.forEach(unit => {
+                 // Use the correct base color for the race
+                 unit.material.color.setHex(raceData[unit.userData.race]?.color || 0xffffff); // Default color if race not found
+             });
+             selectedUnits = [];
+             hideUnitInfo(); // Also hide info panel on deselect
+        }
+
+        function projectToScreen(object) {
+             const vector = new THREE.Vector3();
+             // Get world position (more reliable than matrixWorld directly)
+             object.getWorldPosition(vector);
+             vector.project(camera); // Project to normalized device coords (-1 to +1)
+
+             // Convert to screen coordinates (0 to width/height)
+             const x = (vector.x + 1) / 2 * window.innerWidth;
+             const y = -(vector.y - 1) / 2 * window.innerHeight; // Y is inverted
+             return { x, y, z: vector.z }; // Include Z for visibility check
+        }
+
+        // --- UI Update Functions (Minor adjustments might be needed) ---
+        // showUnitInfo, showBuildingInfo, hideUnitInfo, updateResourceDisplay,
+        // showMessage, updateBuildMenu, attackMove, buildStructure, trainUnit
+        // remain largely the same, but ensure buttons are accessible.
+
+        // --- Game Logic Update Functions ---
+        // updateUnits: Core logic remains the same. Ensure movement/targeting works.
+        // updateMinimap: Logic remains the same, but ensure click works with touch.
+
+        function updateMinimap() {
+            const minimap = document.getElementById('minimap');
+            // Ensure canvas element exists or create it if needed
+            let canvas = minimap.querySelector('canvas');
+            if (!canvas) {
+                 canvas = document.createElement('canvas');
+                 minimap.appendChild(canvas);
+                 // Add touch listener for navigation
+                 canvas.addEventListener('touchstart', onMinimapTap, { passive: false });
+            }
+             const context = canvas.getContext('2d');
+             canvas.width = minimap.clientWidth; // Use clientWidth for actual rendered size
+             canvas.height = minimap.clientHeight;
+
+
+             // --- Drawing logic (same as before) ---
+             context.fillStyle = 'rgba(0, 0, 0, 0.6)'; // Background
+             context.fillRect(0, 0, canvas.width, canvas.height);
+
+             const mapScaleX = canvas.width / 50; // Map size is 50x50 world units
+             const mapScaleZ = canvas.height / 50;
+
+             // Player units (blue)
+             allUnits.forEach(unit => {
+                 if (!unit.userData.isEnemy){
+                     const x = (unit.position.x + 25) * mapScaleX;
+                     const z = (unit.position.z + 25) * mapScaleZ;
+                     context.fillStyle = '#3a5e8c'; // Use player color
+                     context.fillRect(x - 1, z - 1, 3, 3); // Slightly larger dots
+                 }
+             });
+             // Player buildings
+             allBuildings.forEach(building => {
+                 const x = (building.position.x + 25) * mapScaleX;
+                 const z = (building.position.z + 25) * mapScaleZ;
+                 const size = (building.userData.size || 2) * 1.5; // Scale building size
+                 context.fillStyle = '#3a5e8c';
+                 context.fillRect(x - size / 2, z - size / 2, size, size);
+             });
+             // Enemy units (red)
+             enemyUnits.forEach(unit => {
+                  if(unit.parent) { // Check if unit still exists
+                    const x = (unit.position.x + 25) * mapScaleX;
+                    const z = (unit.position.z + 25) * mapScaleZ;
+                    context.fillStyle = 'red';
+                    context.fillRect(x - 1, z - 1, 3, 3);
+                  }
+             });
+              // Resources
+              resourceNodes.forEach(node => {
+                 if(node.parent) {
+                     const x = (node.position.x + 25) * mapScaleX;
+                     const z = (node.position.z + 25) * mapScaleZ;
+                     context.fillStyle = node.userData.type === 'mineral' ? 'cyan' : 'lime'; // Brighter green
+                     context.fillRect(x - 2, z - 2, 4, 4);
+                 }
+             });
+
+             // Camera view area
+             const viewWidthWorld = (camera.right - camera.left) / currentZoomFactor;
+             const viewHeightWorld = (camera.top - camera.bottom) / currentZoomFactor;
+             const viewX = (cameraTarget.x + 25) * mapScaleX;
+             const viewZ = (cameraTarget.z + 25) * mapScaleZ;
+             const viewWidthMap = viewWidthWorld * mapScaleX;
+             const viewHeightMap = viewHeightWorld * mapScaleZ;
+
+             context.strokeStyle = 'white';
+             context.lineWidth = 1;
+             context.strokeRect(viewX - viewWidthMap / 2, viewZ - viewHeightMap / 2, viewWidthMap, viewHeightMap);
+        }
+
+        function onMinimapTap(event) {
+             event.preventDefault();
+             const minimap = document.getElementById('minimap');
+             const canvas = event.target; // The canvas was tapped
+             const rect = canvas.getBoundingClientRect();
+             const touch = event.changedTouches[0];
+
+             // Calculate tap position relative to the canvas
+             const x = touch.clientX - rect.left;
+             const y = touch.clientY - rect.top;
+
+             // Convert minimap coordinates (pixels) to world coordinates
+             const worldX = (x / canvas.width * 50) - 25; // Map size 50x50
+             const worldZ = (y / canvas.height * 50) - 25;
+
+             // Move camera target instantly
+             cameraTarget.x = worldX;
+             cameraTarget.z = worldZ;
+
+             // Clamp camera target
+             cameraTarget.x = Math.max(-25, Math.min(25, cameraTarget.x));
+             cameraTarget.z = Math.max(-25, Math.min(25, cameraTarget.z));
+
+             // Update camera position to follow target
+             camera.position.x = cameraTarget.x + 10;
+             camera.position.z = cameraTarget.z + 10;
+             camera.lookAt(cameraTarget);
+
+             // No need to call updateCamera here as it's an instant jump
+        }
+
+        // updateCamera: Now handled by touch panning logic (onTouchMove)
+        // We don't need the keyboard/edge scroll updateCamera function anymore.
+
+        // updateLabels: Needs to use projectToScreen
+        function updateLabels() {
+            labels.forEach(labelData => {
+                const object = labelData.object;
+                const element = labelData.element;
+
+                // Skip if object was removed or has no parent
+                if (!object.parent) {
+                    if (element.parentNode) { // Remove element from DOM if object is gone
+                         element.parentNode.removeChild(element);
+                         // Remove from labels array (more robustly handled below)
+                    }
+                    element.style.display = 'none';
+                    return; // Skip update for removed objects
+                }
+
+                const screenPos = projectToScreen(object);
+                const x = screenPos.x;
+                const y = screenPos.y;
+                const z = screenPos.z; // Z depth from normalized device coords
+
+                // Only show label if object is in front of camera (z < 1)
+                // and reasonably close (adjust distance check as needed)
+                const objectWorldPos = new THREE.Vector3();
+                object.getWorldPosition(objectWorldPos);
+                const distance = camera.position.distanceTo(objectWorldPos);
+
+                if (z < 1 && distance < 40 / currentZoomFactor) { // Adjust visibility range with zoom
+                    element.style.display = '';
+                    // Center the label horizontally, position slightly above the object
+                    const yOffset = (object.geometry?.parameters?.height || 0.5) * 10 * currentZoomFactor; // Adjust offset based on object size and zoom
+                    element.style.left = `${x - (element.offsetWidth / 2)}px`;
+                    element.style.top = `${y - yOffset - 10}px`; // Add a bit more space above
+                } else {
+                    element.style.display = 'none';
+                }
+            });
+
+             // Cleanup labels for removed objects
+             labels = labels.filter(labelData => labelData.object.parent);
+        }
+
+        // --- Animation Loop (mostly unchanged) ---
+        let lastTime = 0;
+        function animate(time) {
+            requestAnimationFrame(animate);
+
+            const now = time || performance.now(); // Use performance.now() for better precision
+            const delta = Math.min(0.1, (now - lastTime) / 1000); // Clamp delta time to prevent large jumps
+            lastTime = now;
+            gameTime += delta;
+
+            // No updateCamera(delta) call needed, panning is handled by touch events
+
+            updateUnits(delta); // Update unit movement, combat, gathering
+            updateLabels();     // Update floating labels position
+            updateMinimap();    // Redraw minimap state
+
+            renderer.render(scene, camera);
+        }
+
+        // --- Helper Functions ---
+        // createLabel: Remains the same
+        // Race Data (raceData): Remains the same
+
+        // --- Add these utility functions from above ---
+        // function projectToScreen(object) { ... }
+        // function updateRaycaster(screenX, screenY) { ... }
+        // function getPinchDistance(touches) { ... }
+        // function isTouchOnUI(x, y) { ... }
+        // function deselectAllUnits() { ... }
+        // function selectUnitsInBox() { ... }
+        // function handleTap(screenX, screenY) { ... }
+        // function onMinimapTap(event) { ... }
+         // function updateCameraProjection() { ... }
+
+
+        // (Keep original functions like createBuilding, createUnit, populate..., etc.)
+        // (Keep raceData constant)
+        // (Make sure any direct calls to updateCamera() are removed or reassessed)
+
+        // --- Existing functions (like createLabel, updateResourceDisplay, etc.) ---
+        // Make sure they are defined or copied here if not already present
+
+        // --- Functions copied from original code ---
+        const raceData = { /* ... (keep the original race data object) ... */ };
+        function createTerrain() { /* ... */ }
+        function populateResources() { /* ... */ }
+        function createBaseBuildings() { /* ... */ }
+        function createInitialUnits() { /* ... */ }
+        function populateEnemies() { /* ... */ }
+        function createBuilding(name, x, z) { /* ... Make sure it calls createLabel */ }
+        function createUnit(name, x, z) { /* ... Make sure it calls createLabel */ }
+        function showUnitInfo(unit) { /* ... */ }
+        function showBuildingInfo(building) { /* ... */ }
+        function hideUnitInfo() { /* ... */ }
+        function updateResourceDisplay() { /* ... */ }
+        function showMessage(text) { /* ... */ }
+        function updateBuildMenu() { /* ... */ }
+        function attackMove() { /* ... May need adaptation for touch target */ }
+        function buildStructure(buildingName) { /* ... */ }
+        function trainUnit(unitName) { /* ... */ }
+        function updateUnits(delta) { /* ... Keep core logic, ensure path/target works with tap */ }
+        function createLabel(object, text, className = "label") { /* ... */ }
+
+
+        // --- Final cleanup ---
+        // Remove the old mouse/keyboard event listeners if they were in initScene
+        // Remove the old updateCamera function that used the `keys` object
+
+
+    </script>
+</body>
+</html>
