@@ -39,6 +39,8 @@ Game Link:[Spelunker](http://htmlpreview.github.io/?https://github.com/rcman/htm
 <br>
 Game Link:[Spy Hunter](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/spy_try99.html)
 <br><br>
+Game Link:[Star craft](http://htmlpreview.github.io/?https://github.com/rcman/html.games/blob/main/starcraft.html)
+<br><br>
 
 # Mobile
 
