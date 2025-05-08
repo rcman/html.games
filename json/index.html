@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Three.js Apple Tree</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <!-- Import Three.js and OrbitControls -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r134/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.134.0/examples/js/controls/OrbitControls.js"></script>
+
+    <script>
+        // Scene setup
+        const scene = new THREE.Scene();
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Camera position
+        camera.position.set(0, 5, 10);
+        camera.lookAt(0, 0, 0);
+
+        // Orbit controls for interaction
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+        directionalLight.position.set(5, 5, 5);
+        scene.add(directionalLight);
+
+        // JSON model (your tree.json)
+        const treeJson = {
+            "name": "AppleTree",
+            "type": "Group",
+            "position": [0, 0, 0],
+            "rotation": [0, 0, 0],
+            "scale": [1, 1, 1],
+            "children": [
+                {
+                    "name": "Trunk",
+                    "type": "Mesh",
+                    "geometry": {
+                        "type": "CylinderGeometry",
+                        "parameters": {
+                            "radiusTop": 0.5,
+                            "radiusBottom": 0.7,
+                            "height": 4,
+                            "radialSegments": 16
+                        }
+                    },
+                    "material": {
+                        "type": "MeshStandardMaterial",
+                        "color": "#8B4513",
+                        "roughness": 0.8,
+                        "metalness": 0.2
+                    },
+                    "position": [0, 2, 0],
+                    "rotation": [0, 0, 0],
+                    "scale": [1, 1, 1]
+                },
+                {
+                    "name": "Canopy",
+                    "type": "Group",
+                    "position": [0, 4, 0],
+                    "children": [
+                        {
+                            "name": "Branch1",
+                            "type": "Mesh",
+                            "geometry": {
+                                "type": "CylinderGeometry",
+                                "parameters": {
+                                    "radiusTop": 0.1,
+                                    "radiusBottom": 0.2,
+                                    "height": 2,
+                                    "radialSegments": 8
+                                }
+                            },
+                            "material": {
+                                "type": "MeshStandardMaterial",
+                                "color": "#8B4513",
+                                "roughness": 0.8,
+                                "metalness": 0.2
+                            },
+                            "position": [1, 1, 0],
+                            "rotation": [0, 0, -0.5],
+                            "scale": [1, 1, 1],
+                            "children": [
+                                {
+                                    "name": "Leaves1",
+                                    "type": "Mesh",
+                                    "geometry": {
+                                        "type": "SphereGeometry",
+                                        "parameters": {
+                                            "radius": 1,
+                                            "widthSegments": 16,
+                                            "heightSegments": 16
+                                        }
+                                    },
+                                    "material": {
+                                        "type": "MeshStandardMaterial",
+                                        "color": "#228B22",
+                                        "roughness": 0.7,
+                                        "metalness": 0.1
+                                    },
+                                    "position": [0, 1, 0],
+                                    "scale": [1, 0.8, 1]
+                                },
+                                {
+                                    "name": "Apple1",
+                                    "type": "Mesh",
+                                    "geometry": {
+                                        "type": "SphereGeometry",
+                                        "parameters": {
+                                            "radius": 0.2,
+                                            "widthSegments": 16,
+                                            "heightSegments": 16
+                                        }
+                                    },
+                                    "material": {
+                                        "type": "MeshStandardMaterial",
+                                        "color": "#FF0000",
+                                        "roughness": 0.4,
+                                        "metalness": 0.3
+                                    },
+                                    "position": [0.5, 0.5, 0],
+                                    "scale": [1, 1, 1]
+                                }
+                            ]
+                        },
+                        {
+                            "name": "Branch2",
+                            "type": "Mesh",
+                            "geometry": {
+                                "type": "CylinderGeometry",
+                                "parameters": {
+                                    "radiusTop": 0.1,
+                                    "radiusBottom": 0.2,
+                                    "height": 2,
+                                    "radialSegments": 8
+                                }
+                            },
+                            "material": {
+                                "type": "MeshStandardMaterial",
+                                "color": "#8B4513",
+                                "roughness": 0.8,
+                                "metalness": 0.2
+                            },
+                            "position": [-1, 1, 0],
+                            "rotation": [0, 0, 0.5],
+                            "scale": [1, 1, 1],
+                            "children": [
+                                {
+                                    "name": "Leaves2",
+                                    "type": "Mesh",
+                                    "geometry": {
+                                        "type": "SphereGeometry",
+                                        "parameters": {
+                                            "radius": 1,
+                                            "widthSegments": 16,
+                                            "heightSegments": 16
+                                        }
+                                    },
+                                    "material": {
+                                        "type": "MeshStandardMaterial",
+                                        "color": "#228B22",
+                                        "roughness": 0.7,
+                                        "metalness": 0.1
+                                    },
+                                    "position": [0, 1, 0],
+                                    "scale": [1, 0.8, 1]
+                                },
+                                {
+                                    "name": "Apple2",
+                                    "type": "Mesh",
+                                    "geometry": {
+                                        "type": "SphereGeometry",
+                                        "parameters": {
+                                            "radius": 0.2,
+                                            "widthSegments": 16,
+                                            "heightSegments": 16
+                                        }
+                                    },
+                                    "material": {
+                                        "type": "MeshStandardMaterial",
+                                        "color": "#FF0000",
+                                        "roughness": 0.4,
+                                        "metalness": 0.3
+                                    },
+                                    "position": [-0.5, 0.5, 0],
+                                    "scale": [1, 1, 1]
+                                }
+                            ]
+                        }
+                    ]
+                }
+            ]
+        };
+
+        // Function to create Three.js objects from JSON
+        function createObjectFromJSON(json) {
+            if (json.type === 'Group') {
+                const group = new THREE.Group();
+                group.name = json.name;
+                group.position.set(...json.position);
+                group.rotation.set(...json.rotation);
+                group.scale.set(...json.scale);
+                if (json.children) {
+                    json.children.forEach(child => {
+                        group.add(createObjectFromJSON(child));
+                    });
+                }
+                return group;
+            } else if (json.type === 'Mesh') {
+                const geometry = createGeometry(json.geometry);
+                const material = createMaterial(json.material);
+                const mesh = new THREE.Mesh(geometry, material);
+                mesh.name = json.name;
+                mesh.position.set(...json.position);
+                mesh.rotation.set(...json.rotation);
+                mesh.scale.set(...json.scale);
+                if (json.children) {
+                    json.children.forEach(child => {
+                        mesh.add(createObjectFromJSON(child));
+                    });
+                }
+                return mesh;
+            }
+        }
+
+        function createGeometry(geoJson) {
+            if (geoJson.type === 'CylinderGeometry') {
+                const { radiusTop, radiusBottom, height, radialSegments } = geoJson.parameters;
+                return new THREE.CylinderGeometry(radiusTop, radiusBottom, height, radialSegments);
+            } else if (geoJson.type === 'SphereGeometry') {
+                const { radius, widthSegments, heightSegments } = geoJson.parameters;
+                return new THREE.SphereGeometry(radius, widthSegments, heightSegments);
+            }
+        }
+
+        function createMaterial(matJson) {
+            if (matJson.type === 'MeshStandardMaterial') {
+                return new THREE.MeshStandardMaterial({
+                    color: matJson.color,
+                    roughness: matJson.roughness,
+                    metalness: matJson.metalness
+                });
+            }
+        }
+
+        // Load and add the tree to the scene
+        const tree = createObjectFromJSON(treeJson);
+        scene.add(tree);
+
+        // Add a simple ground plane for context
+        const groundGeometry = new THREE.PlaneGeometry(20, 20);
+        const groundMaterial = new THREE.MeshStandardMaterial({ color: '#228B22', side: THREE.DoubleSide });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        ground.position.y = -0.01;
+        scene.add(ground);
+
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+    </script>
+</body>
+</html>
