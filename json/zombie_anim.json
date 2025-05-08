@@ -1,0 +1,255 @@
+{
+  "name": "Zombie",
+  "type": "Group",
+  "position": [0, 0, 0],
+  "rotation": [0, 0, 0],
+  "scale": [1, 1, 1],
+  "children": [
+    {
+      "name": "Torso",
+      "type": "Mesh",
+      "geometry": {
+        "type": "BoxGeometry",
+        "parameters": {
+          "width": 1.0,
+          "height": 1.5,
+          "depth": 0.6
+        }
+      },
+      "material": {
+        "type": "MeshStandardMaterial",
+        "color": "#4A7043",
+        "roughness": 0.9,
+        "metalness": 0.1
+      },
+      "position": [0, 1.5, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1, 1, 1]
+    },
+    {
+      "name": "Head",
+      "type": "Mesh",
+      "geometry": {
+        "type": "SphereGeometry",
+        "parameters": {
+          "radius": 0.5,
+          "widthSegments": 16,
+          "heightSegments": 16
+        }
+      },
+      "material": {
+        "type": "MeshStandardMaterial",
+        "color": "#4A7043",
+        "roughness": 0.9,
+        "metalness": 0.1
+      },
+      "position": [0, 2.5, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1, 1, 1],
+      "children": [
+        {
+          "name": "LeftEye",
+          "type": "Mesh",
+          "geometry": {
+            "type": "SphereGeometry",
+            "parameters": {
+              "radius": 0.1,
+              "widthSegments": 8,
+              "heightSegments": 8
+            }
+          },
+          "material": {
+            "type": "MeshStandardMaterial",
+            "color": "#FFFFFF",
+            "roughness": 0.5,
+            "metalness": 0.2
+          },
+          "position": [-0.2, 0, 0.4],
+          "rotation": [0, 0, 0],
+          "scale": [1, 1, 1]
+        },
+        {
+          "name": "RightEye",
+          "type": "Mesh",
+          "geometry": {
+            "type": "SphereGeometry",
+            "parameters": {
+              "radius": 0.1,
+              "widthSegments": 8,
+              "heightSegments": 8
+            }
+          },
+          "material": {
+            "type": "MeshStandardMaterial",
+            "color": "#FFFFFF",
+            "roughness": 0.5,
+            "metalness": 0.2
+          },
+          "position": [0.2, 0, 0.4],
+          "rotation": [0, 0, 0],
+          "scale": [1, 1, 1]
+        }
+      ]
+    },
+    {
+      "name": "LeftArm",
+      "type": "Mesh",
+      "geometry": {
+        "type": "CylinderGeometry",
+        "parameters": {
+          "radiusTop": 0.15,
+          "radiusBottom": 0.15,
+          "height": 1.2,
+          "radialSegments": 8
+        }
+      },
+      "material": {
+        "type": "MeshStandardMaterial",
+        "color": "#4A7043",
+        "roughness": 0.9,
+        "metalness": 0.1
+      },
+      "position": [-0.7, 1.5, 0],
+      "rotation": [0, 0, Math.PI / 4],
+      "scale": [1, 1, 1]
+    },
+    {
+      "name": "RightArm",
+      "type": "Mesh",
+      "geometry": {
+        "type": "CylinderGeometry",
+        "parameters": {
+          "radiusTop": 0.15,
+          "radiusBottom": 0.15,
+          "height": 1.2,
+          "radialSegments": 8
+        }
+      },
+      "material": {
+        "type": "MeshStandardMaterial",
+        "color": "#4A7043",
+        "roughness": 0.9,
+        "metalness": 0.1
+      },
+      "position": [0.7, 1.5, 0],
+      "rotation": [0, 0, -Math.PI / 4],
+      "scale": [1, 1, 1]
+    },
+    {
+      "name": "LeftLeg",
+      "type": "Mesh",
+      "geometry": {
+        "type": "CylinderGeometry",
+        "parameters": {
+          "radiusTop": 0.2,
+          "radiusBottom": 0.2,
+          "height": 1.5,
+          "radialSegments": 8
+        }
+      },
+      "material": {
+        "type": "MeshStandardMaterial",
+        "color": "#4A7043",
+        "roughness": 0.9,
+        "metalness": 0.1
+      },
+      "position": [-0.3, 0.75, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1, 1, 1]
+    },
+    {
+      "name": "RightLeg",
+      "type": "Mesh",
+      "geometry": {
+        "type": "CylinderGeometry",
+        "parameters": {
+          "radiusTop": 0.2,
+          "radiusBottom": 0.2,
+          "height": 1.5,
+          "radialSegments": 8
+        }
+      },
+      "material": {
+        "type": "MeshStandardMaterial",
+        "color": "#4A7043",
+        "roughness": 0.9,
+        "metalness": 0.1
+      },
+      "position": [0.3, 0.75, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1, 1, 1]
+    }
+  ],
+  "animations": [
+    {
+      "name": "Shamble",
+      "duration": 2,
+      "tracks": [
+        {
+          "name": "Zombie.position",
+          "type": "vector",
+          "keys": [
+            { "time": 0, "value": [0, 0, 0] },
+            { "time": 1, "value": [0, 0, 0.5] },
+            { "time": 2, "value": [0, 0, 0] }
+          ]
+        },
+        {
+          "name": "LeftLeg.rotation",
+          "type": "vector",
+          "keys": [
+            { "time": 0, "value": [0, 0, 0] },
+            { "time": 0.5, "value": [Math.PI / 6, 0, 0] },
+            { "time": 1, "value": [0, 0, 0] },
+            { "time": 1.5, "value": [-Math.PI / 6, 0, 0] },
+            { "time": 2, "value": [0, 0, 0] }
+          ]
+        },
+        {
+          "name": "RightLeg.rotation",
+          "type": "vector",
+          "keys": [
+            { "time": 0, "value": [0, 0, 0] },
+            { "time": 0.5, "value": [-Math.PI / 6, 0, 0] },
+            { "time": 1, "value": [0, 0, 0] },
+            { "time": 1.5, "value": [Math.PI / 6, 0, 0] },
+            { "time": 2, "value": [0, 0, 0] }
+          ]
+        },
+        {
+          "name": "LeftArm.rotation",
+          "type": "vector",
+          "keys": [
+            { "time": 0, "value": [0, 0, Math.PI / 4] },
+            { "time": 0.5, "value": [0, 0, Math.PI / 3] },
+            { "time": 1, "value": [0, 0, Math.PI / 4] },
+            { "time": 1.5, "value": [0, 0, Math.PI / 6] },
+            { "time": 2, "value": [0, 0, Math.PI / 4] }
+          ]
+        },
+        {
+          "name": "RightArm.rotation",
+          "type": "vector",
+          "keys": [
+            { "time": 0, "value": [0, 0, -Math.PI / 4] },
+            { "time": 0.5, "value": [0, 0, -Math.PI / 6] },
+            { "time": 1, "value": [0, 0, -Math.PI / 4] },
+            { "time": 1.5, "value": [0, 0, -Math.PI / 3] },
+            { "time": 2, "value": [0, 0, -Math.PI / 4] }
+          ]
+        },
+        {
+          "name": "Head.rotation",
+          "type": "vector",
+          "keys": [
+            { "time": 0, "value": [0, 0, 0] },
+            { "time": 0.5, "value": [0, 0, Math.PI / 8] },
+            { "time": 1, "value": [0, 0, 0] },
+            { "time": 1.5, "value": [0, 0, -Math.PI / 8] },
+            { "time": 2, "value": [0, 0, 0] }
+          ]
+        }
+      ]
+    }
+  ]
+}
