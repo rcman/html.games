@@ -1,0 +1,166 @@
+{
+  "name": "AppleTree",
+  "type": "Group",
+  "position": [0, 0, 0],
+  "rotation": [0, 0, 0],
+  "scale": [1, 1, 1],
+  "children": [
+    {
+      "name": "Trunk",
+      "type": "Mesh",
+      "geometry": {
+        "type": "CylinderGeometry",
+        "parameters": {
+          "radiusTop": 0.5,
+          "radiusBottom": 0.7,
+          "height": 4,
+          "radialSegments": 16
+        }
+      },
+      "material": {
+        "type": "MeshStandardMaterial",
+        "color": "#8B4513",
+        "roughness": 0.8,
+        "metalness": 0.2
+      },
+      "position": [0, 2, 0],
+      "rotation": [0, 0, 0],
+      "scale": [1, 1, 1]
+    },
+    {
+      "name": "Canopy",
+      "type": "Group",
+      "position": [0, 4, 0],
+      "children": [
+        {
+          "name": "Branch1",
+          "type": "Mesh",
+          "geometry": {
+            "type": "CylinderGeometry",
+            "parameters": {
+              "radiusTop": 0.1,
+              "radiusBottom": 0.2,
+              "height": 2,
+              "radialSegments": 8
+            }
+          },
+          "material": {
+            "type": "MeshStandardMaterial",
+            "color": "#8B4513",
+            "roughness": 0.8,
+            "metalness": 0.2
+          },
+          "position": [1, 1, 0],
+          "rotation": [0, 0, -0.5],
+          "scale": [1, 1, 1],
+          "children": [
+            {
+              "name": "Leaves1",
+              "type": "Mesh",
+              "geometry": {
+                "type": "SphereGeometry",
+                "parameters": {
+                  "radius": 1,
+                  "widthSegments": 16,
+                  "heightSegments": 16
+                }
+              },
+              "material": {
+                "type": "MeshStandardMaterial",
+                "color": "#228B22",
+                "roughness": 0.7,
+                "metalness": 0.1
+              },
+              "position": [0, 1, 0],
+              "scale": [1, 0.8, 1]
+            },
+            {
+              "name": "Apple1",
+              "type": "Mesh",
+              "geometry": {
+                "type": "SphereGeometry",
+                "parameters": {
+                  "radius": 0.2,
+                  "widthSegments": 16,
+                  "heightSegments": 16
+                }
+              },
+              "material": {
+                "type": "MeshStandardMaterial",
+                "color": "#FF0000",
+                "roughness": 0.4,
+                "metalness": 0.3
+              },
+              "position": [0.5, 0.5, 0],
+              "scale": [1, 1, 1]
+            }
+          ]
+        },
+        {
+          "name": "Branch2",
+          "type": "Mesh",
+          "geometry": {
+            "type": "CylinderGeometry",
+            "parameters": {
+              "radiusTop": 0.1,
+              "radiusBottom": 0.2,
+              "height": 2,
+              "radialSegments": 8
+            }
+          },
+          "material": {
+            "type": "MeshStandardMaterial",
+            "color": "#8B4513",
+            "roughness": 0.8,
+            "metalness": 0.2
+          },
+          "position": [-1, 1, 0],
+          "rotation": [0, 0, 0.5],
+          "scale": [1, 1, 1],
+          "children": [
+            {
+              "name": "Leaves2",
+              "type": "Mesh",
+              "geometry": {
+                "type": "SphereGeometry",
+                "parameters": {
+                  "radius": 1,
+                  "widthSegments": 16,
+                  "heightSegments": 16
+                }
+              },
+              "material": {
+                "type": "MeshStandardMaterial",
+                "color": "#228B22",
+                "roughness": 0.7,
+                "metalness": 0.1
+              },
+              "position": [0, 1, 0],
+              "scale": [1, 0.8, 1]
+            },
+            {
+              "name": "Apple2",
+              "type": "Mesh",
+              "geometry": {
+                "type": "SphereGeometry",
+                "parameters": {
+                  "radius": 0.2,
+                  "widthSegments": 16,
+                  "heightSegments": 16
+                }
+              },
+              "material": {
+                "type": "MeshStandardMaterial",
+                "color": "#FF0000",
+                "roughness": 0.4,
+                "metalness": 0.3
+              },
+              "position": [-0.5, 0.5, 0],
+              "scale": [1, 1, 1]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
