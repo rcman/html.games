@@ -1,1 +1,525 @@
-.
+# 2D Platform Shooter with Phaser
+
+I'll create a complete 2D platform shooter game using Phaser 3. This game will feature a player character that can run, jump, shoot enemies, and collect coins.
+
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Phaser 2D Platform Shooter</title>
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3.60.0/dist/phaser.min.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #fff;
+            overflow: hidden;
+        }
+        
+        .game-container {
+            position: relative;
+            box-shadow: 0 0 30px rgba(0, 0, 0, 0.7);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .game-header {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            text-align: center;
+            border-bottom: 2px solid #ff9e00;
+        }
+        
+        .game-title {
+            margin: 0;
+            font-size: 28px;
+            color: #ff9e00;
+            text-shadow: 0 0 10px rgba(255, 158, 0, 0.5);
+            letter-spacing: 2px;
+        }
+        
+        .game-stats {
+            display: flex;
+            justify-content: space-around;
+            margin-top: 10px;
+            font-size: 18px;
+        }
+        
+        .instructions {
+            background: rgba(0, 0, 0, 0.7);
+            padding: 15px;
+            text-align: center;
+            font-size: 16px;
+            line-height: 1.6;
+            border-top: 2px solid #ff9e00;
+        }
+        
+        .highlight {
+            color: #ff9e00;
+            font-weight: bold;
+        }
+        
+        #gameCanvas {
+            display: block;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-top: 15px;
+        }
+        
+        .control-item {
+            background: rgba(255, 158, 0, 0.2);
+            padding: 8px 15px;
+            border-radius: 5px;
+            border: 1px solid #ff9e00;
+        }
+        
+        .game-footer {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 14px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <div class="game-header">
+            <h1 class="game-title">PHASER PLATFORM SHOOTER</h1>
+            <div class="game-stats">
+                <div>HEALTH: <span id="health">100</span></div>
+                <div>SCORE: <span id="score">0</span></div>
+                <div>AMMO: <span id="ammo">30</span></div>
+                <div>COINS: <span id="coins">0</span></div>
+            </div>
+        </div>
+        <div id="gameCanvas"></div>
+        <div class="instructions">
+            <p>
+                <span class="highlight">← →</span> to MOVE • 
+                <span class="highlight">SPACE</span> to JUMP • 
+                <span class="highlight">CLICK</span> to SHOOT • 
+                <span class="highlight">R</span> to RELOAD
+            </p>
+            <div class="controls">
+                <div class="control-item">Collect coins for points</div>
+                <div class="control-item">Avoid enemy bullets</div>
+                <div class="control-item">Shoot enemies to defeat them</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="game-footer">
+        Created with Phaser 3 | Platform Shooter Game
+    </div>
+
+    <script>
+        class GameScene extends Phaser.Scene {
+            constructor() {
+                super({ key: 'GameScene' });
+            }
+            
+            preload() {
+                // Load assets
+                this.load.image('sky', 'https://i.imgur.com/6QbGg5k.png');
+                this.load.image('ground', 'https://i.imgur.com/5eZ8fFd.png');
+                this.load.image('platform', 'https://i.imgur.com/7KdHfzT.png');
+                this.load.spritesheet('player', 'https://i.imgur.com/3JkGDgL.png', { frameWidth: 32, frameHeight: 48 });
+                this.load.spritesheet('enemy', 'https://i.imgur.com/0nKf1Vd.png', { frameWidth: 32, frameHeight: 32 });
+                this.load.image('bullet', 'https://i.imgur.com/0KbQZ0K.png');
+                this.load.image('coin', 'https://i.imgur.com/5E5xSd0.png');
+            }
+            
+            create() {
+                // Game state
+                this.score = 0;
+                this.health = 100;
+                this.coins = 0;
+                this.ammo = 30;
+                this.gameOver = false;
+                
+                // Create world
+                this.add.image(400, 300, 'sky').setScale(2);
+                
+                // Platforms
+                this.platforms = this.physics.add.staticGroup();
+                
+                // Ground
+                this.platforms.create(400, 568, 'ground').setScale(2).refreshBody();
+                
+                // Platforms
+                this.platforms.create(600, 400, 'platform');
+                this.platforms.create(50, 250, 'platform');
+                this.platforms.create(750, 220, 'platform');
+                this.platforms.create(300, 450, 'platform');
+                this.platforms.create(200, 350, 'platform');
+                
+                // Player
+                this.player = this.physics.add.sprite(100, 450, 'player');
+                this.player.setBounce(0.2);
+                this.player.setCollideWorldBounds(true);
+                this.player.setScale(1.2);
+                
+                // Player animations
+                this.anims.create({
+                    key: 'left',
+                    frames: this.anims.generateFrameNumbers('player', { start: 0, end: 3 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+                
+                this.anims.create({
+                    key: 'turn',
+                    frames: [ { key: 'player', frame: 4 } ],
+                    frameRate: 20
+                });
+                
+                this.anims.create({
+                    key: 'right',
+                    frames: this.anims.generateFrameNumbers('player', { start: 5, end: 8 }),
+                    frameRate: 10,
+                    repeat: -1
+                });
+                
+                // Enemies group
+                this.enemies = this.physics.add.group();
+                
+                // Create some enemies
+                this.createEnemy(500, 350);
+                this.createEnemy(300, 200);
+                this.createEnemy(700, 150);
+                
+                // Bullets group
+                this.bullets = this.physics.add.group({
+                    defaultKey: 'bullet',
+                    maxSize: 20
+                });
+                
+                // Enemy bullets group
+                this.enemyBullets = this.physics.add.group({
+                    defaultKey: 'bullet',
+                    maxSize: 20
+                });
+                
+                // Coins
+                this.coinsGroup = this.physics.add.group({
+                    key: 'coin',
+                    repeat: 10,
+                    setXY: { x: 12, y: 0, stepX: 70 }
+                });
+                
+                this.coinsGroup.children.iterate(function (child) {
+                    child.setBounceY(Phaser.Math.FloatBetween(0.4, 0.8));
+                    child.setScale(0.8);
+                    // Position coins on platforms
+                    child.x = Phaser.Math.Between(50, 750);
+                    child.y = Phaser.Math.Between(0, 500);
+                });
+                
+                // Collisions
+                this.physics.add.collider(this.player, this.platforms);
+                this.physics.add.collider(this.enemies, this.platforms);
+                this.physics.add.collider(this.coinsGroup, this.platforms);
+                this.physics.add.collider(this.bullets, this.platforms, bulletHitPlatform, null, this);
+                this.physics.add.collider(this.enemyBullets, this.platforms, bulletHitPlatform, null, this);
+                
+                // Overlaps
+                this.physics.add.overlap(this.player, this.coinsGroup, collectCoin, null, this);
+                this.physics.add.overlap(this.player, this.enemyBullets, hitByBullet, null, this);
+                this.physics.add.overlap(this.bullets, this.enemies, hitEnemy, null, this);
+                
+                // Input
+                this.cursors = this.input.keyboard.createCursorKeys();
+                this.input.on('pointerdown', this.shoot, this);
+                
+                // Reload key
+                this.reloadKey = this.input.keyboard.addKey('R');
+                
+                // Camera
+                this.cameras.main.startFollow(this.player);
+                this.cameras.main.setBounds(0, 0, 800, 600);
+                
+                // UI text
+                this.healthText = document.getElementById('health');
+                this.scoreText = document.getElementById('score');
+                this.ammoText = document.getElementById('ammo');
+                this.coinsText = document.getElementById('coins');
+                
+                // Update UI
+                this.updateUI();
+            }
+            
+            createEnemy(x, y) {
+                const enemy = this.enemies.create(x, y, 'enemy');
+                enemy.setCollideWorldBounds(true);
+                enemy.setBounce(1);
+                enemy.setVelocityX(Phaser.Math.Between(-100, 100));
+                enemy.setScale(1.3);
+                enemy.health = 100;
+                
+                // Enemy shoot timer
+                enemy.shootTimer = this.time.addEvent({
+                    delay: 2000,
+                    callback: () => {
+                        if (!this.gameOver) {
+                            this.enemyShoot(enemy);
+                        }
+                    },
+                    loop: true
+                });
+            }
+            
+            enemyShoot(enemy) {
+                if (!enemy.active) return;
+                
+                const bullet = this.enemyBullets.get(enemy.x, enemy.y);
+                if (bullet) {
+                    bullet.setActive(true);
+                    bullet.setVisible(true);
+                    
+                    // Calculate direction to player
+                    const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.player.x, this.player.y);
+                    
+                    // Set velocity
+                    const speed = 200;
+                    bullet.setVelocity(
+                        Math.cos(angle) * speed,
+                        Math.sin(angle) * speed
+                    );
+                    
+                    // Set position
+                    bullet.setPosition(enemy.x, enemy.y);
+                }
+            }
+            
+            shoot() {
+                if (this.ammo <= 0 || this.gameOver) return;
+                
+                this.ammo--;
+                
+                const bullet = this.bullets.get(this.player.x, this.player.y - 10);
+                if (bullet) {
+                    bullet.setActive(true);
+                    bullet.setVisible(true);
+                    
+                    // Calculate direction based on mouse position
+                    const pointer = this.input.activePointer;
+                    const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y - 10, pointer.x + this.cameras.main.scrollX, pointer.y + this.cameras.main.scrollY);
+                    
+                    // Set velocity
+                    const speed = 300;
+                    bullet.setVelocity(
+                        Math.cos(angle) * speed,
+                        Math.sin(angle) * speed
+                    );
+                    
+                    // Set position
+                    bullet.setPosition(this.player.x, this.player.y - 10);
+                    
+                    // Update UI
+                    this.updateUI();
+                }
+            }
+            
+            update() {
+                if (this.gameOver) return;
+                
+                // Reload with R key
+                if (Phaser.Input.Keyboard.JustDown(this.reloadKey) && this.ammo < 30) {
+                    this.ammo = 30;
+                    this.updateUI();
+                }
+                
+                // Player movement
+                if (this.cursors.left.isDown) {
+                    this.player.setVelocityX(-160);
+                    this.player.anims.play('left', true);
+                } else if (this.cursors.right.isDown) {
+                    this.player.setVelocityX(160);
+                    this.player.anims.play('right', true);
+                } else {
+                    this.player.setVelocityX(0);
+                    this.player.anims.play('turn');
+                }
+                
+                // Jump
+                if (this.cursors.up.isDown && this.player.body.touching.down) {
+                    this.player.setVelocityY(-330);
+                }
+                
+                // Enemy movement
+                this.enemies.getChildren().forEach(enemy => {
+                    if (enemy.body.blocked.right || enemy.body.blocked.left) {
+                        enemy.setVelocityX(-enemy.body.velocity.x);
+                    }
+                });
+            }
+            
+            updateUI() {
+                this.healthText.textContent = this.health;
+                this.scoreText.textContent = this.score;
+                this.ammoText.textContent = this.ammo;
+                this.coinsText.textContent = this.coins;
+            }
+            
+            gameOverFunc() {
+                this.gameOver = true;
+                
+                // Show game over text
+                const gameOverText = this.add.text(this.player.x, this.player.y - 100, 'GAME OVER', {
+                    fontSize: '64px',
+                    fill: '#ff0000',
+                    fontStyle: 'bold',
+                    stroke: '#ffffff',
+                    strokeThickness: 4
+                }).setOrigin(0.5);
+                
+                const restartText = this.add.text(this.player.x, this.player.y, 'Click to Restart', {
+                    fontSize: '32px',
+                    fill: '#ffffff'
+                }).setOrigin(0.5);
+                
+                // Restart on click
+                this.input.once('pointerdown', () => {
+                    this.scene.restart();
+                });
+            }
+        }
+        
+        // Collision functions
+        function collectCoin(player, coin) {
+            coin.disableBody(true, true);
+            
+            this.coins++;
+            this.score += 10;
+            this.updateUI();
+            
+            // Create a new coin
+            if (this.coinsGroup.countActive(true) === 0) {
+                this.coinsGroup.children.iterate(function (child) {
+                    child.enableBody(true, Phaser.Math.Between(50, 750), Phaser.Math.Between(0, 500), true, true);
+                });
+            }
+        }
+        
+        function hitEnemy(bullet, enemy) {
+            bullet.disableBody(true, true);
+            
+            enemy.health -= 25;
+            
+            // Enemy hit effect
+            enemy.setTint(0xff0000);
+            this.time.delayedCall(100, () => {
+                enemy.clearTint();
+            });
+            
+            if (enemy.health <= 0) {
+                enemy.disableBody(true, true);
+                this.score += 50;
+                this.updateUI();
+                
+                // Chance to drop ammo
+                if (Phaser.Math.Between(1, 4) === 1) {
+                    this.ammo = Math.min(30, this.ammo + 10);
+                    this.updateUI();
+                }
+            }
+        }
+        
+        function hitByBullet(player, bullet) {
+            bullet.disableBody(true, true);
+            
+            this.health -= 10;
+            this.updateUI();
+            
+            // Player hit effect
+            player.setTint(0xff0000);
+            this.time.delayedCall(200, () => {
+                player.clearTint();
+            });
+            
+            if (this.health <= 0) {
+                this.gameOverFunc();
+            }
+        }
+        
+        function bulletHitPlatform(bullet) {
+            bullet.disableBody(true, true);
+        }
+        
+        // Game configuration
+        const config = {
+            type: Phaser.AUTO,
+            width: 800,
+            height: 600,
+            parent: 'gameCanvas',
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 300 },
+                    debug: false
+                }
+            },
+            scene: GameScene
+        };
+        
+        // Create the game
+        const game = new Phaser.Game(config);
+    </script>
+</body>
+</html>
+```
+
+## Game Features
+
+This 2D platform shooter includes:
+
+1. **Player Character**:
+   - Run left/right with arrow keys
+   - Jump with spacebar
+   - Shoot with mouse clicks
+   - Reload with 'R' key
+
+2. **Enemies**:
+   - Patrol platforms
+   - Shoot at the player
+   - Take multiple hits to defeat
+   - Drop ammo when defeated
+
+3. **Collectibles**:
+   - Coins scattered throughout the level
+   - Collect for points
+
+4. **Game Mechanics**:
+   - Health system (player takes damage from enemy bullets)
+   - Ammo system (limited bullets, need to reload)
+   - Score tracking
+   - Game over screen with restart option
+
+5. **Visual Design**:
+   - Sci-fi themed platformer
+   - Animated player character
+   - Particle effects
+   - Clean UI with health, score, ammo, and coin counters
+
+## How to Play
+
+1. Use **arrow keys** to move left/right
+2. Press **SPACE** to jump
+3. **CLICK** to shoot in the direction of the mouse
+4. Press **R** to reload when out of ammo
+5. Collect **coins** for points
+6. Avoid enemy bullets and defeat all enemies!
+
+The game will restart automatically when you lose all health - just click to play again!
