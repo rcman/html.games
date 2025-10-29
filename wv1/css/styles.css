@@ -1,0 +1,504 @@
+/* --- START OF FILE styles.css --- */
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body, html {
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    font-family: Arial, sans-serif;
+    background-color: #000; /* Ensure body background is dark */
+}
+
+#game-container {
+    position: relative;
+    width: 100%;
+    height: 100%;
+}
+
+#game-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: block; /* Ensure canvas doesn't have extra space */
+}
+
+/* --- General UI Container --- */
+#ui-container {
+    position: absolute;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allow clicks through to canvas by default */
+    color: white;
+    z-index: 10; /* Base z-index for UI */
+}
+
+/* Utility to hide elements */
+.hidden {
+    display: none !important;
+}
+
+/* --- Player Stats --- */
+#stats {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    width: 180px;
+    pointer-events: none; /* Stats don't need interaction */
+    z-index: 50; /* Ensure stats are above canvas */
+}
+
+.stat-bar {
+    height: 18px;
+    background-color: rgba(0,0,0,0.5);
+    border-radius: 9px;
+    overflow: hidden;
+    margin-bottom: 4px;
+    border: 1px solid #555;
+    padding: 1px; /* Add slight padding inside border */
+    display: flex; /* Use flex for alignment if needed */
+    align-items: center; /* Vertically center fill */
+}
+
+/* Stat fill uses ID directly now */
+.stat-fill {
+    height: 100%;
+    border-radius: 7px; /* Slightly less than container */
+    transition: width 0.3s ease-out;
+}
+
+#health-fill { background-color: #e74c3c; }
+#hunger-fill { background-color: #f39c12; }
+#stamina-fill { background-color: #3498db; }
+
+/* --- Quick Bar --- */
+#quick-bar {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0,0,0,0.6);
+    border-radius: 5px;
+    display: flex;
+    padding: 5px;
+    gap: 6px;
+    pointer-events: auto; /* Quick bar IS interactive */
+    z-index: 50;
+}
+
+.quick-slot {
+    width: 45px;
+    height: 45px;
+    background-color: rgba(255,255,255,0.1);
+    border: 1px solid #444;
+    border-radius: 3px;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    cursor: pointer;
+    position: relative; /* For item count/durability */
+    transition: border-color 0.2s, box-shadow 0.2s; /* Smooth selection transition */
+}
+.quick-slot.drag-over { border: 1px dashed #fff; background-color: rgba(255,255,255,0.2); }
+
+.quick-slot.selected {
+    border: 2px solid #ffaa00;
+    box-shadow: 0 0 5px #ffaa00;
+}
+
+/* --- Inventory Item Display (used in Inventory & Quick Bar) --- */
+.inventory-item {
+    width: 80%;
+    height: 80%;
+    border-radius: 3px;
+    position: relative;
+    /* background-color: #888; */ /* REMOVED default color */
+    background-color: rgba(255, 255, 255, 0.05); /* ADDED subtle background for empty slots or missing images */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    overflow: hidden;
+    /* Tooltip handled by title attribute in JS */
+
+    /* --- ADDED Background Image Styles --- */
+    background-size: contain; /* Or 'cover' - fit image within bounds */
+    background-repeat: no-repeat;
+    background-position: center center;
+    image-rendering: pixelated; /* ADDED for crisp pixel art */
+    image-rendering: crisp-edges; /* Browser compatibility */
+    /* --- END ADD --- */
+}
+
+.item-amount {
+    position: absolute;
+    bottom: 1px;
+    right: 2px;
+    font-size: 10px;
+    background-color: rgba(0,0,0,0.8);
+    color: white;
+    padding: 0px 3px;
+    border-radius: 2px;
+    z-index: 1; /* Ensure amount is above durability bar */
+}
+
+.item-durability {
+    position: absolute;
+    bottom: 1px;
+    left: 1px;
+    width: calc(100% - 2px);
+    height: 3px;
+    background-color: rgba(0,0,0,0.6);
+    border-radius: 1px;
+    overflow: hidden;
+}
+
+.durability-fill {
+    height: 100%;
+    background-color: #4CAF50; /* Default green */
+    border-radius: 1px;
+    transition: width 0.2s, background-color 0.2s; /* Smooth transition */
+}
+
+/* --- Weapon Stats Display --- */
+#weapon-stats {
+    position: absolute;
+    bottom: 65px; /* Above quick bar */
+    right: 20px;
+    background-color: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-size: 14px;
+    display: none; /* Initially hidden */
+    pointer-events: none;
+    z-index: 50;
+}
+#weapon-stats span { margin: 0 4px; }
+
+/* --- Pop-up Menus (Inventory, Build, Crafting, Pause, Death) --- */
+#inventory,
+#build-menu,
+#crafting-menu,
+#pause-menu,
+#death-screen {
+    display: none; /* Default state is hidden */
+    pointer-events: auto; /* These ARE interactive */
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    background-color: rgba(0,0,0,0.85);
+    padding: 20px;
+    border-radius: 8px;
+    z-index: 100; /* Above other UI, below maybe modals */
+    border: 1px solid #666;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    color: white;
+}
+
+/* Inventory Specific */
+#inventory {
+    width: 540px;
+    min-height: 300px;
+    /* display: none; */ /* Handled by common rule above */
+    flex-direction: column;
+}
+#inventory h3 {
+    text-align: center;
+    margin-bottom: 15px;
+    flex-shrink: 0; /* Prevent shrinking */
+}
+#inventory-grid {
+    display: grid;
+    grid-template-columns: repeat(8, 1fr); /* 8 columns */
+    gap: 8px;
+    flex-grow: 1; /* Allow grid to fill space */
+}
+.inventory-slot {
+    background: rgba(255, 255, 255, 0.1);
+    border: 1px solid #444;
+    border-radius: 3px;
+    aspect-ratio: 1; /* Maintain square shape */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    cursor: pointer;
+}
+.inventory-slot.dragging { opacity: 0.5; border-style: dashed; }
+.inventory-slot.drag-over { border: 1px dashed #fff; background-color: rgba(255,255,255,0.2); }
+
+
+/* Build Menu Specific */
+#build-menu {
+    width: 450px;
+    /* display: none; */ /* Handled by common rule above */
+    flex-direction: column;
+}
+#build-menu h3 {
+    text-align: center;
+    margin-bottom: 15px;
+    flex-shrink: 0;
+}
+.build-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(90px, 1fr));
+    gap: 10px;
+    overflow-y: auto; /* Allow scrolling if many items */
+    max-height: 60vh; /* Limit height */
+}
+.build-item {
+    padding: 10px;
+    background-color: rgba(255,255,255,0.1);
+    border-radius: 4px;
+    text-align: center;
+    font-size: 12px;
+    cursor: pointer;
+    transition: background-color 0.2s, border-color 0.2s;
+    border: 2px solid transparent; /* Reserve space for border */
+    word-wrap: break-word; /* Wrap long names */
+}
+.build-item:hover { background-color: rgba(255,255,255,0.2); }
+.build-item.selected { border: 2px solid #ffaa00; background-color: rgba(255,170,0,0.2); }
+.build-item.unavailable { opacity: 0.5; cursor: not-allowed; }
+.build-item.unavailable:hover { background-color: rgba(255,255,255,0.1); } /* Don't highlight on hover if unavailable */
+
+/* Crafting Menu Specific */
+#crafting-menu {
+    width: 600px;
+    max-height: 80vh;
+    /* display: none; */ /* Handled by common rule above */
+    flex-direction: column;
+}
+#crafting-title {
+    text-align: center;
+    margin-bottom: 15px;
+    flex-shrink: 0;
+}
+#crafting-items {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    overflow-y: auto; /* Scroll if content overflows */
+    flex-grow: 1;
+    padding-right: 5px; /* Space for scrollbar */
+}
+.crafting-item {
+    padding: 10px;
+    background-color: rgba(255,255,255,0.1);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column; /* Stack elements vertically */
+    justify-content: space-between; /* Push button to bottom */
+}
+.item-name {
+    font-weight: bold;
+    margin-bottom: 5px;
+}
+.item-requirements {
+    font-size: 0.8em;
+    color: #ccc;
+    margin-bottom: 8px;
+    white-space: pre-wrap; /* Allow requirements tooltip to wrap */
+    flex-grow: 1; /* Allow requirements to take up space */
+}
+.craft-button {
+    display: block;
+    width: 100%;
+    margin-top: 8px;
+    padding: 5px 8px;
+    background-color:#5a5;
+    color:white;
+    border:none;
+    border-radius:3px;
+    cursor:pointer;
+    transition: background-color 0.2s;
+}
+.craft-button:hover:not(:disabled) { background-color: #494; }
+.craft-button:disabled { background-color:#555; cursor:not-allowed; }
+
+/* Notification Area */
+#notification {
+    position: fixed;
+    bottom: 80px; /* Above quick bar + weapon stats */
+    left: 50%;
+    transform: translateX(-50%);
+    background-color: rgba(0,0,0,0.7);
+    color: white;
+    padding: 8px 15px;
+    border-radius: 5px;
+    z-index: 1000; /* Above most UI */
+    transition: opacity 0.5s ease-out;
+    pointer-events: none;
+    opacity: 0;
+    display: none; /* Default hidden, controlled by JS */
+    text-align: center;
+    max-width: 80%;
+}
+
+/* Interaction Prompt */
+#interaction-prompt {
+    position: absolute;
+    bottom: 120px; /* Further up */
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+    font-size: 14px;
+    z-index: 90; /* Below menus */
+    display: none; /* Default hidden */
+    white-space: nowrap; /* Prevent wrapping */
+}
+
+/* Pause Menu */
+#pause-menu {
+    text-align: center;
+    /* display: none; */ /* Handled by common rule above */
+    width: 300px; /* Fixed width */
+}
+#pause-menu h2 { margin-bottom: 20px; }
+#pause-menu button {
+    display: block; /* Stack buttons */
+    width: 80%;
+    margin: 10px auto; /* Center buttons */
+    padding: 10px 20px;
+    cursor: pointer;
+    background: #555;
+    color: white;
+    border: 1px solid #888;
+    border-radius: 4px;
+    font-size: 16px;
+    transition: background-color 0.2s;
+}
+#pause-menu button:hover { background-color: #777; }
+
+/* Death Screen */
+#death-screen {
+    position:fixed;
+    top:0;
+    left:0;
+    width:100%;
+    height:100%;
+    background:rgba(100,0,0,0.6);
+    /* display:none; */ /* Handled by common rule above */
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    color:white;
+    z-index:2000; /* Highest priority */
+}
+#death-screen h1 {
+    font-size:60px;
+    color:#FF4444;
+    text-shadow:2px 2px 5px black;
+    margin-bottom:40px;
+}
+#death-screen button {
+    padding:15px 30px;
+    font-size:24px;
+    background:#555;
+    color:white;
+    border:2px solid #888;
+    border-radius:5px;
+    cursor:pointer;
+    transition: background-color 0.2s;
+}
+#death-screen button:hover { background-color: #777; }
+
+/* --- Drag & Drop --- */
+.drag-image { /* Hidden element used for custom drag image */
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* --- Damage Indicator --- */
+.damage-indicator {
+    /* Styles mostly applied via JS, can add defaults here */
+    position: fixed;
+    color: #ff4444;
+    font-size: 24px;
+    font-weight: bold;
+    text-shadow: 0 0 3px black, 0 0 3px black;
+    pointer-events: none;
+    z-index: 1001; /* Above notifications */
+    transition: opacity 0.8s ease-out, transform 0.8s ease-out;
+}
+
+/* --- Settings Menu --- */
+#settings-menu {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0,0,0,0.9);
+    color: white;
+    z-index: 5000; /* Above everything */
+    display: flex; /* Starts visible, controlled by main.js */
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    font-family: Arial, sans-serif;
+    padding: 20px;
+    overflow-y: auto; /* Allow scrolling on small screens */
+}
+#settings-menu h2 { margin-bottom: 20px; }
+#settings-menu div { max-width: 500px; width: 90%; } /* Responsive grid */
+#settings-menu label { text-align: right; }
+#settings-menu input[type="range"],
+#settings-menu input[type="number"] { width: 150px; } /* Consistent input size */
+#start-game-button { padding: 15px 30px; font-size: 20px; cursor: pointer; margin-top: 20px; }
+
+/* --- Debug Controls --- */
+#debug-controls {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    background: rgba(0,0,0,0.7);
+    padding: 10px;
+    border-radius: 5px;
+    display: none; /* Initially hidden */
+    pointer-events: auto; /* IS interactive */
+    z-index: 200; /* High z-index */
+    color: white;
+}
+#debug-controls h4 { margin-bottom: 8px; }
+#debug-controls div { margin-bottom: 5px; }
+#debug-controls label { display: block; font-size: 12px; margin-bottom: 2px; }
+#debug-controls input[type="range"] { width: 150px; vertical-align: middle; }
+#debug-controls span { font-size: 11px; margin-left: 5px; display: inline-block; width: 30px; text-align: right; vertical-align: middle; }
+
+/* --- Save/Load Buttons (Outside Menus) --- */
+#save-load-buttons {
+    position: absolute;
+    top: 70px; /* Below stats */
+    left: 10px;
+    pointer-events: auto; /* IS interactive */
+    z-index: 50;
+}
+#save-load-buttons button {
+    background: rgba(0,0,0,0.6);
+    color: white;
+    border: 1px solid #555;
+    padding: 5px 10px;
+    margin-right: 5px;
+    border-radius: 3px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background-color 0.2s;
+}
+#save-load-buttons button:hover { background: rgba(255,255,255,0.2); }
+
+/* --- END OF FILE styles.css --- */
