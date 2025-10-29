@@ -1,0 +1,24 @@
+Things that need to be fixed or added.
+
+- When the game starts there's there's a health counter on the center of the screen it needs to be removed.
+
+- animals and resources are affected by map heightmap so this needs to be changed so they spawn to which ever hightmap I select
+
+- empty buildings are drawn wrong, there should only be 4 walls and inside the building a container that can be searched
+
+- barrels should be all over the map not just in empty buildings.
+
+- The build system doesn't seen to work 
+
+- add a saving and loading feature.
+
+- make the sky more blue
+
+- add crafting table items: coat, boots, pants, stuff to help with cold.
+- add add body armour, helmet, stronger pants 
+
+Player spawns with Base Controller but one can also be crafted at the craftiing table. The Base controller is attached to a wall inside your base to make you the owner of that base. You can add permissions(other users) to the Base Controller  but these added users can never remove or delete an item on or in the base.
+and ownership 
+
+all the base unit to add others to your group but with permissions
+some users can't delete or remove items 

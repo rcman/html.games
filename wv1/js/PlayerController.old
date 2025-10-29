@@ -1,0 +1,880 @@
+// --- START OF FILE PlayerController.js ---
+
+class PlayerController {
+    constructor(game) {
+        this.game = game;
+        this.camera = game.camera;
+        this.position = new THREE.Vector3(0, 10, 0); // Initial position
+        this.velocity = new THREE.Vector3(0, 0, 0);
+        this.rotation = 0; // Radians, around Y axis
+        this.pitch = 0; // Radians, camera up/down
+        this.moveSpeed = Constants.PLAYER.MOVE_SPEED;
+        this.sprintSpeed = Constants.PLAYER.SPRINT_SPEED;
+        this.jumpForce = Constants.PLAYER.JUMP_FORCE;
+        this.interactionRange = Constants.PLAYER.INTERACTION_RANGE;
+        this.cameraHeight = Constants.PLAYER.CAM_HEIGHT;
+        this.reloadTime = Constants.PLAYER.RELOAD_TIME;
+
+        // Movement state
+        this.moveForward = false;
+        this.moveBackward = false;
+        this.moveLeft = false;
+        this.moveRight = false;
+        this.isSprinting = false;
+        this.isJumping = false;
+        this.onGround = false;
+        this.isMoving = false; // Track if any movement key is pressed
+
+        // Interaction/Building state
+        this.buildMode = false;
+        this.selectedBuildItem = null;
+        this.buildPreview = null;
+        this.buildRotation = 0; // Y-axis rotation for build preview
+
+        // Weapon state
+        this.weaponCooldownTimer = 0;
+        this.isReloading = false;
+        this.reloadTimer = 0;
+
+        // Flashlight State
+        this.flashlight = null;
+        this.isFlashlightOn = false;
+
+        // Debug Ray Helper
+        this.rayHelper = null;
+
+        // Player model (using Cylinder as a fallback)
+        this.playerModel = null;
+        this.createPlayerModel(); // Create the model representation
+
+        this.setupInputHandlers();
+    }
+
+    createPlayerModel() {
+        // --- USING CylinderGeometry as a fallback for older THREE versions ---
+        const radius = 0.4;
+        const height = 1.8; // Total height desired
+        const cylinderHeight = Math.max(0.1, height - (radius * 2)); // Adjust for caps visual
+        const geo = new THREE.CylinderGeometry(radius, radius, cylinderHeight, 8);
+        // --- END FALLBACK ---
+
+        // const geo = new THREE.CapsuleGeometry(0.4, 1.0, 4, 8); // Use this if you update three.js
+
+        const mat = new THREE.MeshStandardMaterial({ color: 0xff0000, wireframe: true, visible: false }); // Initially invisible
+        this.playerModel = new THREE.Mesh(geo, mat);
+        this.playerModel.position.copy(this.position);
+        // Adjust Y position based on Cylinder origin (center)
+        this.playerModel.position.y += height / 2;
+        // this.game.scene.add(this.playerModel); // Optional: add to scene for debugging visibility
+    }
+
+    setupInputHandlers() {
+        document.addEventListener('keydown', (e) => {
+            if (this.game.uiManager?.isInventoryOpen || this.game.uiManager?.isCraftingMenuOpen || this.game.uiManager?.isBuildMenuOpen || document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') return;
+
+            switch (e.key.toLowerCase()) {
+                case 'w': this.moveForward = true; break;
+                case 's': this.moveBackward = true; break;
+                case 'a': this.moveLeft = true; break;
+                case 'd': this.moveRight = true; break;
+                case ' ': if (this.onGround && !this.isJumping) this.jump(); break;
+                case 'shift': this.isSprinting = true; break;
+                case 'e': this.interact(); break;
+                case 'b': this.toggleBuildMode(); break;
+                case 'r':
+                     if (!this.buildMode) this.reloadWeapon();
+                     else this.rotateBuildPreview();
+                     break;
+                case 'f': this.toggleFlashlight(); break; // Flashlight Toggle
+                case 'g': this.game.toggleGodMode(); break;
+                case 'i': this.game.uiManager?.toggleInventory(); break;
+                case 'c':
+                     if(this.game.uiManager?.isCraftingMenuOpen) this.game.uiManager.closeCraftingMenu();
+                     else this.game.uiManager?.openCraftingMenu('basic');
+                     break;
+            }
+            this.isMoving = this.moveForward || this.moveBackward || this.moveLeft || this.moveRight;
+        });
+
+        document.addEventListener('keyup', (e) => {
+            switch (e.key.toLowerCase()) {
+                case 'w': this.moveForward = false; break;
+                case 's': this.moveBackward = false; break;
+                case 'a': this.moveLeft = false; break;
+                case 'd': this.moveRight = false; break;
+                case 'shift': this.isSprinting = false; break;
+            }
+            this.isMoving = this.moveForward || this.moveBackward || this.moveLeft || this.moveRight;
+        });
+
+        document.addEventListener('mousemove', (e) => {
+            if (document.pointerLockElement === this.game.renderer.domElement) {
+                this.rotation -= e.movementX * 0.002;
+                this.pitch -= e.movementY * 0.002;
+                this.pitch = Math.max(-Math.PI / 2 + 0.01, Math.min(Math.PI / 2 - 0.01, this.pitch));
+            }
+        });
+
+        document.addEventListener('mousedown', (e) => {
+             console.log("[Mousedown Start] Active Element:", document.activeElement?.tagName, "Pointer Locked:", document.pointerLockElement === this.game.renderer.domElement); // Log state at start
+             if (this.game.uiManager?.isInventoryOpen || this.game.uiManager?.isCraftingMenuOpen || this.game.uiManager?.isBuildMenuOpen) {
+                 // Check if click is outside the open menu
+                 if (!e.target.closest('#inventory') && !e.target.closest('#crafting-menu') && !e.target.closest('#build-menu')) {
+                     console.log("[Mousedown] Clicked outside open menu, preventing default.");
+                     e.preventDefault(); // Prevent potential focus changes or canvas interaction
+                     return; // Stop processing this click if outside menu
+                 }
+                 console.log("[Mousedown] Clicked inside an open menu.");
+             } else {
+                 // No major menu is open, check if pointer lock is needed
+                 if (document.pointerLockElement !== this.game.renderer.domElement) {
+                     console.log("[Mousedown] Requesting pointer lock...");
+                     this.game.renderer.domElement.requestPointerLock();
+                     // It might take a moment for the lock to activate, so subsequent logic might not run immediately in the locked state
+                 }
+             }
+
+            // Only process game actions if pointer IS locked
+            if (document.pointerLockElement === this.game.renderer.domElement) {
+                console.log("[Mousedown] Pointer is locked. Processing click button:", e.button);
+                if (e.button === 0) { // Left mouse
+                    if (this.buildMode && this.selectedBuildItem && this.buildPreview?.visible) {
+                        console.log("[Mousedown] Calling build()...");
+                        this.build();
+                    } else if (!this.buildMode) {
+                        console.log("[Mousedown] Calling shoot() (not in build mode)...");
+                        this.shoot();
+                    } else {
+                         console.log("[Mousedown] Left click ignored in build mode (no valid preview/item).");
+                    }
+                } else if (e.button === 2) { // Right mouse
+                    console.log("[Mousedown] Right click detected.");
+                    if (this.buildMode) {
+                        console.log("[Mousedown] Toggling build mode off.");
+                        this.toggleBuildMode();
+                    } else {
+                        console.log("[Mousedown] Right click action (e.g., Aim) - currently none.");
+                        /* Aim down sights? */
+                    }
+                }
+            } else {
+                 console.log("[Mousedown] Pointer not locked, click not processed for game actions.");
+            }
+        });
+
+         document.addEventListener('pointerlockchange', () => {
+             // --- ADDED: Log pointer lock changes ---
+             if (document.pointerLockElement === this.game.renderer?.domElement) {
+                 console.log("Pointer LOCK successful.");
+             } else {
+                 console.log("Pointer UNLOCK successful.");
+                 // If unlocked unexpectedly, maybe close menus?
+                 // Example: If inventory is open when pointer unlocks, maybe force it closed?
+                 // if(this.game.uiManager?.isInventoryOpen) {
+                 //     console.log("Pointer unlocked while inventory open, closing inventory.");
+                 //     this.game.uiManager.toggleInventory();
+                 // }
+             }
+             // --- END ADDED ---
+         }, false);
+         document.addEventListener('pointerlockerror', () => console.error('Pointer Lock Error'), false);
+    }
+
+
+    createFlashlight() {
+        if (!this.flashlight) {
+            this.flashlight = new THREE.SpotLight( 0xffffe0, 0, Constants.PLAYER.FLASHLIGHT_RANGE, Constants.PLAYER.FLASHLIGHT_ANGLE, Constants.PLAYER.FLASHLIGHT_PENUMBRA, 1.5 );
+            this.flashlight.castShadow = true;
+            this.flashlight.shadow.mapSize.width = 512; this.flashlight.shadow.mapSize.height = 512;
+            this.flashlight.shadow.camera.near = 0.5; this.flashlight.shadow.camera.far = Constants.PLAYER.FLASHLIGHT_RANGE;
+            this.flashlight.shadow.bias = -0.002;
+
+            this.camera.add(this.flashlight);
+            this.flashlight.position.set(0.2, -0.3, 0.1);
+            this.flashlight.target.position.set(0, 0, -1);
+            this.camera.add(this.flashlight.target);
+        }
+    }
+
+    toggleFlashlight() {
+        if (!this.flashlight) { this.createFlashlight(); }
+        if (this.flashlight) {
+             this.isFlashlightOn = !this.isFlashlightOn;
+             this.flashlight.intensity = this.isFlashlightOn ? Constants.PLAYER.FLASHLIGHT_INTENSITY : 0;
+             this.game.uiManager?.showNotification(`Flashlight ${this.isFlashlightOn ? 'ON' : 'OFF'}`, 1000);
+         } else { console.error("Failed to create flashlight."); }
+    }
+
+    update(deltaTime) {
+        if (!deltaTime || deltaTime <= 0) return;
+
+        if (this.weaponCooldownTimer > 0) { this.weaponCooldownTimer -= deltaTime; }
+        if (this.isReloading) {
+            this.reloadTimer -= deltaTime;
+            if (this.reloadTimer <= 0) {
+                this.isReloading = false;
+                this.game.uiManager?.updateWeaponUI(this.getSelectedTool());
+            }
+        }
+
+        this.updatePhysics(deltaTime);
+        this.checkWorldCollisions(deltaTime); // Check terrain collision *after* applying Y velocity
+        // Object collisions are handled within applyMovementWithCollision now
+        this.updateCamera();
+        this.updatePlayerModel();
+
+        if (this.buildMode && this.selectedBuildItem) { this.updateBuildPreview(deltaTime); }
+    }
+
+
+    updatePhysics(deltaTime) {
+        const currentMoveSpeed = (this.isSprinting && this.game.characterStats.stamina > 0) ? this.sprintSpeed : this.moveSpeed;
+        const effectiveSpeed = this.game.isGodMode ? this.sprintSpeed * 1.5 : currentMoveSpeed;
+
+        let moveDirection = new THREE.Vector3(0, 0, 0);
+        if (this.moveForward) moveDirection.z -= 1; if (this.moveBackward) moveDirection.z += 1;
+        if (this.moveLeft) moveDirection.x -= 1; if (this.moveRight) moveDirection.x += 1;
+
+        if (moveDirection.lengthSq() > 0) {
+            moveDirection.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), this.rotation);
+            this.velocity.x = moveDirection.x * effectiveSpeed; this.velocity.z = moveDirection.z * effectiveSpeed;
+            if (this.isSprinting && !this.game.isGodMode) {
+                 this.game.characterStats?.useStamina(Constants.PLAYER.STAMINA_SPRINT_DRAIN * deltaTime);
+                 if (this.game.characterStats.stamina <= 0) { this.isSprinting = false; }
+            }
+        } else {
+            const friction = this.onGround ? 15 : 1;
+            this.velocity.x *= (1 - friction * deltaTime); this.velocity.z *= (1 - friction * deltaTime);
+        }
+
+        if (!this.onGround) { this.velocity.y -= Constants.WORLD.GRAVITY * deltaTime; }
+
+        // --- Apply movement with object collision checks ---
+        this.applyMovementWithCollision(deltaTime);
+        // ---
+    }
+
+
+    checkWorldCollisions(deltaTime) {
+         if (!this.game.terrain) return;
+         const terrainHeight = this.game.terrain.getHeightAt(this.position.x, this.position.z);
+         const groundCheckOffset = 0.1; // How close to terrain to be considered grounded
+
+         // If we are falling and below or at terrain level
+         if (this.velocity.y <= 0 && this.position.y <= terrainHeight + groundCheckOffset) {
+             // Check for fall damage only if falling speed is significant
+             if (this.velocity.y < -15) {
+                 const fallDamage = Math.abs(this.velocity.y + 15) * 2;
+                 this.game.characterStats?.takeDamage(fallDamage, 'fall');
+             }
+             // Land on ground
+             this.position.y = terrainHeight;
+             this.velocity.y = 0;
+             this.onGround = true;
+             this.isJumping = false; // Can jump again
+         } else {
+             // If above ground level, we are not on the ground
+             this.onGround = false;
+         }
+
+         // Prevent falling through world edges (Boundary check)
+         const worldLimit = (Constants.WORLD.SIZE / 2) - 1;
+         this.position.x = Math.max(-worldLimit, Math.min(worldLimit, this.position.x));
+         this.position.z = Math.max(-worldLimit, Math.min(worldLimit, this.position.z));
+    }
+
+    // --- NEW: Apply Movement with Collision Detection ---
+    applyMovementWithCollision(deltaTime) {
+        const originalPos = this.position.clone();
+        const playerHalfHeight = 0.9; // Approximate half-height for collision box
+        const playerRadius = 0.4;     // Approximate radius
+
+        // Calculate potential new positions based on current velocity
+        const potentialPosX = originalPos.x + this.velocity.x * deltaTime;
+        const potentialPosY = originalPos.y + this.velocity.y * deltaTime; // Handle Y separately for terrain
+        const potentialPosZ = originalPos.z + this.velocity.z * deltaTime;
+
+        // Get nearby potential colliders (barrels, generated structures, and player-built buildings)
+        const collisionCheckRadius = 2.0; // Check slightly larger than player
+        const nearbyResources = this.game.resourceManager?.getResourcesNear(this.position, collisionCheckRadius)
+            .filter(res => res && ['barrel', 'structure', 'building'].includes(res.type) && res.meshes && res.meshes.length > 0) || []; // Include 'building' type
+
+        // Also get player-built buildings directly from BuildingSystem (as they might not all be registered as resources if not destructible)
+        // Note: This might lead to duplicates if destructible buildings are also in RM. We filter later.
+        const nearbyPlayerBuildings = this.game.buildingSystem?.buildings
+            .filter(bldg => bldg && bldg.meshes && bldg.meshes.length > 0 && Utils.distance(this.position.x, this.position.z, bldg.position.x, bldg.position.z) < collisionCheckRadius) || [];
+
+        // Check X-axis movement
+        let collisionX = false;
+        if (this.velocity.x !== 0) {
+            // Adjust Y pos of collider based on player's current vertical position
+            const currentGroundOffset = this.onGround ? 0 : 0.1; // Small offset if slightly airborne
+            const playerColliderX = new THREE.Box3(
+                new THREE.Vector3(potentialPosX - playerRadius, originalPos.y - playerHalfHeight + currentGroundOffset, originalPos.z - playerRadius),
+                new THREE.Vector3(potentialPosX + playerRadius, originalPos.y + playerHalfHeight + currentGroundOffset, originalPos.z + playerRadius)
+            );
+
+            // Combine and deduplicate potential colliders
+            const checkedIds = new Set();
+            const allNearbyObjects = [...nearbyResources, ...nearbyPlayerBuildings];
+
+            for (const obj of allNearbyObjects) {
+                if (!obj || !obj.meshes || !obj.meshes[0] || checkedIds.has(obj.id)) continue; // Skip if invalid or already checked
+                checkedIds.add(obj.id);
+                // Ensure the object's mesh matrix is updated for accurate bounds
+                // Check if meshes[0] exists and is a valid THREE object
+                if (obj.meshes[0] && typeof obj.meshes[0].updateMatrixWorld === 'function') {
+                     obj.meshes[0].updateMatrixWorld(true);
+                     const objBounds = new THREE.Box3().setFromObject(obj.meshes[0]);
+                     if (playerColliderX.intersectsBox(objBounds)) {
+                         collisionX = true;
+                         // console.log("Collision X with:", obj.id || obj.type); // DEBUG
+                         break;
+                     }
+                 }
+            }
+        }
+
+        // Check Z-axis movement
+        let collisionZ = false;
+        if (this.velocity.z !== 0) {
+            const currentGroundOffset = this.onGround ? 0 : 0.1;
+             // Use original X position, potential Z position for this check
+            const playerColliderZ = new THREE.Box3(
+                new THREE.Vector3(originalPos.x - playerRadius, originalPos.y - playerHalfHeight + currentGroundOffset, potentialPosZ - playerRadius),
+                new THREE.Vector3(originalPos.x + playerRadius, originalPos.y + playerHalfHeight + currentGroundOffset, potentialPosZ + playerRadius)
+            );
+
+            // Combine and deduplicate potential colliders (reuse from X check if efficient, or re-query/filter)
+            const checkedIds = new Set(); // Reset checked set for Z axis
+            const allNearbyObjects = [...nearbyResources, ...nearbyPlayerBuildings]; // Re-get combined list
+
+            for (const obj of allNearbyObjects) {
+                if (!obj || !obj.meshes || !obj.meshes[0] || checkedIds.has(obj.id)) continue;
+                checkedIds.add(obj.id);
+                 if (obj.meshes[0] && typeof obj.meshes[0].updateMatrixWorld === 'function') {
+                      obj.meshes[0].updateMatrixWorld(true);
+                      const objBounds = new THREE.Box3().setFromObject(obj.meshes[0]);
+                      if (playerColliderZ.intersectsBox(objBounds)) {
+                          collisionZ = true;
+                           // console.log("Collision Z with:", obj.id || obj.type); // DEBUG
+                          break;
+                      }
+                  }
+            }
+        }
+
+        // Apply movement, stopping velocity if collision occurred on that axis
+        if (collisionX) {
+            this.velocity.x = 0;
+        } else {
+            this.position.x = potentialPosX;
+        }
+
+        if (collisionZ) {
+            this.velocity.z = 0;
+        } else {
+            this.position.z = potentialPosZ;
+        }
+
+        // Apply Y movement (this will be corrected by checkWorldCollisions if needed)
+        this.position.y = potentialPosY;
+
+        // Clean up near-zero velocities after collision checks
+        if (Math.abs(this.velocity.x) < 0.01) this.velocity.x = 0;
+        if (Math.abs(this.velocity.z) < 0.01) this.velocity.z = 0;
+        // Y velocity cleanup happens in checkWorldCollisions
+    }
+    // --- END NEW ---
+
+
+    updateCamera() {
+        this.camera.position.set(this.position.x, this.position.y + this.cameraHeight, this.position.z);
+        this.camera.rotation.order = 'YXZ';
+        this.camera.rotation.y = this.rotation; this.camera.rotation.x = this.pitch; this.camera.rotation.z = 0;
+        this.camera.updateMatrixWorld(true); // Ensure camera matrix is updated
+    }
+
+    updatePlayerModel() {
+        if (this.playerModel) {
+            this.playerModel.position.copy(this.position);
+            // Adjust Y for model origin (center of cylinder/capsule)
+            this.playerModel.position.y += (Constants.PLAYER.CAM_HEIGHT / 2); // Crude adjustment, depends on model origin
+            this.playerModel.rotation.y = this.rotation;
+        }
+    }
+
+    jump() {
+        const staminaCost = Constants.PLAYER.STAMINA_JUMP_COST;
+        if (!this.game.isGodMode && this.game.characterStats.stamina < staminaCost) {
+             this.game.uiManager?.showNotification("Not enough stamina to jump!", 1500); return;
+        }
+        if (this.onGround) {
+             this.isJumping = true; this.onGround = false; this.velocity.y = this.jumpForce;
+             if (!this.game.isGodMode) { this.game.characterStats?.useStamina(staminaCost); }
+        }
+    }
+
+    interact() {
+        const interactionRay = new THREE.Raycaster( this.camera.position, this.camera.getWorldDirection(new THREE.Vector3()) );
+        interactionRay.far = this.interactionRange;
+        let interactTarget = null; let minDistance = this.interactionRange + 1;
+
+        // --- Combine targets for raycasting ---
+        let potentialTargets = [];
+        // Resources (Trees, Rocks, Plants, Crates, Barrels, maybe dead animals?)
+        const nearbyResources = this.game.resourceManager?.getResourcesNear(this.position, this.interactionRange + 2) || [];
+        nearbyResources.forEach(res => {
+            if (res && res.meshes && res.meshes.length > 0) {
+                 res.meshes.forEach(mesh => {
+                     if(mesh) {
+                         mesh.traverse(child => {
+                             if(child.isMesh) {
+                                 child.userData.resourceId = res.id; // Ensure ID is attached
+                                 child.userData.resourceType = res.type;
+                                 child.userData.resourceName = res.name;
+                                 child.userData.isSearchable = ['crate', 'barrel'].includes(res.type);
+                                 // Determine if harvestable (exclude searchable, stations, structures, buildings)
+                                 child.userData.isHarvestable = !child.userData.isSearchable && !['workbench', 'forge', 'campfire', 'structure', 'building'].includes(res.type);
+                                 child.userData.isStation = ['workbench', 'forge', 'campfire'].includes(res.type);
+                             }
+                         });
+                         potentialTargets.push(mesh);
+                     }
+                 });
+            }
+        });
+
+        // Crafting Stations (may already be included if registered as resources)
+        // const nearbyStations = this.game.resourceManager?.resources.crafting || []; // Redundant if stations are resources
+        // nearbyStations.forEach(st => { ... });
+
+        // Player Buildings (if they need specific interaction)
+        // const nearbyBuildings = this.game.buildingSystem?.buildings || [];
+        // nearbyBuildings.forEach(bldg => { ... });
+
+        // Raycast against combined list
+        const hits = interactionRay.intersectObjects(potentialTargets, true);
+
+        let promptText = null;
+        if (hits.length > 0) {
+             const hitObj = hits[0].object;
+             const dist = hits[0].distance;
+
+             // Traverse up to find the mesh with userData if hit child mesh
+             let parentWithData = hitObj;
+             while(parentWithData && !parentWithData.userData.resourceId && !parentWithData.userData.stationType) {
+                 parentWithData = parentWithData.parent;
+             }
+             const userData = parentWithData ? parentWithData.userData : {};
+
+
+             if (userData.isStation && userData.stationType) {
+                  promptText = `[E] Open ${userData.stationType}`;
+                  interactTarget = { type: 'station', stationType: userData.stationType };
+             } else if (userData.isSearchable && userData.resourceId) {
+                  const resource = this.game.resourceManager.getResource(userData.resourceId);
+                  if (resource && !resource.searched) {
+                       promptText = `[E] Search ${userData.resourceName || userData.resourceType}`;
+                       interactTarget = { type: 'searchable', resourceId: userData.resourceId };
+                  } else if (resource && resource.searched) {
+                       promptText = `${userData.resourceName || userData.resourceType} (Searched)`;
+                       // No interact target if already searched
+                  }
+             } else if (userData.isHarvestable && userData.resourceId) {
+                  const resource = this.game.resourceManager.getResource(userData.resourceId);
+                  if (resource) {
+                       const toolNeeded = this.getRequiredTool(userData.resourceType);
+                       const toolText = toolNeeded ? ` (Requires ${toolNeeded})` : ' (Hand)';
+                       promptText = `[LMB] Harvest ${userData.resourceName || userData.resourceType}${toolText}`;
+                       // Interaction via LMB (shoot/harvest), not E key
+                       // interactTarget = { type: 'harvestable', resourceId: userData.resourceId }; // Don't set for LMB interaction
+                  }
+             }
+             // Add checks for other interactable types (doors, base controller, etc.) here
+         }
+
+        if (promptText) {
+            this.game.uiManager?.showInteractionPrompt(promptText);
+        } else {
+            this.game.uiManager?.hideInteractionPrompt();
+        }
+
+
+        // Handle E key press if a target was identified
+        if (interactTarget) {
+             switch (interactTarget.type) {
+                 case 'station':
+                      if (interactTarget.stationType === 'workbench') this.game.uiManager?.openWorkbenchMenu();
+                      else if (interactTarget.stationType === 'forge') this.game.uiManager?.openForgeMenu();
+                      else if (interactTarget.stationType === 'campfire') this.game.uiManager?.openCookingMenu();
+                      break;
+                 case 'searchable':
+                      this.game.resourceManager?.searchResource(interactTarget.resourceId, this);
+                      // Hide prompt after searching
+                      this.game.uiManager?.hideInteractionPrompt();
+                      break;
+                 // Harvestable interaction is handled by LMB (shoot method)
+             }
+         }
+    }
+
+
+     // --- Consolidated shoot/harvest into one function ---
+     shoot() {
+         if (this.buildMode || this.game.uiManager?.isInventoryOpen || this.game.uiManager?.isCraftingMenuOpen ) return;
+         if (!this.game.isGodMode && (this.isReloading || this.weaponCooldownTimer > 0)) {
+             // Allow harvesting even if weapon on cooldown? Maybe not for tools.
+             // Let's prevent action if weapon/tool is on cooldown.
+             return;
+         }
+         const equippedItem = this.getSelectedTool(); // Gets weapon or tool
+         const raycaster = new THREE.Raycaster(this.camera.position, this.camera.getWorldDirection(new THREE.Vector3()));
+         const interactionRange = equippedItem?.range || this.interactionRange; // Use weapon range or default interaction range
+         raycaster.far = interactionRange;
+
+         // --- Target Prioritization: Entities > Resources ---
+         let didHit = false;
+
+         // 1. Check Entities (Animals/Hunters)
+         if (equippedItem && equippedItem.type === 'weapon') { // Only shoot entities with weapons
+             const entityTargets = [];
+             const entityList = [...(this.game.entityManager?.animals || []), ...(this.game.entityManager?.hunters || [])];
+             entityList.forEach(e => {
+                 if (e?.model && e.isAlive) {
+                      // Ensure userData is attached for raycasting identification
+                      e.model.traverse(c => { if(c.isMesh) c.userData.entity = e; });
+                      entityTargets.push(e.model);
+                 }
+             });
+             const entityHits = raycaster.intersectObjects(entityTargets, true);
+             if (entityHits.length > 0 && entityHits[0].distance <= interactionRange) {
+                  let hitEntity = null; let cur = entityHits[0].object;
+                  while(cur && !hitEntity) { hitEntity = cur.userData.entity; cur = cur.parent; }
+
+                  if (hitEntity && typeof hitEntity.takeDamage === 'function') {
+                       const weaponDef = this.game.inventory.getItemById(equippedItem.id); if (!weaponDef) return;
+                       if (this.game.isGodMode || (equippedItem.currentAmmo != null && equippedItem.currentAmmo > 0)) {
+                            if (!this.game.isGodMode) { equippedItem.currentAmmo -= 1; }
+                            this.weaponCooldownTimer = this.game.isGodMode ? 0.05 : (weaponDef.fireRate || 0.5);
+                            hitEntity.takeDamage(weaponDef.damage || 10, 'player');
+                            this.game.uiManager?.updateWeaponUI(equippedItem);
+                            didHit = true;
+                            // TODO: Play shot sound, muzzle flash effect
+                       } else {
+                            this.game.uiManager?.showNotification("Reload needed! (Press R)", 2000);
+                            didHit = true; // Register the attempt even if out of ammo
+                       }
+                  }
+             }
+         }
+
+         // 2. Check Resources (Harvestable) if no entity was hit
+         if (!didHit) {
+              let harvestables = [];
+              const nearbyResources = this.game.resourceManager?.getResourcesNear(this.position, this.interactionRange + 2) || [];
+              nearbyResources.forEach(res => {
+                  // Only consider harvestable types (not crates/barrels/stations)
+                   if (res && res.meshes && res.meshes.length > 0 && res.health > 0 && !['crate', 'barrel', 'workbench', 'forge', 'campfire', 'structure', 'building'].includes(res.type)) {
+                       res.meshes.forEach(mesh => {
+                           if (mesh) {
+                                mesh.traverse((child) => {
+                                    if (child.isMesh) {
+                                        if(!child.userData.resourceId) child.userData.resourceId = res.id;
+                                        if(!child.userData.resourceType) child.userData.resourceType = res.type;
+                                    }
+                                });
+                                harvestables.push(mesh);
+                           }
+                       });
+                   }
+              });
+
+              const resourceHits = raycaster.intersectObjects(harvestables, true);
+              if (resourceHits.length > 0 && resourceHits[0].distance <= this.interactionRange) { // Use interaction range for harvesting
+                   const hitMesh = resourceHits[0].object;
+                   let resourceId = hitMesh.userData.resourceId;
+                   let resourceType = hitMesh.userData.resourceType;
+                   let cur = hitMesh;
+                   while ((!resourceId || !resourceType) && cur.parent) {
+                        cur = cur.parent;
+                        if (!resourceId) resourceId = cur.userData.resourceId;
+                        if (!resourceType) resourceType = cur.userData.resourceType;
+                   }
+
+                   if (resourceId && resourceType) {
+                        const resource = this.game.resourceManager.getResource(resourceId);
+                        if (resource) {
+                             const requiredTool = this.getRequiredTool(resourceType);
+                             const canHarvest = !requiredTool || (equippedItem && equippedItem.id === requiredTool); // Hand harvest if no tool needed
+
+                             if (canHarvest) {
+                                  const harvested = this.game.resourceManager.harvestResource(resourceId, this);
+                                  if (harvested && Object.keys(harvested).length > 0) {
+                                       this.game.uiManager?.showHarvestNotification(harvested);
+                                  }
+                                  // Apply cooldown even for harvesting
+                                  this.weaponCooldownTimer = equippedItem?.fireRate || 0.5; // Use tool speed or default
+                                  didHit = true;
+                                  // TODO: Play harvest sound effect
+                             } else if (equippedItem) {
+                                  this.game.uiManager?.showNotification(`Wrong tool! Need a ${requiredTool}.`, 2000);
+                                  didHit = true; // Register attempt
+                             } else {
+                                  this.game.uiManager?.showNotification(`Need a ${requiredTool} to harvest this.`, 2000);
+                                  didHit = true; // Register attempt
+                             }
+                        } else { console.error("[Harvest] Found ID but getResource failed:", resourceId); }
+                   } else { console.error("[Harvest] Hit mesh missing resourceId/Type userData!"); }
+              }
+         }
+
+         // 3. Punch if nothing else hit (Optional: Add melee attack logic)
+         if (!didHit) {
+              // console.log("Punch!"); // Basic punch/empty swing
+              this.weaponCooldownTimer = 0.5; // Cooldown for empty swing
+         }
+     }
+     // --- END CONSOLIDATED ---
+
+
+    getRequiredTool(resourceType) {
+        switch (resourceType) {
+            case 'tree': return 'axe';
+            case 'stone': case 'iron': case 'copper': case 'zinc': return 'pickaxe';
+             // Buildings / Structures might require specific tools if made destructible
+             case 'building': case 'structure': return 'axe'; // Assume axe for wood structures
+            case 'fiber': return null; // Hand harvestable
+            case 'blueberry': case 'carrot': case 'onion': case 'medicinalherb': return null; // Hand harvestable
+            case 'animal': return 'knife'; // For harvesting dead animals
+            default: return null; // Default to hand harvestable or non-harvestable
+        }
+    }
+
+    // --- Building Methods ---
+    toggleBuildMode() {
+        this.buildMode = !this.buildMode;
+        if (this.buildMode) {
+            this.game.uiManager?.openBuildMenu();
+            // Auto-select first item if none selected
+            if (!this.selectedBuildItem && this.game.buildingSystem?.getBuildingComponents().length > 0) {
+                 this.setBuildItem(this.game.buildingSystem.getBuildingComponents()[0].id);
+            } else if(this.selectedBuildItem) {
+                 this.createBuildPreview(); // Recreate preview if toggling back on with item selected
+            }
+        } else {
+            this.game.uiManager?.closeBuildMenu();
+            this.removeBuildPreview();
+            this.selectedBuildItem = null;
+        }
+        this.game.uiManager?.updateBuildMode(this.buildMode, this.selectedBuildItem);
+    }
+
+    setBuildItem(itemId) {
+        if (!this.buildMode) { this.toggleBuildMode(); } // Enter build mode if selecting an item
+        const component = this.game.buildingSystem.getBuildingComponent(itemId);
+        if (component) {
+             this.selectedBuildItem = itemId;
+             this.createBuildPreview(); // Create preview for newly selected item
+             this.game.uiManager?.updateBuildMode(this.buildMode, this.selectedBuildItem);
+         }
+        else { console.warn("Invalid build item selected:", itemId); }
+    }
+
+    createBuildPreview() {
+        this.removeBuildPreview(); // Clear previous preview first
+        if (!this.selectedBuildItem) return;
+        this.buildPreview = this.game.buildingSystem.createBuildingPreview(this.selectedBuildItem);
+        if (this.buildPreview) {
+             this.game.scene.add(this.buildPreview);
+             this.buildPreview.visible = false; // Hide until raycast hits something
+        } else {
+             console.error("Failed to create build preview for:", this.selectedBuildItem);
+        }
+    }
+
+    removeBuildPreview() {
+        if (this.buildPreview) {
+            this.game.scene.remove(this.buildPreview);
+            // Safely dispose geometry and material
+            this.buildPreview.traverse(child => {
+                 if (child.isMesh) {
+                     child.geometry?.dispose();
+                     if (child.material) {
+                         if (Array.isArray(child.material)) {
+                              child.material.forEach(m => m?.dispose());
+                          } else {
+                              child.material?.dispose();
+                          }
+                      }
+                  }
+             });
+            this.buildPreview = null;
+        }
+        // Remove ray helper if it exists
+        if (this.rayHelper) {
+            this.game.scene.remove(this.rayHelper);
+            this.rayHelper.geometry?.dispose();
+            this.rayHelper.material?.dispose();
+            this.rayHelper = null;
+        }
+    }
+
+    updateBuildPreview(deltaTime) {
+        if (!this.buildMode || !this.selectedBuildItem || !this.buildPreview) {
+            if (this.buildPreview) this.buildPreview.visible = false; // Hide if mode off
+            if (this.rayHelper) this.rayHelper.visible = false; // Hide helper too
+            return;
+        }
+
+        // Raycast from camera to find placement position
+        const rayOrigin = this.camera.position;
+        const rayDirection = this.camera.getWorldDirection(new THREE.Vector3());
+        const buildRay = new THREE.Raycaster(rayOrigin, rayDirection);
+        buildRay.far = this.interactionRange * 2.5; // Building range
+        const rayLength = buildRay.far;
+
+        // Update or create debug ray helper
+        if (!this.rayHelper) {
+             this.rayHelper = new THREE.ArrowHelper(rayDirection, rayOrigin, rayLength, 0xff0000, 0.2, 0.1); // Red default
+             this.game.scene.add(this.rayHelper);
+        } else {
+             this.rayHelper.position.copy(rayOrigin);
+             this.rayHelper.setDirection(rayDirection);
+             this.rayHelper.setLength(rayLength, 0.2, 0.1);
+             this.rayHelper.visible = true; // Make sure it's visible
+        }
+
+        // Targets for raycasting: Terrain and existing building meshes
+        let targets = [];
+        if (this.game.terrain?.terrainMesh) targets.push(this.game.terrain.terrainMesh);
+        // Add meshes from BuildingSystem buildings
+        this.game.buildingSystem.getAllBuildings().forEach(bldg => {
+             if (bldg.meshes && bldg.meshes[0]) { targets.push(bldg.meshes[0]); }
+        });
+        // Add meshes from generated structures (if they are separate from buildings)
+         this.game.resourceManager?.resources.structures.forEach(struct => {
+              if (struct.meshes && struct.meshes[0]) { targets.push(struct.meshes[0]); }
+         });
+
+        const hits = buildRay.intersectObjects(targets, true); // Recursive check
+
+        if (hits.length > 0) {
+             this.rayHelper.setColor(0x00ff00); // Green ray on hit
+             const hitPoint = hits[0].point;
+             const hitObject = hits[0].object;
+
+             this.buildPreview.visible = true;
+
+             // Find the snapping point based on the hit location
+             let buildPos = this.game.buildingSystem.findSnappingPoint(hitPoint, this.selectedBuildItem, this.buildRotation);
+
+             // Set preview position and rotation
+             this.buildPreview.position.copy(buildPos);
+             this.buildPreview.rotation.y = this.buildRotation;
+             this.buildPreview.updateMatrixWorld(); // Update matrix for validation
+
+             // Validate the snapped position
+             const isValid = this.game.buildingSystem.isValidBuildPosition(buildPos, this.selectedBuildItem, this.buildRotation);
+             const canAfford = this.game.buildingSystem.canBuildComponent(this.selectedBuildItem);
+
+             // Update preview material color based on validity and cost
+             let previewColor = 0xff0000; // Red = Invalid position
+             if (isValid) {
+                  previewColor = canAfford ? 0x00ff00 : 0xffff00; // Green = Can build, Yellow = Can't afford
+              }
+
+             // Apply color to material(s)
+             const applyColor = (mat) => {
+                  if (mat && mat.color) { mat.color.setHex(previewColor); }
+                  if (mat && mat.opacity) { mat.opacity = 0.6; } // Ensure opacity
+                  if (mat) mat.needsUpdate = true;
+              };
+
+             if (Array.isArray(this.buildPreview.material)) {
+                  this.buildPreview.material.forEach(applyColor);
+              } else {
+                  applyColor(this.buildPreview.material);
+              }
+
+        } else {
+            // No hit, hide preview
+             if(this.rayHelper) this.rayHelper.setColor(0xff0000); // Red ray on miss
+             this.buildPreview.visible = false;
+        }
+    }
+
+
+    rotateBuildPreview() {
+        if (!this.buildMode || !this.selectedBuildItem) return;
+        this.buildRotation = (this.buildRotation + Math.PI / 2) % (Math.PI * 2);
+        if (this.buildPreview) { this.buildPreview.rotation.y = this.buildRotation; this.updateBuildPreview(0); } // Update preview immediately after rotation
+    }
+
+    build() {
+        if (!this.buildMode || !this.selectedBuildItem || !this.buildPreview || !this.buildPreview.visible) {
+             console.log("Build check failed: Preview not visible or item not selected."); // Add this log
+             return;
+        }
+        const buildPos = this.buildPreview.position; // Use the preview's snapped position
+        const isValid = this.game.buildingSystem.isValidBuildPosition(buildPos, this.selectedBuildItem, this.buildRotation);
+        const canAfford = this.game.buildingSystem.canBuildComponent(this.selectedBuildItem);
+
+        console.log(`Build Attempt: Item=${this.selectedBuildItem}, Pos=${buildPos.x.toFixed(1)},${buildPos.y.toFixed(1)},${buildPos.z.toFixed(1)}, Valid=${isValid}, Affordable=${canAfford}`); // Add this log
+
+        if (isValid && canAfford) {
+             console.log("Calling BuildingSystem.buildComponent..."); // Add this log
+             const success = this.game.buildingSystem.buildComponent(this.selectedBuildItem, buildPos, this.buildRotation);
+             if (success) {
+                  // Update relevant UI after successful build
+                  this.game.uiManager?.buildingUI?.updateBuildMenu();
+                  this.game.uiManager?.updateInventoryUI(this.game.inventory); // Inventory changed
+                  this.game.uiManager?.updateQuickBarUI(this.game.inventory);
+             } else {
+                  this.game.uiManager?.showNotification("Failed to build (Internal Error)", 2000);
+             }
+         } else if (isValid && !canAfford) {
+             this.game.uiManager?.showNotification("Not enough resources!", 2000);
+         } else { // Not valid position
+             this.game.uiManager?.showNotification("Cannot build here!", 2000);
+         }
+    }
+
+    // --- Weapon Methods ---
+     getSelectedTool() {
+        const item = this.game.inventory?.getSelectedItem();
+        // Return item only if it's explicitly a tool or weapon
+        if (item && (item.type === 'tool' || item.type === 'weapon')) { return item; }
+        return null;
+    }
+
+    // shoot() function consolidated above
+
+    reloadWeapon() {
+        if (this.isReloading || this.buildMode || this.game.uiManager?.isInventoryOpen || this.game.uiManager?.isCraftingMenuOpen || this.game.isGodMode) return;
+        const equippedWeapon = this.getSelectedTool(); if (!equippedWeapon || equippedWeapon.type !== 'weapon') return;
+        const weaponDef = this.game.inventory.getItemById(equippedWeapon.id); if (!weaponDef?.magazineSize) return;
+        const magSize = weaponDef.magazineSize; const curAmmo = equippedWeapon.currentAmmo ?? 0; const needed = magSize - curAmmo;
+        if (needed <= 0) { this.game.uiManager?.showNotification("Magazine full", 1500); return; }
+        let ammoTypeId = null; if (equippedWeapon.id === 'rifle') ammoTypeId = 'rifleround'; else return; // Add other ammo types here
+        if (!ammoTypeId) { console.warn("Cannot determine ammo type for weapon:", equippedWeapon.id); return; }
+        const available = this.game.inventory.getItemCount(ammoTypeId); if (available <= 0) { this.game.uiManager?.showNotification(`No ${ammoTypeId} ammo!`, 2000); return; }
+        const toReload = Math.min(needed, available);
+        const quickBarIdx = this.game.inventory.selectedSlot; const invSlotIdx = this.game.inventory.quickBarSlots[quickBarIdx];
+
+        // Ensure the item reference in inventory matches
+        if (invSlotIdx !== null && this.game.inventory.inventorySlots[invSlotIdx]?.id === equippedWeapon.id) {
+            const invItem = this.game.inventory.inventorySlots[invSlotIdx];
+             if (this.game.inventory.removeItem(ammoTypeId, toReload)) {
+                 this.isReloading = true; this.reloadTimer = this.reloadTime;
+                 // Initialize currentAmmo if it doesn't exist
+                 if (invItem.currentAmmo === undefined || invItem.currentAmmo === null) {
+                     invItem.currentAmmo = 0;
+                 }
+                 invItem.currentAmmo += toReload;
+                 this.game.uiManager?.showNotification("Reloading...", this.reloadTime * 1000 - 100);
+                 this.game.uiManager?.updateWeaponUI(invItem, true); // Show reloading status
+             } else { console.error("[Reload] Failed ammo removal"); this.game.uiManager?.showNotification("Reload Error!", 2000); }
+         } else { console.error("[Reload] Inventory sync error for weapon in slot", quickBarIdx, "inv index", invSlotIdx); this.game.uiManager?.showNotification("Reload Error!", 2000); }
+    }
+}
