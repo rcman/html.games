@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Open World Survival</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; user-select: none; }
+        #game-container { position: absolute; top: 0; left: 0; width: 100%; height: 100%; }
+        
+        /* UI OVERLAYS */
+        #ui-layer { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+        
+        /* HUD */
+        #hud { position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%); display: flex; gap: 10px; pointer-events: auto; }
+        .hotbar-slot { width: 50px; height: 50px; background: rgba(0,0,0,0.5); border: 2px solid #555; color: white; display: flex; justify-content: center; align-items: center; position: relative; cursor: pointer; }
+        .hotbar-slot.active { border-color: #ffd700; box-shadow: 0 0 10px #ffd700; }
+        .slot-qty { position: absolute; bottom: 2px; right: 2px; font-size: 10px; }
+
+        /* INVENTORY */
+        #inventory { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); background: rgba(20,20,20,0.95); width: 600px; height: 400px; border: 2px solid #444; display: none; pointer-events: auto; flex-direction: column; color: white; border-radius: 8px; }
+        #inventory-header { padding: 10px; background: #333; border-bottom: 1px solid #555; display: flex; justify-content: space-between; font-weight: bold; }
+        #inventory-body { display: flex; flex: 1; }
+        #inventory-grid { flex: 2; padding: 20px; display: grid; grid-template-columns: repeat(5, 1fr); grid-auto-rows: 60px; gap: 10px; overflow-y: auto; }
+        #crafting-panel { flex: 1; border-left: 1px solid #555; padding: 10px; background: rgba(0,0,0,0.2); display: flex; flex-direction: column; gap: 5px; }
+        .inv-item { background: rgba(255,255,255,0.1); border: 1px solid #666; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; position: relative; }
+        .inv-item:hover { background: rgba(255,255,255,0.2); }
+        .craft-btn { background: #2c3e50; color: white; border: 1px solid #34495e; padding: 8px; cursor: pointer; text-align: left; font-size: 12px; }
+        .craft-btn:hover { background: #34495e; }
+        .craft-req { font-size: 10px; color: #aaa; }
+
+        /* BUILDING MENU */
+        #build-menu { position: absolute; top: 100px; right: 20px; background: rgba(0,0,0,0.8); padding: 10px; color: white; display: none; pointer-events: auto; border-radius: 8px; }
+        .build-opt { padding: 8px 15px; cursor: pointer; border-bottom: 1px solid #444; }
+        .build-opt:hover { color: #ffd700; }
+        .build-opt.selected { color: #ffd700; font-weight: bold; border-left: 3px solid #ffd700; }
+
+        /* STATS */
+        #stats { position: absolute; top: 20px; left: 20px; color: white; text-shadow: 1px 1px 2px black; }
+        .stat-bar { width: 200px; height: 20px; background: #333; margin-bottom: 5px; position: relative; border-radius: 4px; overflow: hidden; }
+        .stat-fill { height: 100%; width: 100%; transition: width 0.2s; }
+        .hp { background: #e74c3c; }
+        .stamina { background: #f1c40f; }
+        .thirst { background: #3498db; }
+        
+        /* INTERACTION */
+        #interact-msg { position: absolute; top: 60%; left: 50%; transform: translate(-50%, -50%); color: white; font-size: 18px; text-shadow: 0 0 5px black; display: none; }
+        
+        #loading { position: absolute; top:0; left:0; width:100%; height:100%; background:#111; color:white; display:flex; justify-content:center; align-items:center; z-index: 9999; flex-direction: column;}
+        .loader { border: 4px solid #333; border-top: 4px solid #fff; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 20px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+    
+    <!-- IMPORT MAP FOR THREE.JS & ADDONS -->
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+                "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="loading">
+        <div class="loader"></div>
+        <div id="loading-text">Generating World...</div>
+    </div>
+
+    <div id="game-container"></div>
+
+    <div id="ui-layer">
+        <div id="stats">
+            <div class="stat-bar"><div class="stat-fill hp" id="bar-hp"></div></div>
+            <div class="stat-bar"><div class="stat-fill thirst" id="bar-thirst"></div></div>
+            <div style="font-size: 12px; color: #ccc;">WASD: Move | B: Build | I: Inventory | Click: Action | E: Interact</div>
+        </div>
+
+        <div id="interact-msg">Press E to Interact</div>
+
+        <div id="inventory">
+            <div id="inventory-header">
+                <span>Inventory</span>
+                <span id="inv-close-btn" style="cursor:pointer">X</span>
+            </div>
+            <div id="inventory-body">
+                <div id="inventory-grid"></div>
+                <div id="crafting-panel">
+                    <div style="font-weight:bold; margin-bottom:5px;">Crafting</div>
+                    <div id="craft-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="build-menu">
+            <div style="margin-bottom:10px; font-weight:bold;">Build Mode</div>
+            <div class="build-opt" data-type="foundation">Foundation (10 Wood)</div>
+            <div class="build-opt" data-type="wall">Wall (8 Wood)</div>
+            <div class="build-opt" data-type="doorway">Door Frame (8 Wood)</div>
+            <div class="build-opt" data-type="door">Door (6 Wood)</div>
+            <div class="build-opt" data-type="window">Window Wall (8 Wood)</div>
+            <div class="build-opt" data-type="ceiling">Ceiling (6 Wood)</div>
+            <div class="build-opt" data-type="campfire">Campfire (10 Stone)</div>
+        </div>
+
+        <div id="hud">
+            <!-- Slots generated by JS -->
+        </div>
+    </div>
+
+    <!-- MAIN GAME SCRIPT -->
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+        import { Water } from 'three/addons/objects/Water.js';
+        import { Sky } from 'three/addons/objects/Sky.js';
+        import { SimplexNoise } from 'three/addons/math/SimplexNoise.js';
+
+        // --- FIREBASE IMPORTS ---
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, doc, setDoc, updateDoc, onSnapshot, query, where, deleteDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- GLOBALS & CONFIG ---
+        const firebaseConfig = JSON.parse(__firebase_config);
+        const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
+        const db = getFirestore(app);
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app';
+
+        let currentUser = null;
+        let game = null;
+
+        // --- AUTH & INIT ---
+        const initAuth = async () => {
+            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                await signInWithCustomToken(auth, __initial_auth_token);
+            } else {
+                await signInAnonymously(auth);
+            }
+        };
+
+        initAuth();
+
+        onAuthStateChanged(auth, (user) => {
+            if (user) {
+                currentUser = user;
+                if (!game) {
+                    game = new Game();
+                    game.init();
+                }
+            }
+        });
+
+        // --- UTILS ---
+        const Utils = {
+            rand: (min, max) => Math.random() * (max - min) + min,
+            getDistance: (v1, v2) => Math.sqrt(Math.pow(v1.x - v2.x, 2) + Math.pow(v1.z - v2.z, 2)),
+            // Texture Generator
+            createWoodTexture: () => {
+                const canvas = document.createElement('canvas');
+                canvas.width = 256; canvas.height = 256;
+                const ctx = canvas.getContext('2d');
+                ctx.fillStyle = '#8B5A2B';
+                ctx.fillRect(0,0,256,256);
+                ctx.fillStyle = '#5C4033';
+                ctx.globalAlpha = 0.4;
+                for(let i=0; i<40; i++) {
+                    const x = Math.random() * 256;
+                    const w = Math.random() * 5 + 1;
+                    ctx.fillRect(x, 0, w, 256);
+                }
+                for(let i=0; i<5; i++) {
+                    ctx.beginPath();
+                    ctx.arc(Math.random()*256, Math.random()*256, Math.random()*5, 0, Math.PI*2);
+                    ctx.fill();
+                }
+                const tex = new THREE.CanvasTexture(canvas);
+                tex.wrapS = THREE.RepeatWrapping;
+                tex.wrapT = THREE.RepeatWrapping;
+                return tex;
+            }
+        };
+
+        const WOOD_TEX = Utils.createWoodTexture();
+        const WOOD_MAT = new THREE.MeshStandardMaterial({ map: WOOD_TEX, roughness: 0.9 });
+
+        // --- GEOMETRY FACTORY ---
+        const BuildingFactory = {
+            create: (type, isGhost = false) => {
+                const mat = isGhost 
+                    ? new THREE.MeshBasicMaterial({ color: 0x00ff00, opacity: 0.5, transparent: true, side: THREE.DoubleSide }) 
+                    : WOOD_MAT;
+                
+                if (type === 'foundation') {
+                    const geo = new THREE.BoxGeometry(4, 0.5, 4);
+                    const mesh = new THREE.Mesh(geo, mat);
+                    return mesh;
+                } else if (type === 'wall') {
+                    const geo = new THREE.BoxGeometry(4, 4, 0.2);
+                    const mesh = new THREE.Mesh(geo, mat);
+                    return mesh;
+                } else if (type === 'doorway') {
+                    const group = new THREE.Group();
+                    const left = new THREE.Mesh(new THREE.BoxGeometry(1, 4, 0.2), mat);
+                    left.position.x = -1.5;
+                    left.castShadow = !isGhost; left.receiveShadow = !isGhost;
+                    group.add(left);
+                    const right = new THREE.Mesh(new THREE.BoxGeometry(1, 4, 0.2), mat);
+                    right.position.x = 1.5;
+                    right.castShadow = !isGhost; right.receiveShadow = !isGhost;
+                    group.add(right);
+                    const top = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 0.2), mat);
+                    top.position.y = 1.5;
+                    top.castShadow = !isGhost; top.receiveShadow = !isGhost;
+                    group.add(top);
+                    return group;
+                } else if (type === 'door') {
+                    // Hinge mechanism
+                    const hinge = new THREE.Group();
+                    // Door mesh shifted so hinge is at 0,0
+                    const doorGeo = new THREE.BoxGeometry(2, 3, 0.1);
+                    const doorMesh = new THREE.Mesh(doorGeo, mat);
+                    doorMesh.position.set(1, 0, 0); // Offset by half width so it pivots on edge
+                    doorMesh.castShadow = !isGhost;
+                    hinge.add(doorMesh);
+                    // Start pos roughly at bottom of doorway
+                    // In the game world, wall center y is +2. Doorway opening bottom is roughly y-1.5 relative to wall center.
+                    return hinge;
+                } else if (type === 'window') {
+                    const group = new THREE.Group();
+                    const left = new THREE.Mesh(new THREE.BoxGeometry(1, 4, 0.2), mat);
+                    left.position.x = -1.5;
+                    group.add(left);
+                    const right = new THREE.Mesh(new THREE.BoxGeometry(1, 4, 0.2), mat);
+                    right.position.x = 1.5;
+                    group.add(right);
+                    const top = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 0.2), mat);
+                    top.position.y = 1.5;
+                    group.add(top);
+                    const bot = new THREE.Mesh(new THREE.BoxGeometry(2, 1, 0.2), mat);
+                    bot.position.y = -1.5;
+                    group.add(bot);
+                    return group;
+                } else if (type === 'ceiling') {
+                    const geo = new THREE.BoxGeometry(4, 0.1, 4);
+                    const mesh = new THREE.Mesh(geo, mat);
+                    return mesh;
+                } else if (type === 'campfire') {
+                    const geo = new THREE.CylinderGeometry(0.5, 0.6, 0.5, 8);
+                    const cMat = isGhost ? mat : new THREE.MeshStandardMaterial({ color: 0x333333 });
+                    const mesh = new THREE.Mesh(geo, cMat);
+                    return mesh;
+                }
+                return new THREE.Mesh(new THREE.BoxGeometry(1,1,1), mat);
+            }
+        };
+
+        // --- ITEMS & RECIPES ---
+        const ITEMS = {
+            wood: { name: "Wood", icon: "🌲" },
+            stone: { name: "Stone", icon: "🪨" },
+            fiber: { name: "Fiber", icon: "🌿" },
+            meat: { name: "Raw Meat", icon: "🥩" },
+            cooked_meat: { name: "Cooked Meat", icon: "🍖" },
+            scrap: { name: "Scrap Metal", icon: "⚙️" },
+            axe: { name: "Axe", icon: "🪓", tool: true },
+            pickaxe: { name: "Pickaxe", icon: "⛏️", tool: true },
+            foundation: { name: "Foundation", build: true },
+            door: { name: "Door", build: true },
+            campfire: { name: "Campfire", build: true }
+        };
+
+        const RECIPES = [
+            { name: "Axe", req: { wood: 5, stone: 5 }, result: "axe", count: 1 },
+            { name: "Pickaxe", req: { wood: 5, stone: 5 }, result: "pickaxe", count: 1 },
+            { name: "Rope", req: { fiber: 10 }, result: "rope", count: 1 },
+        ];
+
+        // --- CLASS: GAME ENGINE ---
+        class Game {
+            constructor() {
+                this.container = document.getElementById('game-container');
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 4000);
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+                this.container.appendChild(this.renderer.domElement);
+
+                this.clock = new THREE.Clock();
+                this.controls = null;
+                this.world = null;
+                this.player = null;
+                this.input = { w: false, a: false, s: false, d: false, space: false, shift: false };
+                this.raycaster = new THREE.Raycaster();
+                
+                this.ui = null; 
+                this.network = new NetworkManager(this);
+                
+                this.otherPlayers = {}; // id -> mesh
+                this.buildings = []; // Track placed buildings for raycasting
+            }
+
+            async init() {
+                this.setupLighting();
+                this.world = new World(this.scene);
+                await this.world.generate();
+                this.player = new Player(this);
+                this.scene.add(this.player.mesh);
+                this.ui = new UIManager(this);
+
+                const dummy = new THREE.Object3D();
+                this.controls = new PointerLockControls(dummy, document.body);
+                
+                const _requestPointerLock = document.body.requestPointerLock.bind(document.body);
+                document.body.requestPointerLock = function() {
+                    const promise = _requestPointerLock();
+                    if (promise && promise.catch) promise.catch(err => {});
+                    return promise;
+                };
+
+                document.addEventListener('click', (e) => {
+                   // Allow clicking UI without re-locking immediately if clicking buttons
+                   if (e.target.closest('button') || e.target.closest('.build-opt') || e.target.closest('.inv-item') || e.target.closest('.craft-btn') || e.target.id === 'inv-close-btn') return;
+                   
+                   // If not in inventory and (not building OR building with menu hidden), lock
+                   if (this.ui && !this.ui.inventoryOpen) {
+                       const menuHidden = document.getElementById('build-menu').style.display === 'none';
+                       if (!this.ui.buildMode || (this.ui.buildMode && menuHidden)) {
+                           this.controls.lock();
+                       }
+                   }
+                });
+
+                this.setupInputs();
+                document.getElementById('loading').style.display = 'none';
+                this.animate();
+                this.network.startSync();
+            }
+
+            setupLighting() {
+                const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 0.6);
+                hemiLight.position.set(0, 200, 0);
+                this.scene.add(hemiLight);
+                const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+                dirLight.position.set(100, 300, 100);
+                dirLight.castShadow = true;
+                dirLight.shadow.mapSize.width = 2048;
+                dirLight.shadow.mapSize.height = 2048;
+                this.scene.add(dirLight);
+                this.scene.fog = new THREE.FogExp2(0xaaccff, 0.002);
+                this.scene.background = new THREE.Color(0xaaccff);
+            }
+
+            setupInputs() {
+                document.addEventListener('keydown', (e) => this.onKey(e, true));
+                document.addEventListener('keyup', (e) => this.onKey(e, false));
+                document.addEventListener('mousedown', (e) => this.player.onAction(e));
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+            }
+
+            onKey(e, down) {
+                switch(e.code) {
+                    case 'KeyW': this.input.w = down; break;
+                    case 'KeyA': this.input.a = down; break;
+                    case 'KeyS': this.input.s = down; break;
+                    case 'KeyD': this.input.d = down; break;
+                    case 'Space': this.input.space = down; break;
+                    case 'ShiftLeft': this.input.shift = down; break;
+                    case 'KeyI': if(down && this.ui) this.ui.toggleInventory(); break;
+                    case 'KeyB': if(down && this.ui) this.ui.toggleBuildMode(); break;
+                    case 'KeyE': if(down) this.player.interact(); break;
+                    case 'Digit1': if(down) this.player.selectSlot(0); break;
+                    case 'Digit2': if(down) this.player.selectSlot(1); break;
+                    case 'Digit3': if(down) this.player.selectSlot(2); break;
+                    case 'Digit4': if(down) this.player.selectSlot(3); break;
+                    case 'Digit5': if(down) this.player.selectSlot(4); break;
+                    case 'Escape': 
+                        if(down && this.ui) {
+                            if(this.ui.inventoryOpen) this.ui.toggleInventory();
+                            if(this.ui.buildMode) this.ui.toggleBuildMode();
+                        }
+                        break;
+                }
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                const dt = Math.min(this.clock.getDelta(), 0.1);
+                if (this.player) this.player.update(dt);
+                if (this.world) this.world.update(dt);
+                if (this.network) this.network.update(dt);
+                if (this.ui) this.ui.update();
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        // --- CLASS: WORLD GENERATION ---
+        class World {
+            constructor(scene) {
+                this.scene = scene;
+                this.size = 1000;
+                this.segments = 256;
+                this.simplex = new SimplexNoise();
+                this.waterLevel = 10;
+                this.objects = [];
+                this.animals = [];
+            }
+
+            async generate() {
+                const geo = new THREE.PlaneGeometry(this.size, this.size, this.segments, this.segments);
+                geo.rotateX(-Math.PI / 2);
+                const posAttribute = geo.attributes.position;
+                const colors = [];
+                
+                for (let i = 0; i < posAttribute.count; i++) {
+                    const x = posAttribute.getX(i);
+                    const z = posAttribute.getZ(i);
+                    let y = this.noise(x * 0.003, z * 0.003) * 40 + this.noise(x * 0.01, z * 0.01) * 10;
+                    if (y > 15 && y < 25) y = 20 + (y-20)*0.2;
+                    posAttribute.setY(i, y);
+                    let c = new THREE.Color();
+                    if (y < this.waterLevel + 2) c.setHex(0xe0d4a6);
+                    else if (y < 40) c.setHex(0x507a32);
+                    else c.setHex(0x666666);
+                    colors.push(c.r, c.g, c.b);
+                }
+                geo.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+                geo.computeVertexNormals();
+                
+                const mat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, flatShading: true });
+                this.terrain = new THREE.Mesh(geo, mat);
+                this.terrain.receiveShadow = true;
+                this.scene.add(this.terrain);
+
+                const waterGeo = new THREE.PlaneGeometry(this.size, this.size);
+                this.water = new Water(waterGeo, {
+                    textureWidth: 512, textureHeight: 512,
+                    waterNormals: new THREE.TextureLoader().load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/water/waternormals.jpg', function (texture) { texture.wrapS = texture.wrapT = THREE.RepeatWrapping; }),
+                    sunDirection: new THREE.Vector3(), sunColor: 0xffffff, waterColor: 0x001e0f, distortionScale: 3.7, fog: this.scene.fog !== undefined
+                });
+                this.water.rotation.x = -Math.PI / 2;
+                this.water.position.y = this.waterLevel;
+                this.scene.add(this.water);
+
+                this.spawnFoliage();
+                this.spawnLoot();
+                this.spawnAnimals();
+            }
+
+            noise(x, z) { return this.simplex.noise(x, z); }
+
+            getHeightAt(x, z) {
+                const raycaster = new THREE.Raycaster();
+                raycaster.set(new THREE.Vector3(x, 200, z), new THREE.Vector3(0, -1, 0));
+                const intersects = raycaster.intersectObject(this.terrain);
+                if (intersects.length > 0) return intersects[0].point.y;
+                return 0;
+            }
+
+            spawnFoliage() {
+                // Simplified for brevity, same as before
+                const trunkGeo = new THREE.CylinderGeometry(0.5, 0.8, 3, 6);
+                const leafGeo = new THREE.ConeGeometry(3, 7, 6);
+                trunkGeo.translate(0, 1.5, 0); leafGeo.translate(0, 5, 0);
+                const dummy = new THREE.Object3D();
+                const treeMat = new THREE.MeshStandardMaterial({ color: 0x2d4c1e });
+                const trunkMat = new THREE.MeshStandardMaterial({ color: 0x5c4033 });
+                const trunks = new THREE.InstancedMesh(trunkGeo, trunkMat, 1000);
+                const leaves = new THREE.InstancedMesh(leafGeo, treeMat, 1000);
+                trunks.castShadow = true; leaves.castShadow = true;
+
+                for (let i = 0; i < 1000; i++) {
+                    let x = Utils.rand(-450, 450); let z = Utils.rand(-450, 450);
+                    let y = this.getHeightAt(x, z);
+                    if (y > this.waterLevel + 2) {
+                        dummy.position.set(x, y, z);
+                        const scale = Utils.rand(0.8, 1.5);
+                        dummy.scale.set(scale, scale, scale);
+                        dummy.updateMatrix();
+                        trunks.setMatrixAt(i, dummy.matrix);
+                        leaves.setMatrixAt(i, dummy.matrix);
+                        this.objects.push({ type: 'tree', position: new THREE.Vector3(x, y, z), radius: 1.5, hp: 3, meshIndex: i, active: true });
+                    } else {
+                         dummy.position.set(0, -100, 0); dummy.updateMatrix();
+                         trunks.setMatrixAt(i, dummy.matrix); leaves.setMatrixAt(i, dummy.matrix);
+                    }
+                }
+                this.scene.add(trunks); this.scene.add(leaves);
+                this.treeIM = { trunks, leaves };
+
+                const rockGeo = new THREE.DodecahedronGeometry(1);
+                const rockMat = new THREE.MeshStandardMaterial({ color: 0x777777 });
+                const rocks = new THREE.InstancedMesh(rockGeo, rockMat, 500);
+                for(let i=0; i<500; i++) {
+                    let x = Utils.rand(-450, 450); let z = Utils.rand(-450, 450);
+                    let y = this.getHeightAt(x, z);
+                    if(y > this.waterLevel + 1) {
+                        dummy.position.set(x, y+0.5, z);
+                        dummy.scale.setScalar(Utils.rand(1,3));
+                        dummy.updateMatrix();
+                        rocks.setMatrixAt(i, dummy.matrix);
+                        this.objects.push({ type: 'rock', position: new THREE.Vector3(x,y,z), radius: 2, hp:3, active:true});
+                    }
+                }
+                this.scene.add(rocks);
+            }
+
+            spawnLoot() {
+                const geo = new THREE.CylinderGeometry(0.6, 0.6, 1.5, 10);
+                const mat = new THREE.MeshStandardMaterial({ color: 0x8e44ad });
+                for(let i=0; i<30; i++) {
+                    let x = Utils.rand(-400, 400); let z = Utils.rand(-400, 400); let y = this.getHeightAt(x, z);
+                    if(y > this.waterLevel + 1) {
+                        const mesh = new THREE.Mesh(geo, mat);
+                        mesh.position.set(x, y+0.75, z);
+                        this.scene.add(mesh);
+                        this.objects.push({ type: 'barrel', mesh: mesh, position: mesh.position, active: true, radius: 1 });
+                    }
+                }
+            }
+
+            spawnAnimals() {
+                const types = ['wolf', 'bear', 'chicken'];
+                for(let i=0; i<20; i++) {
+                    const type = types[Math.floor(Math.random()*types.length)];
+                    let color = type === 'bear' ? 0x4a3222 : (type === 'chicken' ? 0xffffff : 0xaaaaaa);
+                    let scale = type === 'bear' ? 1.8 : (type === 'chicken' ? 0.4 : 1);
+                    const group = new THREE.Group();
+                    const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 2), new THREE.MeshStandardMaterial({color: color}));
+                    body.position.y = 0.5 * scale;
+                    group.add(body);
+                    group.scale.setScalar(scale);
+                    let x = Utils.rand(-400, 400); let z = Utils.rand(-400, 400); let y = this.getHeightAt(x, z);
+                    group.position.set(x, y, z);
+                    if (y > this.waterLevel) {
+                        this.scene.add(group);
+                        this.animals.push({ mesh: group, type: type, state: 'roam', target: null, speed: type === 'wolf' ? 6 : 4 });
+                    }
+                }
+            }
+
+            update(dt) {
+                if (this.water) this.water.material.uniforms['time'].value += dt;
+                this.animals.forEach(animal => {
+                    const myPos = animal.mesh.position;
+                    const y = this.getHeightAt(myPos.x, myPos.z);
+                    if (y < this.waterLevel - 1) { animal.mesh.visible = false; return; }
+                    animal.mesh.position.y = y;
+                    // Basic roaming
+                    if(Math.random() < 0.02) animal.rot = Math.random() * Math.PI * 2;
+                    const dx = Math.sin(animal.rot||0) * animal.speed * dt;
+                    const dz = Math.cos(animal.rot||0) * animal.speed * dt;
+                    animal.mesh.position.x += dx;
+                    animal.mesh.position.z += dz;
+                    animal.mesh.rotation.y = animal.rot || 0;
+                });
+            }
+        }
+
+        // --- CLASS: PLAYER ---
+        class Player {
+            constructor(game) {
+                this.game = game;
+                const geo = new THREE.CapsuleGeometry(0.5, 1, 4, 8);
+                const mat = new THREE.MeshStandardMaterial({ color: 0x00ff00 });
+                this.mesh = new THREE.Mesh(geo, mat);
+                this.mesh.position.set(0, 30, 0);
+                this.mesh.castShadow = true;
+                
+                this.head = new THREE.Object3D();
+                this.head.position.set(0, 1.6, 0);
+                this.mesh.add(this.head);
+                this.game.camera.position.set(0, 0, 4); 
+                this.head.add(this.game.camera);
+
+                document.addEventListener('mousemove', (e) => {
+                    if (this.game.controls && this.game.controls.isLocked) {
+                        this.mesh.rotation.y -= e.movementX * 0.002;
+                        this.head.rotation.x -= e.movementY * 0.002;
+                        this.head.rotation.x = Math.max(-1.5, Math.min(1.5, this.head.rotation.x));
+                    }
+                });
+                
+                this.velocity = new THREE.Vector3();
+                this.onGround = false;
+                this.inventory = { wood: 0, stone: 0, fiber: 0, meat: 0, axe: 1, foundation: 5, door: 2 };
+                this.hotbar = ['axe', 'foundation', 'door', null, null];
+                this.activeSlot = 0;
+                this.stats = { hp: 100, thirst: 100 };
+            }
+
+            update(dt) {
+                if (!this.game.controls.isLocked) return;
+                const worldY = this.game.world.getHeightAt(this.mesh.position.x, this.mesh.position.z);
+                const speed = this.game.input.shift ? 15 : 8;
+                const dir = new THREE.Vector3();
+                const forward = new THREE.Vector3(0, 0, -1).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+                const right = new THREE.Vector3(1, 0, 0).applyAxisAngle(new THREE.Vector3(0, 1, 0), this.mesh.rotation.y);
+
+                if (this.game.input.w) dir.add(forward);
+                if (this.game.input.s) dir.sub(forward);
+                if (this.game.input.d) dir.add(right);
+                if (this.game.input.a) dir.sub(right);
+                if (dir.length() > 0) dir.normalize();
+
+                this.velocity.x = dir.x * speed;
+                this.velocity.z = dir.z * speed;
+                this.velocity.y -= 30 * dt;
+                if (this.onGround && this.game.input.space) { this.velocity.y = 12; this.onGround = false; }
+
+                this.mesh.position.addScaledVector(this.velocity, dt);
+                if (this.mesh.position.y < worldY + 1) {
+                    this.mesh.position.y = worldY + 1;
+                    this.velocity.y = 0;
+                    this.onGround = true;
+                }
+            }
+
+            onAction(e) {
+                if (!this.game.controls.isLocked) return;
+                if (e.button === 0) {
+                    if (this.game.ui.buildMode) this.game.ui.placeBuilding();
+                    else this.attackOrGather();
+                }
+            }
+
+            attackOrGather() {
+                const raycaster = new THREE.Raycaster();
+                const camPos = new THREE.Vector3(); this.game.camera.getWorldPosition(camPos);
+                const dir = new THREE.Vector3(); this.game.camera.getWorldDirection(dir);
+                raycaster.set(camPos, dir);
+
+                // Check world objects
+                for (let obj of this.game.world.objects) {
+                    if (!obj.active) continue;
+                    if (Utils.getDistance(this.mesh.position, obj.position) < 6) {
+                        if (obj.type === 'tree' && this.hotbar[this.activeSlot] === 'axe') {
+                            this.addItem('wood', 2);
+                            obj.hp--;
+                            if(obj.hp<=0) { 
+                                obj.active = false; 
+                                this.game.world.treeIM.trunks.setMatrixAt(obj.meshIndex, new THREE.Matrix4().scale(new THREE.Vector3(0,0,0)));
+                                this.game.world.treeIM.leaves.setMatrixAt(obj.meshIndex, new THREE.Matrix4().scale(new THREE.Vector3(0,0,0)));
+                                this.game.world.treeIM.trunks.instanceMatrix.needsUpdate=true;
+                                this.game.world.treeIM.leaves.instanceMatrix.needsUpdate=true;
+                            }
+                            return;
+                        }
+                    }
+                }
+            }
+
+            interact() {
+                // Interaction Raycast (E key)
+                const raycaster = new THREE.Raycaster();
+                const camPos = new THREE.Vector3(); this.game.camera.getWorldPosition(camPos);
+                const dir = new THREE.Vector3(); this.game.camera.getWorldDirection(dir);
+                raycaster.set(camPos, dir);
+
+                // Check buildings (Doors)
+                const intersects = raycaster.intersectObjects(this.game.buildings, true);
+                if (intersects.length > 0 && intersects[0].distance < 4) {
+                    // Traverse up to find parent with userData
+                    let target = intersects[0].object;
+                    while(target.parent && !target.userData.type) { target = target.parent; }
+                    
+                    if (target.userData.type === 'door' && target.userData.docId) {
+                        this.game.network.toggleDoor(target.userData.docId, !target.userData.isOpen);
+                    }
+                }
+
+                const msg = document.getElementById('interact-msg');
+                msg.style.display = 'block';
+                setTimeout(() => msg.style.display = 'none', 1000);
+            }
+
+            addItem(id, qty) {
+                if (!this.inventory[id]) this.inventory[id] = 0;
+                this.inventory[id] += qty;
+                if(this.game.ui) this.game.ui.renderHotbar();
+            }
+            
+            removeItem(id, qty) {
+                if ((this.inventory[id]||0) >= qty) {
+                    this.inventory[id] -= qty;
+                    if(this.game.ui) this.game.ui.renderHotbar();
+                    return true;
+                }
+                return false;
+            }
+
+            selectSlot(index) {
+                this.activeSlot = index;
+                if(this.game.ui) this.game.ui.renderHotbar();
+            }
+        }
+
+        // --- CLASS: UI MANAGER ---
+        class UIManager {
+            constructor(game) {
+                this.game = game;
+                this.inventoryOpen = false;
+                this.buildMode = false;
+                this.selectedBuildType = 'foundation';
+                this.ghostMesh = null;
+                this.setupUI();
+                this.renderHotbar();
+            }
+
+            setupUI() {
+                document.querySelectorAll('.build-opt').forEach(el => {
+                    el.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        this.selectedBuildType = e.currentTarget.dataset.type;
+                        document.querySelectorAll('.build-opt').forEach(b => b.classList.remove('selected'));
+                        e.currentTarget.classList.add('selected');
+                        this.updateGhostGeo();
+                        document.getElementById('build-menu').style.display = 'none';
+                        this.game.controls.lock();
+                    });
+                });
+                document.getElementById('inv-close-btn').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    this.toggleInventory();
+                });
+            }
+
+            toggleInventory() {
+                this.inventoryOpen = !this.inventoryOpen;
+                document.getElementById('inventory').style.display = this.inventoryOpen ? 'flex' : 'none';
+                if (this.inventoryOpen) { this.renderInventory(); this.game.controls.unlock(); }
+                else { this.game.controls.lock(); }
+            }
+
+            toggleBuildMode() {
+                this.buildMode = !this.buildMode;
+                if (this.buildMode) {
+                    document.getElementById('build-menu').style.display = 'block';
+                    this.game.controls.unlock();
+                    if (this.ghostMesh) this.ghostMesh.visible = true; 
+                } else {
+                    document.getElementById('build-menu').style.display = 'none';
+                    this.game.controls.lock();
+                    if (this.ghostMesh) this.ghostMesh.visible = false;
+                }
+            }
+            
+            getBuildTarget() {
+                const raycaster = new THREE.Raycaster();
+                const camPos = new THREE.Vector3(); this.game.camera.getWorldPosition(camPos);
+                const dir = new THREE.Vector3(); this.game.camera.getWorldDirection(dir);
+                raycaster.set(camPos, dir);
+
+                // DOOR LOGIC: Snap to Doorway
+                if (this.selectedBuildType === 'door') {
+                    const doorways = this.game.buildings.filter(b => b.userData.type === 'doorway');
+                    const intersects = raycaster.intersectObjects(doorways, true); // recursive
+                    if (intersects.length > 0) {
+                        // Find the Group parent
+                        let doorway = intersects[0].object;
+                        while(doorway.parent && !doorway.userData.type) doorway = doorway.parent;
+                        
+                        if (doorway.userData.type === 'doorway') {
+                            const pos = doorway.position.clone();
+                            const offset = new THREE.Vector3(-1, -1.5, 0); // -1.5 y to move from wall center to floor
+                            offset.applyEuler(doorway.rotation);
+                            pos.add(offset);
+                            
+                            return { pos, rot: doorway.rotation };
+                        }
+                    }
+                    return null;
+                }
+
+                // WALL LOGIC
+                if (['wall', 'doorway', 'window'].includes(this.selectedBuildType)) {
+                    const foundations = this.game.buildings.filter(b => b.userData.type === 'foundation');
+                    const intersects = raycaster.intersectObjects(foundations);
+                    if (intersects.length > 0) {
+                        const fHit = intersects[0];
+                        const fPos = fHit.object.position;
+                        const localX = fHit.point.x - fPos.x;
+                        const localZ = fHit.point.z - fPos.z;
+                        const dists = { N: Math.abs(-2-localZ), S: Math.abs(2-localZ), E: Math.abs(2-localX), W: Math.abs(-2-localX) };
+                        const min = Math.min(dists.N, dists.S, dists.E, dists.W);
+                        let pos = new THREE.Vector3(fPos.x, fPos.y+2, fPos.z);
+                        let rot = new THREE.Euler();
+                        if(min===dists.N) { pos.z-=2; }
+                        else if(min===dists.S) { pos.z+=2; }
+                        else if(min===dists.E) { pos.x+=2; rot.y=Math.PI/2; }
+                        else { pos.x-=2; rot.y=Math.PI/2; }
+                        return { pos, rot };
+                    }
+                    return null;
+                }
+
+                // FOUNDATION/DEFAULT LOGIC
+                const objects = [this.game.world.terrain, ...this.game.buildings];
+                const intersects = raycaster.intersectObjects(objects);
+                if (intersects.length > 0) {
+                    const hit = intersects[0];
+                    let snapX = Math.round(hit.point.x/4)*4;
+                    let snapZ = Math.round(hit.point.z/4)*4;
+                    let snapY = hit.point.y;
+                    
+                    if (this.selectedBuildType === 'foundation') {
+                        if (hit.object.userData.type === 'foundation') {
+                            const n = hit.face.normal;
+                            if(Math.abs(n.y)<0.5) {
+                                snapX = hit.object.position.x + Math.round(n.x)*4;
+                                snapZ = hit.object.position.z + Math.round(n.z)*4;
+                                snapY = hit.object.position.y;
+                            }
+                        } else {
+                            snapY += 0.25;
+                            let closestF = null, minDist = 5.0;
+                            for(const b of this.game.buildings) {
+                                if(b.userData.type==='foundation') {
+                                    const d = Utils.getDistance({x:snapX, z:snapZ}, b.position);
+                                    if(d<minDist) { minDist=d; closestF=b; }
+                                }
+                            }
+                            if(closestF) snapY = closestF.position.y;
+                        }
+                    }
+                    if (this.selectedBuildType === 'campfire') snapY += 0.25;
+                    if (this.selectedBuildType === 'ceiling') snapY += 4.25; 
+
+                    return { pos: new THREE.Vector3(snapX, snapY, snapZ), rot: new THREE.Euler() };
+                }
+                return null;
+            }
+
+            update() {
+                if (!this.buildMode) return;
+                const target = this.getBuildTarget();
+                if (target) {
+                    if(this.ghostMesh) {
+                        this.ghostMesh.position.copy(target.pos);
+                        this.ghostMesh.rotation.copy(target.rot);
+                        this.ghostMesh.visible = true;
+                    }
+                } else {
+                    if(this.ghostMesh) this.ghostMesh.visible = false;
+                }
+            }
+
+            renderHotbar() {
+                const hud = document.getElementById('hud');
+                hud.innerHTML = '';
+                this.game.player.hotbar.forEach((item, i) => {
+                    const el = document.createElement('div');
+                    el.className = `hotbar-slot ${i === this.game.player.activeSlot ? 'active' : ''}`;
+                    if (item) {
+                        const qty = this.game.player.inventory[item] || 0;
+                        el.innerHTML = `<span>${ITEMS[item].icon}</span><div class="slot-qty">${qty}</div>`;
+                    }
+                    hud.appendChild(el);
+                });
+            }
+
+            renderInventory() {
+                const grid = document.getElementById('inventory-grid');
+                grid.innerHTML = '';
+                for (let [key, qty] of Object.entries(this.game.player.inventory)) {
+                    if (qty <= 0) continue;
+                    const el = document.createElement('div');
+                    el.className = 'inv-item';
+                    el.innerHTML = `<div style="font-size:24px">${ITEMS[key].icon}</div><div>${ITEMS[key].name}</div><div style="font-size:10px">x${qty}</div>`;
+                    el.onclick = () => {
+                         const emptyIdx = this.game.player.hotbar.indexOf(null);
+                         if (emptyIdx !== -1) { this.game.player.hotbar[emptyIdx] = key; this.renderHotbar(); }
+                    };
+                    grid.appendChild(el);
+                }
+            }
+
+            renderCrafting() {
+                const list = document.getElementById('craft-list');
+                list.innerHTML = '';
+                RECIPES.forEach(r => {
+                    const btn = document.createElement('div');
+                    btn.className = 'craft-btn';
+                    const req = Object.entries(r.req).map(([k,v])=>`${ITEMS[k].name} x${v}`).join(', ');
+                    btn.innerHTML = `<div>${r.name}</div><div class="craft-req">${req}</div>`;
+                    btn.onclick = () => this.craft(r);
+                    list.appendChild(btn);
+                });
+            }
+
+            craft(recipe) {
+                for (let [k, v] of Object.entries(recipe.req)) { if ((this.game.player.inventory[k]||0) < v) return; }
+                for (let [k, v] of Object.entries(recipe.req)) { this.game.player.inventory[k] -= v; }
+                this.game.player.addItem(recipe.result, recipe.count);
+                this.renderInventory();
+            }
+
+            updateGhostGeo() {
+                if (this.ghostMesh) {
+                    this.game.scene.remove(this.ghostMesh);
+                    if(this.ghostMesh.traverse) this.ghostMesh.traverse(c => { if(c.geometry) c.geometry.dispose(); });
+                }
+                this.ghostMesh = BuildingFactory.create(this.selectedBuildType, true);
+                this.game.scene.add(this.ghostMesh);
+                this.ghostMesh.visible = true;
+            }
+
+            updateStats() {
+                const hpBar = document.getElementById('bar-hp');
+                const thirstBar = document.getElementById('bar-thirst');
+                if(hpBar) hpBar.style.width = this.game.player.stats.hp + '%';
+                if(thirstBar) thirstBar.style.width = this.game.player.stats.thirst + '%';
+            }
+
+            placeBuilding() {
+                const target = this.getBuildTarget();
+                if (target) {
+                    const costs = { 
+                        foundation: { wood: 10 }, 
+                        wall: { wood: 8 }, 
+                        doorway: { wood: 8 }, 
+                        window: { wood: 8 }, 
+                        ceiling: { wood: 6 }, 
+                        door: { wood: 6 }, 
+                        campfire: { stone: 10 } 
+                    };
+                    const costObj = costs[this.selectedBuildType] || { wood: 1 };
+                    
+                    let hasResources = true;
+                    for(const [res, amt] of Object.entries(costObj)) {
+                        if((this.game.player.inventory[res] || 0) < amt) hasResources = false;
+                    }
+
+                    if(hasResources) {
+                        for(const [res, amt] of Object.entries(costObj)) {
+                            this.game.player.inventory[res] -= amt;
+                        }
+                        this.renderHotbar();
+                        this.game.network.sendBuilding(this.selectedBuildType, target.pos, {x: target.rot.x, y: target.rot.y, z: target.rot.z});
+                    } else {
+                        console.log("Not enough resources");
+                    }
+                }
+            }
+        }
+
+        // --- CLASS: NETWORK ---
+        class NetworkManager {
+            constructor(game) {
+                this.game = game;
+                this.buildingsRef = collection(db, 'artifacts', appId, 'public', 'data', 'buildings');
+                this.playersRef = collection(db, 'artifacts', appId, 'public', 'data', 'players');
+                this.lastUpdate = 0;
+            }
+
+            startSync() {
+                if (!currentUser) return;
+                onSnapshot(this.buildingsRef, (snapshot) => {
+                    snapshot.docChanges().forEach((change) => {
+                        if (change.type === "added") {
+                            this.spawnBuilding(change.doc.data(), change.doc.id);
+                        }
+                        if (change.type === "modified") {
+                            // Handle door updates
+                            const data = change.doc.data();
+                            const mesh = this.game.buildings.find(b => b.userData.docId === change.doc.id);
+                            if (mesh && mesh.userData.type === 'door') {
+                                mesh.userData.isOpen = data.isOpen;
+                                // Animate rotation
+                                const targetRot = data.isOpen ? Math.PI / 2 : 0;
+                                mesh.children[0].rotation.y = targetRot; // Door mesh is child of pivot group
+                            }
+                        }
+                    });
+                });
+                onSnapshot(this.playersRef, (snapshot) => {
+                    snapshot.docChanges().forEach((change) => {
+                        if (change.doc.id === currentUser.uid) return;
+                        const data = change.doc.data();
+                        if (change.type === "added") {
+                            const geo = new THREE.CapsuleGeometry(0.5, 1, 4, 8);
+                            const mat = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+                            const mesh = new THREE.Mesh(geo, mat);
+                            this.game.scene.add(mesh);
+                            this.game.otherPlayers[change.doc.id] = mesh;
+                        } else if (change.type === "modified" && this.game.otherPlayers[change.doc.id]) {
+                            this.game.otherPlayers[change.doc.id].position.set(data.pos.x, data.pos.y, data.pos.z);
+                            this.game.otherPlayers[change.doc.id].rotation.set(data.rot._x, data.rot._y, data.rot._z);
+                        } else if (change.type === "removed" && this.game.otherPlayers[change.doc.id]) {
+                            this.game.scene.remove(this.game.otherPlayers[change.doc.id]);
+                            delete this.game.otherPlayers[change.doc.id];
+                        }
+                    });
+                });
+            }
+
+            update(dt) {
+                if (!currentUser) return;
+                if (Date.now() - this.lastUpdate > 100) {
+                    this.lastUpdate = Date.now();
+                    const p = this.game.player.mesh.position;
+                    const r = this.game.player.mesh.rotation;
+                    setDoc(doc(this.playersRef, currentUser.uid), {
+                        pos: { x: p.x, y: p.y, z: p.z },
+                        rot: { _x: r.x, _y: r.y, _z: r.z }
+                    }).catch(e => {});
+                }
+            }
+
+            async sendBuilding(type, pos, rot) {
+                await setDoc(doc(this.buildingsRef, `${Date.now()}_${Math.random()}`), {
+                    type: type,
+                    pos: { x: pos.x, y: pos.y, z: pos.z },
+                    rot: rot,
+                    owner: currentUser.uid,
+                    isOpen: false // Default for doors
+                });
+            }
+            
+            async toggleDoor(docId, isOpen) {
+                await updateDoc(doc(this.buildingsRef, docId), { isOpen: isOpen });
+            }
+
+            spawnBuilding(data, docId) {
+                const mesh = BuildingFactory.create(data.type, false);
+                if(mesh) {
+                    mesh.position.set(data.pos.x, data.pos.y, data.pos.z);
+                    if (data.rot) mesh.rotation.set(data.rot.x, data.rot.y, data.rot.z);
+                    mesh.userData = { type: data.type, docId: docId, isOpen: data.isOpen };
+                    
+                    // Initial state for doors
+                    if (data.type === 'door' && data.isOpen) {
+                        mesh.children[0].rotation.y = Math.PI / 2;
+                    }
+
+                    this.game.scene.add(mesh);
+                    this.game.buildings.push(mesh);
+                }
+            }
+        }
+    </script>
+</body>
+</html>
