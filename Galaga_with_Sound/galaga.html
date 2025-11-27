@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galaga JS</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            background-color: #111;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            color: white;
+            font-family: 'Press Start 2P', cursive;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+            border: 2px solid #333;
+        }
+
+        canvas {
+            display: block;
+            background-color: #000;
+        }
+
+        /* UI Overlays */
+        .overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 10;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        h1 {
+            color: #ff0000;
+            text-shadow: 2px 2px #0000ff;
+            font-size: 40px;
+            margin-bottom: 20px;
+            text-transform: uppercase;
+            letter-spacing: 4px;
+        }
+
+        p {
+            color: #fff;
+            font-size: 14px;
+            line-height: 1.5;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        button {
+            background: transparent;
+            color: #00ff00;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 18px;
+            padding: 15px 20px;
+            border: 2px solid #00ff00;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            animation: blink 1s infinite;
+        }
+
+        button:hover {
+            background: #00ff00;
+            color: #000;
+            animation: none;
+        }
+
+        @keyframes blink {
+            0% { opacity: 1; }
+            50% { opacity: 0; }
+            100% { opacity: 1; }
+        }
+
+        #score-board {
+            position: absolute;
+            top: 10px;
+            left: 20px;
+            color: #fff;
+            font-size: 16px;
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        #high-score {
+            position: absolute;
+            top: 10px;
+            right: 20px;
+            color: #ff0000;
+            font-size: 16px;
+            z-index: 5;
+            pointer-events: none;
+        }
+
+        /* CRT Scanline Effect */
+        #scanlines {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.1) 50%,
+                rgba(0,0,0,0.1)
+            );
+            background-size: 100% 4px;
+            z-index: 8;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="480" height="640"></canvas>
+        <div id="scanlines"></div>
+        
+        <div id="score-board">1UP <br><span id="score-val">00</span></div>
+        <div id="high-score">HIGH SCORE<br><span id="high-val">20000</span></div>
+
+        <div id="start-screen" class="overlay">
+            <h1>GALAGA JS</h1>
+            <p>ARROWS to Move<br>SPACE to Fire</p>
+            <button id="start-btn">INSERT COIN</button>
+        </div>
+
+        <div id="game-over-screen" class="overlay hidden">
+            <h1>GAME OVER</h1>
+            <p>Result: <span id="final-score">0</span></p>
+            <p>Shots Fired: <span id="shots-fired">0</span></p>
+            <p>Hit Ratio: <span id="hit-ratio">0</span>%</p>
+            <button id="restart-btn">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * AUDIO ENGINE
+         * Uses Web Audio API to synthesize sounds on the fly.
+         * No external files required.
+         */
+        const AudioEngine = {
+            ctx: null,
+            
+            init() {
+                if (!this.ctx) {
+                    this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+                }
+            },
+
+            playTone(freq, type, duration, vol = 0.1) {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = type;
+                osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+                
+                gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                
+                osc.start();
+                osc.stop(this.ctx.currentTime + duration);
+            },
+
+            playShoot() {
+                // Classic pew-pew: Rapid frequency slide
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(800, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, this.ctx.currentTime + 0.15);
+
+                gain.gain.setValueAtTime(0.05, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.15);
+
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.2);
+            },
+
+            playExplosion() {
+                // White noise burst
+                if (!this.ctx) return;
+                const bufferSize = this.ctx.sampleRate * 0.5; // 0.5 sec
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+                
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+
+                // Lowpass filter to make it rumbly
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.value = 1000;
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start();
+            },
+
+            playStartTheme() {
+                // Simplified Galaga Intro Theme
+                if (!this.ctx) return;
+                const now = this.ctx.currentTime;
+                const tempo = 0.12; 
+                
+                // Note frequencies (approximate)
+                const notes = [
+                    {f: 392.00, t: 0}, {f: 523.25, t: 1}, {f: 587.33, t: 2}, {f: 622.25, t: 3}, // G4, C5, D5, Eb5
+                    {f: 392.00, t: 4}, {f: 523.25, t: 5}, {f: 587.33, t: 6}, {f: 622.25, t: 7},
+                    {f: 698.46, t: 8}, {f: 622.25, t: 9}, {f: 587.33, t: 10}, {f: 523.25, t: 11}, // F5, Eb5, D5, C5
+                    {f: 466.16, t: 12}, {f: 523.25, t: 14} // Bb4, C5 (Long)
+                ];
+
+                notes.forEach(n => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle'; // 8-bit NES vibe
+                    osc.frequency.setValueAtTime(n.f, now + n.t * tempo);
+                    
+                    gain.gain.setValueAtTime(0.1, now + n.t * tempo);
+                    gain.gain.linearRampToValueAtTime(0, now + (n.t * tempo) + (tempo * 0.9));
+
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(now + n.t * tempo);
+                    osc.stop(now + (n.t * tempo) + tempo);
+                });
+            }
+        };
+
+        /**
+         * GAME LOGIC
+         */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game State
+        const GAME = {
+            width: canvas.width,
+            height: canvas.height,
+            active: false,
+            score: 0,
+            highScore: 20000,
+            shotsFired: 0,
+            shotsHit: 0,
+            frameCount: 0,
+            stars: [],
+            enemies: [],
+            bullets: [],
+            particles: [],
+            player: null,
+            lastTime: 0
+        };
+
+        const KEYS = {
+            ArrowLeft: false,
+            ArrowRight: false,
+            Space: false
+        };
+
+        // Inputs
+        window.addEventListener('keydown', (e) => {
+            if (e.code === 'ArrowLeft') KEYS.ArrowLeft = true;
+            if (e.code === 'ArrowRight') KEYS.ArrowRight = true;
+            if (e.code === 'Space') {
+                if (!KEYS.Space && GAME.active) GAME.player.shoot();
+                KEYS.Space = true;
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (e.code === 'ArrowLeft') KEYS.ArrowLeft = false;
+            if (e.code === 'ArrowRight') KEYS.ArrowRight = false;
+            if (e.code === 'Space') KEYS.Space = false;
+        });
+
+        // Classes
+        class Star {
+            constructor() {
+                this.x = Math.random() * GAME.width;
+                this.y = Math.random() * GAME.height;
+                this.size = Math.random() * 1.5;
+                this.speed = Math.random() * 3 + 0.5;
+                // Make some stars blink (colors)
+                this.color = Math.random() > 0.9 ? '#ff0000' : (Math.random() > 0.9 ? '#0000ff' : '#ffffff');
+            }
+
+            update() {
+                this.y += this.speed + (GAME.active ? 0 : 4); // Fast warp speed when menu open
+                if (this.y > GAME.height) {
+                    this.y = 0;
+                    this.x = Math.random() * GAME.width;
+                }
+            }
+
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.size, this.size);
+            }
+        }
+
+        class Player {
+            constructor() {
+                this.w = 24;
+                this.h = 24;
+                this.x = GAME.width / 2;
+                this.y = GAME.height - 50;
+                this.speed = 4;
+                this.color = '#eee';
+                this.dead = false;
+                this.cooldown = 0;
+            }
+
+            update() {
+                if (this.dead) return;
+
+                if (KEYS.ArrowLeft) this.x -= this.speed;
+                if (KEYS.ArrowRight) this.x += this.speed;
+
+                // Clamp
+                if (this.x < this.w/2) this.x = this.w/2;
+                if (this.x > GAME.width - this.w/2) this.x = GAME.width - this.w/2;
+
+                if (this.cooldown > 0) this.cooldown--;
+            }
+
+            draw() {
+                if (this.dead) return;
+                ctx.save();
+                ctx.translate(this.x, this.y);
+
+                // Draw Ship (Vector style)
+                ctx.fillStyle = "#ffffff";
+                // Main body
+                ctx.beginPath();
+                ctx.moveTo(0, -12);
+                ctx.lineTo(8, 8);
+                ctx.lineTo(0, 4);
+                ctx.lineTo(-8, 8);
+                ctx.closePath();
+                ctx.fill();
+
+                // Wings/Red accents
+                ctx.fillStyle = "#ff0000";
+                ctx.beginPath();
+                ctx.moveTo(-8, 8);
+                ctx.lineTo(-12, 12);
+                ctx.lineTo(-8, 12);
+                ctx.lineTo(-4, 8);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.moveTo(8, 8);
+                ctx.lineTo(12, 12);
+                ctx.lineTo(8, 12);
+                ctx.lineTo(4, 8);
+                ctx.fill();
+
+                ctx.restore();
+            }
+
+            shoot() {
+                // Max 2 bullets on screen logic or cooldown logic
+                const activeBullets = GAME.bullets.filter(b => b.isPlayer).length;
+                if (this.cooldown <= 0 && activeBullets < 2) {
+                    GAME.bullets.push(new Bullet(this.x, this.y - 15, true));
+                    AudioEngine.playShoot();
+                    this.cooldown = 10;
+                    GAME.shotsFired++;
+                }
+            }
+            
+            die() {
+                this.dead = true;
+                AudioEngine.playExplosion();
+                createExplosion(this.x, this.y, '#ffffff');
+                endGame();
+            }
+        }
+
+        class Bullet {
+            constructor(x, y, isPlayer) {
+                this.x = x;
+                this.y = y;
+                this.isPlayer = isPlayer;
+                this.speed = isPlayer ? 7 : 4;
+                this.active = true;
+                this.w = 4;
+                this.h = 8;
+            }
+
+            update() {
+                if (this.isPlayer) {
+                    this.y -= this.speed;
+                } else {
+                    this.y += this.speed;
+                }
+
+                if (this.y < 0 || this.y > GAME.height) this.active = false;
+            }
+
+            draw() {
+                ctx.fillStyle = this.isPlayer ? '#ff0000' : '#ffff00';
+                ctx.fillRect(this.x - 1, this.y, 2, 8);
+            }
+        }
+
+        class Enemy {
+            constructor(gridX, gridY, type) {
+                this.gridX = gridX;
+                this.gridY = gridY;
+                this.homeX = 40 + gridX * 40;
+                this.homeY = 60 + gridY * 35;
+                this.x = this.homeX;
+                this.y = -50; // Spawn off screen
+                this.type = type; // 0: Bee, 1: Butterfly, 2: Boss
+                this.state = 'SPAWNING'; // SPAWNING, IDLE, DIVING
+                this.angle = 0;
+                this.diveTimer = 0;
+                this.active = true;
+                
+                // Colors based on type
+                this.colorPrimary = type === 0 ? '#0000ff' : (type === 1 ? '#ff0000' : '#00ff00');
+                this.colorSecondary = '#ffff00';
+            }
+
+            update() {
+                this.diveTimer++;
+
+                if (this.state === 'SPAWNING') {
+                    // Move to home position
+                    let dx = this.homeX - this.x;
+                    let dy = this.homeY - this.y;
+                    this.x += dx * 0.05;
+                    this.y += dy * 0.05;
+                    
+                    if (Math.abs(dx) < 1 && Math.abs(dy) < 1) {
+                        this.state = 'IDLE';
+                    }
+                } 
+                else if (this.state === 'IDLE') {
+                    // Breathing movement
+                    this.x = this.homeX + Math.sin(GAME.frameCount * 0.05) * 10;
+                    
+                    // Random chance to dive
+                    if (Math.random() < 0.001 + (GAME.frameCount * 0.000001)) {
+                        this.state = 'DIVING';
+                        this.vx = (Math.random() - 0.5) * 4;
+                        this.vy = 2;
+                    }
+                } 
+                else if (this.state === 'DIVING') {
+                    this.y += this.vy;
+                    this.x += this.vx;
+                    this.vy += 0.05; // Accelerate down
+
+                    // Home in slightly on player x
+                    if (GAME.player && !GAME.player.dead) {
+                        if (this.x < GAME.player.x) this.vx += 0.05;
+                        else this.vx -= 0.05;
+                    }
+
+                    // Loop back to top if goes off bottom
+                    if (this.y > GAME.height) {
+                        this.y = -20;
+                        this.state = 'SPAWNING';
+                        this.vx = 0;
+                        this.vy = 0;
+                    }
+                }
+
+                // Animation toggle
+                this.frame = Math.floor(GAME.frameCount / 20) % 2;
+            }
+
+            draw() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                
+                // Rotate if diving
+                if (this.state === 'DIVING') {
+                    // Calculate angle based on velocity
+                    // Simple tilt
+                    ctx.rotate(this.vx * 0.1);
+                }
+
+                // Draw based on type (Pixel art using rects)
+                if (this.type === 2) { // Green Boss
+                    ctx.fillStyle = "#00aa00";
+                    ctx.beginPath(); // Shield shape
+                    ctx.moveTo(0, 10);
+                    ctx.lineTo(-8, 0);
+                    ctx.lineTo(-4, -8);
+                    ctx.lineTo(4, -8);
+                    ctx.lineTo(8, 0);
+                    ctx.fill();
+                    // Detail
+                    ctx.fillStyle = this.colorSecondary;
+                    ctx.fillRect(-2, -2, 4, 4);
+                } else if (this.type === 1) { // Red Butterfly
+                    ctx.fillStyle = "#aa0000";
+                    ctx.beginPath();
+                    if (this.frame === 0) {
+                        ctx.moveTo(0, 8); ctx.lineTo(-10, -5); ctx.lineTo(0, -2); ctx.lineTo(10, -5);
+                    } else {
+                        ctx.moveTo(0, 8); ctx.lineTo(-8, 0); ctx.lineTo(0, -2); ctx.lineTo(8, 0);
+                    }
+                    ctx.fill();
+                } else { // Blue Bee
+                    ctx.fillStyle = "#0000aa";
+                    ctx.beginPath();
+                    ctx.moveTo(0, 6);
+                    ctx.lineTo(-6, -4);
+                    ctx.lineTo(6, -4);
+                    ctx.fill();
+                    ctx.fillStyle = "#aaaaaa"; // antenna
+                    ctx.fillRect(-4, -8, 1, 4);
+                    ctx.fillRect(3, -8, 1, 4);
+                }
+
+                ctx.restore();
+            }
+        }
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 3 + 1;
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.life = 1.0;
+                this.decay = Math.random() * 0.05 + 0.02;
+            }
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.life -= this.decay;
+            }
+            draw() {
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, 3, 3);
+                ctx.globalAlpha = 1.0;
+            }
+        }
+
+        // --- Core Functions ---
+
+        function init() {
+            // Generate Stars
+            for(let i=0; i<50; i++) GAME.stars.push(new Star());
+            
+            animate();
+        }
+
+        function startGame() {
+            // Reset Game State
+            GAME.active = true;
+            GAME.score = 0;
+            GAME.shotsFired = 0;
+            GAME.shotsHit = 0;
+            GAME.bullets = [];
+            GAME.particles = [];
+            GAME.enemies = [];
+            GAME.frameCount = 0;
+
+            // Update UI
+            document.getElementById('start-screen').classList.add('hidden');
+            document.getElementById('game-over-screen').classList.add('hidden');
+            document.getElementById('score-val').innerText = '00';
+
+            // Create Player
+            GAME.player = new Player();
+
+            // Create Formation
+            // 4 rows: 2 blue, 1 red, 1 green
+            // 10 columns
+            const rows = [0, 0, 1, 2]; // Types
+            for(let r=0; r<rows.length; r++) {
+                for(let c=0; c<10; c++) {
+                    // Center the formation
+                    GAME.enemies.push(new Enemy(c, r, rows[r]));
+                }
+            }
+
+            // Audio
+            AudioEngine.init();
+            AudioEngine.playStartTheme();
+        }
+
+        function createExplosion(x, y, color) {
+            for(let i=0; i<15; i++) {
+                GAME.particles.push(new Particle(x, y, color));
+            }
+        }
+
+        function checkCollisions() {
+            // Player Bullets hitting Enemies
+            GAME.bullets.forEach(b => {
+                if (!b.active || !b.isPlayer) return;
+
+                GAME.enemies.forEach(e => {
+                    if (!e.active) return;
+                    // Simple AABB
+                    if (b.x > e.x - 10 && b.x < e.x + 10 &&
+                        b.y > e.y - 10 && b.y < e.y + 10) {
+                        
+                        b.active = false;
+                        e.active = false;
+                        createExplosion(e.x, e.y, e.colorSecondary);
+                        AudioEngine.playExplosion();
+                        
+                        // Score logic
+                        let points = e.type === 2 ? 150 : (e.type === 1 ? 80 : 50);
+                        if(e.state === 'DIVING') points *= 2; // Bonus for hitting diver
+                        
+                        GAME.score += points;
+                        GAME.shotsHit++;
+                        document.getElementById('score-val').innerText = GAME.score;
+                    }
+                });
+            });
+
+            // Enemy/EnemyBullets hitting Player
+            if (GAME.player && !GAME.player.dead) {
+                // Check Enemy collision (Kamikaze)
+                GAME.enemies.forEach(e => {
+                    if (!e.active) return;
+                    if (Math.abs(e.x - GAME.player.x) < 15 && Math.abs(e.y - GAME.player.y) < 15) {
+                        GAME.player.die();
+                        createExplosion(e.x, e.y, '#ff0000');
+                        e.active = false;
+                    }
+                });
+            }
+        }
+
+        function endGame() {
+            GAME.active = false;
+            setTimeout(() => {
+                document.getElementById('game-over-screen').classList.remove('hidden');
+                document.getElementById('final-score').innerText = GAME.score;
+                document.getElementById('shots-fired').innerText = GAME.shotsFired;
+                
+                let ratio = GAME.shotsFired > 0 ? Math.round((GAME.shotsHit / GAME.shotsFired) * 100) : 0;
+                document.getElementById('hit-ratio').innerText = ratio;
+
+                if (GAME.score > GAME.highScore) {
+                    GAME.highScore = GAME.score;
+                    document.getElementById('high-val').innerText = GAME.highScore;
+                }
+            }, 1000);
+        }
+
+        function animate(time) {
+            // Loop
+            requestAnimationFrame(animate);
+
+            // Throttle FPS slightly? No, standard 60 is fine.
+            GAME.frameCount++;
+
+            // Clear Screen
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, GAME.width, GAME.height);
+
+            // Update Stars
+            GAME.stars.forEach(s => { s.update(); s.draw(); });
+
+            if (!GAME.active && GAME.enemies.length === 0 && !document.getElementById('start-screen').classList.contains('hidden')) {
+                // Attract mode (no enemies, just stars)
+                return; 
+            }
+
+            // Game Logic
+            if (GAME.active) {
+                if (GAME.player) {
+                    GAME.player.update();
+                    GAME.player.draw();
+                }
+
+                // Clean arrays
+                GAME.bullets = GAME.bullets.filter(b => b.active);
+                GAME.enemies = GAME.enemies.filter(e => e.active);
+                GAME.particles = GAME.particles.filter(p => p.life > 0);
+
+                // Win Condition (Respawn wave)
+                if (GAME.enemies.length === 0) {
+                     // In full game, this would spawn next level. Here we just win/reset
+                     // For endless play, let's respawn them
+                     const rows = [0, 0, 1, 2];
+                     for(let r=0; r<rows.length; r++) {
+                        for(let c=0; c<10; c++) {
+                            GAME.enemies.push(new Enemy(c, r, rows[r]));
+                        }
+                    }
+                }
+            }
+
+            // Update Enemies
+            GAME.enemies.forEach(e => {
+                e.update();
+                e.draw();
+            });
+
+            // Update Bullets
+            GAME.bullets.forEach(b => {
+                b.update();
+                b.draw();
+            });
+
+            // Update Particles
+            GAME.particles.forEach(p => {
+                p.update();
+                p.draw();
+            });
+
+            if (GAME.active) checkCollisions();
+        }
+
+        // Event Listeners
+        document.getElementById('start-btn').addEventListener('click', startGame);
+        document.getElementById('restart-btn').addEventListener('click', startGame);
+
+        // Start loop
+        init();
+
+    </script>
+</body>
+</html>
