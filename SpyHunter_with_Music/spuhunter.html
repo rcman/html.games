@@ -1,0 +1,902 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Agent Hunter - G-6155 Interceptor</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+            touch-action: none; /* Prevent pull-to-refresh on mobile */
+        }
+
+        #gameCanvas {
+            display: block;
+            margin: 0 auto;
+            background: #2d8d2d; /* Grass green */
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 20px;
+            color: #00ff00;
+            text-shadow: 2px 2px 0 #000;
+            font-size: 20px;
+            font-weight: bold;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.8), transparent);
+        }
+
+        .hud-bottom {
+            padding: 20px;
+            text-align: center;
+        }
+
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            z-index: 10;
+            pointer-events: auto;
+        }
+
+        h1 {
+            font-size: 48px;
+            color: #ff3333;
+            text-transform: uppercase;
+            letter-spacing: 5px;
+            margin-bottom: 10px;
+            text-shadow: 0 0 10px #ff0000;
+            text-align: center;
+        }
+
+        .btn {
+            background: #ff3333;
+            color: white;
+            border: 2px solid #fff;
+            padding: 15px 40px;
+            font-size: 24px;
+            cursor: pointer;
+            font-family: 'Courier New', Courier, monospace;
+            text-transform: uppercase;
+            font-weight: bold;
+            transition: all 0.2s;
+            margin-top: 20px;
+        }
+
+        .btn:hover {
+            background: #ff0000;
+            transform: scale(1.1);
+            box-shadow: 0 0 20px #ff0000;
+        }
+
+        .controls-hint {
+            margin-top: 30px;
+            color: #ccc;
+            text-align: center;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+
+        .key {
+            display: inline-block;
+            background: #333;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid #666;
+            color: #fff;
+        }
+        
+        #mobile-controls {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            height: 150px;
+            pointer-events: none;
+            display: none; /* Shown via JS on touch devices */
+        }
+        
+        .touch-zone {
+            position: absolute;
+            bottom: 0;
+            width: 50%;
+            height: 100%;
+            pointer-events: auto;
+            opacity: 0.1;
+            background: white;
+        }
+        #touch-left { left: 0; }
+        #touch-right { right: 0; }
+        
+        #message-area {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: yellow;
+            font-size: 30px;
+            font-weight: bold;
+            text-shadow: 2px 2px 0 #000;
+            display: none;
+            z-index: 5;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="game-container">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="ui-layer">
+            <div class="hud-top">
+                <div id="score-display">SCORE: 00000</div>
+                <div id="health-display">SYSTEMS: 100%</div>
+            </div>
+        </div>
+
+        <div id="message-area">WEAPONS VAN</div>
+
+        <div id="start-screen">
+            <h1>AGENT HUNTER</h1>
+            <p>G-6155 INTERCEPTOR READY</p>
+            <button class="btn" id="start-btn">INITIATE MISSION</button>
+            <div class="controls-hint">
+                <p>CONTROLS</p>
+                <p><span class="key">ARROWS</span> or <span class="key">WASD</span> to Drive</p>
+                <p><span class="key">SPACE</span> to Shoot</p>
+                <p>Avoid Civilians (Red). Destroy Enemies (Blue/Black).</p>
+                <p>Dock with Weapons Van for Repairs.</p>
+            </div>
+        </div>
+        
+        <div id="mobile-controls">
+            <div id="touch-left" class="touch-zone"></div>
+            <div id="touch-right" class="touch-zone"></div>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * AUDIO SYSTEM - PETER GUNN THEME
+         * Implemented using Web Audio API oscillators to avoid external assets.
+         */
+        class MusicController {
+            constructor() {
+                this.ctx = null;
+                this.isPlaying = false;
+                this.tempo = 145; // BPM
+                this.nextNoteTime = 0;
+                this.noteIndex = 0;
+                this.timerID = null;
+                
+                // The Peter Gunn Bass Riff (E Phrygian dominant-ish)
+                // E2, E2, F#2, E2, G2, E2, A2, G#2
+                this.riff = [
+                    { note: 'E2', duration: 0.5 },
+                    { note: 'E2', duration: 0.5 },
+                    { note: 'F#2', duration: 0.5 },
+                    { note: 'E2', duration: 0.5 },
+                    { note: 'G2', duration: 0.5 },
+                    { note: 'E2', duration: 0.5 },
+                    { note: 'A2', duration: 0.5 },
+                    { note: 'G#2', duration: 0.5 }
+                ];
+                
+                // Simple frequency map
+                this.freqs = {
+                    'E2': 82.41,
+                    'F#2': 92.50,
+                    'G2': 98.00,
+                    'G#2': 103.83,
+                    'A2': 110.00,
+                    'B2': 123.47,
+                    'C3': 130.81, 
+                    'D3': 146.83,
+                    'E3': 164.81
+                };
+            }
+
+            init() {
+                window.AudioContext = window.AudioContext || window.webkitAudioContext;
+                this.ctx = new AudioContext();
+            }
+
+            playTone(freq, duration, type = 'sawtooth', vol = 0.1) {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                
+                osc.type = type;
+                osc.frequency.value = freq;
+                
+                // Envelope
+                gain.gain.setValueAtTime(0, this.ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(vol, this.ctx.currentTime + 0.02);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration - 0.02);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                
+                osc.start(this.ctx.currentTime);
+                osc.stop(this.ctx.currentTime + duration);
+            }
+
+            playShoot() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'square';
+                osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(40, this.ctx.currentTime + 0.1);
+                
+                gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.1);
+            }
+
+            playExplosion() {
+                if (!this.ctx) return;
+                const bufferSize = this.ctx.sampleRate * 0.5; // 0.5 seconds
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = Math.random() * 2 - 1;
+                }
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+                const gain = this.ctx.createGain();
+                
+                // Lowpass filter to make it sound like an explosion
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.value = 1000;
+                
+                gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+                
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start();
+            }
+
+            scheduler() {
+                // While there are notes that will need to play before the next interval, schedule them
+                while (this.nextNoteTime < this.ctx.currentTime + 0.1) {
+                    this.scheduleNote(this.noteIndex, this.nextNoteTime);
+                    this.advanceNote();
+                }
+                this.timerID = setTimeout(() => this.scheduler(), 25);
+            }
+
+            scheduleNote(index, time) {
+                const noteData = this.riff[index % this.riff.length];
+                const freq = this.freqs[noteData.note];
+                const secondsPerBeat = 60.0 / this.tempo;
+                const duration = noteData.duration * secondsPerBeat; // 8th notes are half a beat usually, but simpler here
+                
+                // Bass (Main Riff)
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.value = freq;
+                
+                gain.gain.setValueAtTime(0.05, time);
+                gain.gain.linearRampToValueAtTime(0.15, time + 0.05);
+                gain.gain.exponentialRampToValueAtTime(0.01, time + duration - 0.02);
+                
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start(time);
+                osc.stop(time + duration);
+            }
+
+            advanceNote() {
+                const secondsPerBeat = 60.0 / this.tempo;
+                // In our array, duration 0.5 is an eighth note
+                const noteData = this.riff[this.noteIndex % this.riff.length];
+                this.nextNoteTime += noteData.duration * secondsPerBeat; 
+                this.noteIndex++;
+            }
+
+            startMusic() {
+                if (this.isPlaying) return;
+                if (!this.ctx) this.init();
+                
+                this.isPlaying = true;
+                this.noteIndex = 0;
+                this.nextNoteTime = this.ctx.currentTime + 0.1;
+                this.scheduler();
+            }
+
+            stopMusic() {
+                this.isPlaying = false;
+                clearTimeout(this.timerID);
+            }
+        }
+
+        /**
+         * GAME ENGINE
+         */
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const uiScore = document.getElementById('score-display');
+        const uiHealth = document.getElementById('health-display');
+        const startScreen = document.getElementById('start-screen');
+        const startBtn = document.getElementById('start-btn');
+        const messageArea = document.getElementById('message-area');
+
+        // Assets (Procedural Generation)
+        // No images loaded to ensure single file robustness
+        
+        let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER
+        let score = 0;
+        let speed = 0;
+        let maxSpeed = 12;
+        let roadOffset = 0;
+        let lastTime = 0;
+        let music = new MusicController();
+        
+        const roadWidth = 400;
+        const laneWidth = roadWidth / 4;
+        
+        // Input
+        const keys = {
+            ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false,
+            w: false, s: false, a: false, d: false, ' ': false
+        };
+
+        // Resize handling
+        function resize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Input Listeners
+        window.addEventListener('keydown', (e) => {
+            if(keys.hasOwnProperty(e.key) || e.key === " ") keys[e.key] = true;
+            if(e.key === " " && gameState === 'PLAYING') player.shoot();
+        });
+        window.addEventListener('keyup', (e) => {
+            if(keys.hasOwnProperty(e.key) || e.key === " ") keys[e.key] = false;
+        });
+
+        // Touch Controls
+        const touchLeft = document.getElementById('touch-left');
+        const touchRight = document.getElementById('touch-right');
+        let touchX = 0;
+        
+        if('ontouchstart' in window) {
+            document.getElementById('mobile-controls').style.display = 'block';
+            
+            // Simple touch steering logic
+            window.addEventListener('touchstart', (e) => {
+                if(gameState !== 'PLAYING') return;
+                const touch = e.touches[0];
+                touchX = touch.clientX;
+                player.shoot(); // Auto shoot on tap
+            });
+
+            window.addEventListener('touchmove', (e) => {
+                if(gameState !== 'PLAYING') return;
+                e.preventDefault();
+                const touch = e.touches[0];
+                const diff = touch.clientX - touchX;
+                if(diff > 10) { keys.ArrowRight = true; keys.ArrowLeft = false; }
+                else if(diff < -10) { keys.ArrowLeft = true; keys.ArrowRight = false; }
+                else { keys.ArrowLeft = false; keys.ArrowRight = false; }
+            });
+
+            window.addEventListener('touchend', () => {
+                keys.ArrowLeft = false;
+                keys.ArrowRight = false;
+            });
+        }
+
+        // --- CLASSES ---
+
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.color = color;
+                this.size = Math.random() * 5 + 2;
+                this.speedX = Math.random() * 6 - 3;
+                this.speedY = Math.random() * 6 - 3;
+                this.life = 30;
+            }
+            update() {
+                this.x += this.speedX;
+                this.y += this.speedY;
+                this.life--;
+                this.size *= 0.9;
+            }
+            draw() {
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x, this.y, this.size, this.size);
+            }
+        }
+
+        class Entity {
+            constructor(x, y, type) {
+                this.x = x;
+                this.y = y;
+                this.width = 40;
+                this.height = 70;
+                this.type = type; // 'player', 'enemy', 'civ', 'van'
+                this.active = true;
+                this.health = 100;
+                this.color = '#fff';
+            }
+
+            drawBody() {
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                
+                // Shadow
+                ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                ctx.fillRect(5, 5, this.width, this.height);
+
+                if (this.type === 'player') {
+                    // G-6155 Interceptor Style
+                    ctx.fillStyle = '#ccc'; // Silver body
+                    ctx.fillRect(0, 0, this.width, this.height);
+                    ctx.fillStyle = '#fff'; // Shine
+                    ctx.fillRect(5, 0, 5, this.height);
+                    ctx.fillStyle = '#333'; // Windows
+                    ctx.fillRect(5, 20, 30, 10); // Windshield
+                    ctx.fillRect(5, 40, 30, 5); // Rear window
+                    ctx.fillStyle = 'red'; // Taillights
+                    ctx.fillRect(2, 65, 8, 4);
+                    ctx.fillRect(30, 65, 8, 4);
+                } 
+                else if (this.type === 'enemy') {
+                    // Blue Bandit
+                    ctx.fillStyle = '#000033'; 
+                    ctx.fillRect(0, 0, this.width, this.height);
+                    ctx.fillStyle = '#00f'; 
+                    ctx.fillRect(2, 2, this.width-4, this.height-4);
+                    ctx.fillStyle = '#000'; // Window
+                    ctx.fillRect(5, 20, 30, 15);
+                }
+                else if (this.type === 'civ') {
+                    // Red Sedan
+                    ctx.fillStyle = '#900';
+                    ctx.fillRect(0, 0, this.width, this.height);
+                    ctx.fillStyle = '#d44';
+                    ctx.fillRect(2, 2, this.width-4, this.height-4);
+                    ctx.fillStyle = '#300';
+                    ctx.fillRect(5, 15, 30, 15);
+                }
+                else if (this.type === 'van') {
+                    // Weapons Van
+                    ctx.fillStyle = '#e6b800'; // Orange/Yellow
+                    ctx.fillRect(0, 0, this.width + 10, this.height + 10);
+                    ctx.fillStyle = '#333';
+                    ctx.fillText("W", 15, 40);
+                    // Stripes
+                    ctx.fillStyle = 'red';
+                    ctx.fillRect(5, 5, 40, 5);
+                    ctx.fillRect(5, 70, 40, 5);
+                }
+
+                // Tires
+                ctx.fillStyle = '#000';
+                ctx.fillRect(-2, 10, 4, 15); // FL
+                ctx.fillRect(this.width-2, 10, 4, 15); // FR
+                ctx.fillRect(-2, 50, 4, 15); // RL
+                ctx.fillRect(this.width-2, 50, 4, 15); // RR
+
+                ctx.restore();
+            }
+
+            draw() {
+                if(!this.active) return;
+                this.drawBody();
+            }
+
+            getBounds() {
+                return { x: this.x, y: this.y, w: this.width, h: this.height };
+            }
+        }
+
+        class Player extends Entity {
+            constructor() {
+                super(canvas.width / 2 - 20, canvas.height - 150, 'player');
+                this.speedX = 0;
+            }
+
+            update() {
+                // Acceleration simulation
+                if (keys.ArrowUp || keys.w) speed = Math.min(speed + 0.2, maxSpeed);
+                else if (keys.ArrowDown || keys.s) speed = Math.max(speed - 0.2, maxSpeed/2);
+                else speed = Math.max(speed - 0.1, 0); // Friction coast
+
+                // Steering
+                if (keys.ArrowLeft || keys.a) this.x -= 6;
+                if (keys.ArrowRight || keys.d) this.x += 6;
+
+                // Road Boundaries
+                const centerX = canvas.width / 2;
+                const roadLeft = centerX - roadWidth / 2;
+                const roadRight = centerX + roadWidth / 2;
+
+                if (this.x < roadLeft) {
+                    this.x = roadLeft;
+                    speed *= 0.9; // Grass slows you down
+                }
+                if (this.x + this.width > roadRight) {
+                    this.x = roadRight - this.width;
+                    speed *= 0.9;
+                }
+            }
+
+            shoot() {
+                projectiles.push(new Projectile(this.x + this.width/2 - 2, this.y, -15, 'player'));
+                music.playShoot();
+            }
+        }
+
+        class Enemy extends Entity {
+            constructor(x, y) {
+                super(x, y, 'enemy');
+                this.behavior = Math.random() > 0.5 ? 'ram' : 'weave';
+            }
+
+            update() {
+                // Move down relative to player speed
+                this.y += (speed * 0.5) + 2; 
+
+                // Simple AI
+                if (this.behavior === 'ram') {
+                    if (this.x + this.width/2 < player.x + player.width/2) this.x += 1;
+                    else this.x -= 1;
+                } else {
+                    this.x += Math.sin(Date.now() / 200) * 2;
+                }
+
+                // Cull if off screen
+                if (this.y > canvas.height) this.active = false;
+            }
+        }
+
+        class Civilian extends Entity {
+            constructor(x, y) {
+                super(x, y, 'civ');
+            }
+            update() {
+                // Civilians drive slower than max player speed
+                this.y += (speed * 0.7);
+                if (this.y > canvas.height) this.active = false;
+            }
+        }
+
+        class Van extends Entity {
+            constructor(x, y) {
+                super(x, y, 'van');
+            }
+            update() {
+                this.y += (speed * 0.4); // Moves slow
+                if (this.y > canvas.height) this.active = false;
+            }
+        }
+
+        class Projectile {
+            constructor(x, y, vy, owner) {
+                this.x = x;
+                this.y = y;
+                this.vy = vy;
+                this.owner = owner;
+                this.width = 4;
+                this.height = 10;
+                this.active = true;
+            }
+
+            update() {
+                this.y += this.vy;
+                if (this.y < 0 || this.y > canvas.height) this.active = false;
+            }
+
+            draw() {
+                ctx.fillStyle = '#ff0';
+                ctx.fillRect(this.x, this.y, this.width, this.height);
+            }
+        }
+
+        // --- GAME LOOP VARIABLES ---
+        let player;
+        let enemies = [];
+        let civilians = [];
+        let projectiles = [];
+        let particles = [];
+        let vans = [];
+        let spawnTimer = 0;
+        let scoreTimer = 0;
+
+        function initGame() {
+            player = new Player();
+            enemies = [];
+            civilians = [];
+            projectiles = [];
+            particles = [];
+            vans = [];
+            score = 0;
+            speed = 0;
+            player.health = 100;
+            gameState = 'PLAYING';
+            music.startMusic();
+            
+            uiScore.innerText = "SCORE: 00000";
+            uiHealth.innerText = "SYSTEMS: 100%";
+            startScreen.style.display = 'none';
+            
+            requestAnimationFrame(gameLoop);
+        }
+
+        function createExplosion(x, y, color) {
+            music.playExplosion();
+            for(let i=0; i<20; i++) {
+                particles.push(new Particle(x, y, color));
+            }
+        }
+
+        function checkCollisions() {
+            const pRect = player.getBounds();
+
+            // Projectiles hit Enemies
+            projectiles.forEach(proj => {
+                if(!proj.active) return;
+                
+                enemies.forEach(enemy => {
+                    if(!enemy.active) return;
+                    const eRect = enemy.getBounds();
+                    if(rectIntersect(proj, eRect)) {
+                        createExplosion(enemy.x + enemy.width/2, enemy.y + enemy.height/2, '#00f');
+                        enemy.active = false;
+                        proj.active = false;
+                        score += 150;
+                    }
+                });
+
+                civilians.forEach(civ => {
+                    if(!civ.active) return;
+                    const cRect = civ.getBounds();
+                    if(rectIntersect(proj, cRect)) {
+                        createExplosion(civ.x + civ.width/2, civ.y + civ.height/2, '#f00');
+                        civ.active = false;
+                        proj.active = false;
+                        score -= 500; // Penalty
+                        score = Math.max(0, score);
+                        showMessage("NO CIVILIAN CASUALTIES!");
+                    }
+                });
+            });
+
+            // Player hits Enemy
+            enemies.forEach(enemy => {
+                if(!enemy.active) return;
+                if(rectIntersect(pRect, enemy.getBounds())) {
+                    createExplosion(enemy.x + enemy.width/2, enemy.y + enemy.height/2, '#fa0');
+                    enemy.active = false;
+                    player.health -= 20;
+                    speed *= 0.5;
+                }
+            });
+
+            // Player hits Civ
+            civilians.forEach(civ => {
+                if(!civ.active) return;
+                if(rectIntersect(pRect, civ.getBounds())) {
+                    createExplosion(civ.x + civ.width/2, civ.y + civ.height/2, '#fa0');
+                    civ.active = false;
+                    player.health -= 10;
+                    score -= 500;
+                    speed *= 0.5;
+                    showMessage("WATCH OUT!");
+                }
+            });
+
+            // Player hits Van
+            vans.forEach(van => {
+                if(!van.active) return;
+                if(rectIntersect(pRect, van.getBounds())) {
+                    van.active = false;
+                    player.health = 100;
+                    score += 500;
+                    showMessage("WEAPONS VAN: REPAIRED");
+                }
+            });
+        }
+
+        function showMessage(text) {
+            messageArea.innerText = text;
+            messageArea.style.display = 'block';
+            setTimeout(() => {
+                messageArea.style.display = 'none';
+            }, 2000);
+        }
+
+        function rectIntersect(r1, r2) {
+            return !(r2.x > r1.x + r1.w || 
+                     r2.x + r2.w < r1.x || 
+                     r2.y > r1.y + r1.h || 
+                     r2.y + r2.h < r1.y);
+        }
+
+        function spawnEntities() {
+            spawnTimer++;
+            
+            // Difficulty ramps up slightly with score
+            let spawnRate = 60; 
+            
+            if (spawnTimer > spawnRate) {
+                const centerX = canvas.width / 2;
+                const lane = Math.floor(Math.random() * 4) - 2; // -2 to 1
+                const xPos = centerX + (lane * laneWidth) + 10;
+                const startY = -100;
+
+                const r = Math.random();
+                if (r < 0.6) {
+                    enemies.push(new Enemy(xPos, startY));
+                } else if (r < 0.9) {
+                    civilians.push(new Civilian(xPos, startY));
+                } else {
+                    // Rare Van spawn
+                     if (Math.random() > 0.7) vans.push(new Van(xPos, startY));
+                }
+                spawnTimer = 0;
+            }
+        }
+
+        function drawRoad() {
+            // Background Grass
+            ctx.fillStyle = '#2d8d2d';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const centerX = canvas.width / 2;
+            const leftEdge = centerX - roadWidth / 2;
+            const rightEdge = centerX + roadWidth / 2;
+
+            // Road Asphalt
+            ctx.fillStyle = '#555';
+            ctx.fillRect(leftEdge, 0, roadWidth, canvas.height);
+
+            // Borders
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(leftEdge - 5, 0, 5, canvas.height);
+            ctx.fillRect(rightEdge, 0, 5, canvas.height);
+
+            // Moving Lines
+            ctx.fillStyle = '#dd0'; // Yellow lines
+            roadOffset += speed;
+            if (roadOffset > 100) roadOffset = 0;
+
+            for (let i = -100; i < canvas.height; i += 100) {
+                // Center dashed line
+                ctx.fillRect(centerX - 2, i + roadOffset, 4, 40);
+                
+                // Lane dividers
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(centerX - roadWidth/4 - 1, i + roadOffset, 2, 40);
+                ctx.fillRect(centerX + roadWidth/4 - 1, i + roadOffset, 2, 40);
+                ctx.fillStyle = '#dd0'; // Reset yellow
+            }
+
+            // Procedural Trees on side
+            ctx.fillStyle = '#0f4d0f';
+            for (let i = -100; i < canvas.height; i += 200) {
+                const y = i + roadOffset;
+                // Left trees
+                drawTree(leftEdge - 50, y);
+                drawTree(leftEdge - 150, y + 100);
+                // Right trees
+                drawTree(rightEdge + 50, y + 50);
+                drawTree(rightEdge + 120, y - 50);
+            }
+        }
+
+        function drawTree(x, y) {
+            ctx.beginPath();
+            ctx.arc(x, y, 30, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function gameLoop(timestamp) {
+            if (gameState !== 'PLAYING') return;
+
+            // Delta time handling could be added here, currently using fixed steps for simplicity
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Logic
+            player.update();
+            spawnEntities();
+            
+            enemies.forEach(e => e.update());
+            civilians.forEach(c => c.update());
+            vans.forEach(v => v.update());
+            projectiles.forEach(p => p.update());
+            particles.forEach(p => p.update());
+
+            checkCollisions();
+
+            // Drawing
+            drawRoad();
+            
+            // Draw Items under player/over road?
+            vans.forEach(v => v.draw());
+            civilians.forEach(c => c.draw());
+            enemies.forEach(e => e.draw());
+            player.draw();
+            projectiles.forEach(p => p.draw());
+            particles.forEach(p => p.draw());
+
+            // Cleanup
+            enemies = enemies.filter(e => e.active);
+            civilians = civilians.filter(c => c.active);
+            vans = vans.filter(v => v.active);
+            projectiles = projectiles.filter(p => p.active);
+            particles = particles.filter(p => p.life > 0);
+
+            // Score Logic
+            if(speed > 0) score += Math.floor(speed/10);
+            uiScore.innerText = `SCORE: ${score.toString().padStart(5, '0')}`;
+            uiHealth.innerText = `SYSTEMS: ${Math.floor(player.health)}%`;
+
+            // Game Over Check
+            if (player.health <= 0) {
+                endGame();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function endGame() {
+            gameState = 'GAMEOVER';
+            music.stopMusic();
+            startScreen.innerHTML = `
+                <h1>MISSION FAILED</h1>
+                <p>FINAL SCORE: ${score}</p>
+                <button class="btn" onclick="location.reload()">RETRY MISSION</button>
+            `;
+            startScreen.style.display = 'flex';
+        }
+
+        startBtn.addEventListener('click', initGame);
+
+        // Initial Draw
+        drawRoad();
+        
+    </script>
+</body>
+</html>

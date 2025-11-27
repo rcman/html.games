@@ -1,0 +1,1015 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Rally-X Clone</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            color: #fff;
+            font-family: 'Press Start 2P', monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        #game-container {
+            position: relative;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            border: 4px solid #444;
+            background-color: #000;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .hud-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 20px;
+            text-shadow: 2px 2px 0 #000;
+            font-size: 14px;
+        }
+
+        #radar-container {
+            position: absolute;
+            right: 20px;
+            top: 50%;
+            transform: translateY(-50%);
+            border: 2px solid #555;
+            background: rgba(0, 0, 0, 0.8);
+            width: 120px;
+            height: 160px;
+        }
+
+        #start-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.85);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 10;
+            pointer-events: auto;
+            text-align: center;
+        }
+
+        h1 {
+            color: #ffcc00;
+            text-shadow: 4px 4px 0 #cc0000;
+            font-size: 40px;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        p {
+            margin-bottom: 20px;
+            line-height: 1.5;
+            color: #ccc;
+        }
+
+        button {
+            background: #cc0000;
+            color: #fff;
+            border: none;
+            padding: 15px 30px;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.1s;
+            box-shadow: 0 4px 0 #880000;
+        }
+
+        button:active {
+            transform: translateY(4px);
+            box-shadow: 0 0 0 #880000;
+        }
+
+        button:hover {
+            background: #ff3333;
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        /* Mobile Controls */
+        #mobile-controls {
+            display: none; /* Shown via JS on touch devices if needed, but keeping simple for now */
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <div id="ui-layer">
+        <div class="hud-row">
+            <div id="score-display">SCORE: 0</div>
+            <div id="high-score-display">HI: 20000</div>
+        </div>
+        <div id="radar-container">
+            <canvas id="radarCanvas" width="120" height="160"></canvas>
+        </div>
+        <div class="hud-row" style="margin-top: auto;">
+            <div id="fuel-display">FUEL: 1000</div>
+            <div id="flags-display">FLAGS: 10</div>
+        </div>
+    </div>
+
+    <div id="start-screen">
+        <h1>RALLY-X<br>REDUX</h1>
+        <p>ARROWS to Drive<br>SPACE for Smoke Screen</p>
+        <p>Collect all Flags before Fuel runs out!</p>
+        <button id="start-btn">INSERT COIN</button>
+    </div>
+
+    <div id="game-over-screen" class="hidden">
+        <h1 id="go-title">GAME OVER</h1>
+        <p id="go-score">SCORE: 0</p>
+        <button id="restart-btn">TRY AGAIN</button>
+    </div>
+</div>
+
+<script>
+/**
+ * AUDIO SYSTEM
+ * Synthesizes sounds using Web Audio API to avoid external assets.
+ */
+class SoundManager {
+    constructor() {
+        this.ctx = null;
+        this.masterGain = null;
+        this.engineOsc = null;
+        this.engineGain = null;
+        this.initialized = false;
+    }
+
+    init() {
+        if (this.initialized) return;
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioContext();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.value = 0.3; // Master volume
+        this.masterGain.connect(this.ctx.destination);
+        this.initialized = true;
+    }
+
+    startEngine() {
+        if (!this.initialized) return;
+        this.engineOsc = this.ctx.createOscillator();
+        this.engineGain = this.ctx.createGain();
+        
+        this.engineOsc.type = 'sawtooth';
+        this.engineOsc.frequency.value = 80;
+        
+        this.engineGain.gain.value = 0.1;
+        
+        this.engineOsc.connect(this.engineGain);
+        this.engineGain.connect(this.masterGain);
+        this.engineOsc.start();
+    }
+
+    updateEngine(speed) {
+        if (!this.engineOsc) return;
+        // Pitch modulation based on speed
+        const baseFreq = 60;
+        this.engineOsc.frequency.setTargetAtTime(baseFreq + (speed * 20), this.ctx.currentTime, 0.1);
+    }
+
+    stopEngine() {
+        if (this.engineOsc) {
+            this.engineOsc.stop();
+            this.engineOsc = null;
+        }
+    }
+
+    playFlagPickup() {
+        if (!this.initialized) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(600, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1200, this.ctx.currentTime + 0.1);
+        
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.1);
+        
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.2);
+    }
+
+    playCrash() {
+        if (!this.initialized) return;
+        const bufferSize = this.ctx.sampleRate * 0.5; // 0.5 seconds
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        
+        const gain = this.ctx.createGain();
+        gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.5);
+        
+        noise.connect(gain);
+        gain.connect(this.masterGain);
+        noise.start();
+    }
+
+    playSmoke() {
+        if (!this.initialized) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(200, this.ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(50, this.ctx.currentTime + 0.3);
+        
+        gain.gain.setValueAtTime(0.3, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + 0.3);
+        
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        
+        osc.start();
+        osc.stop(this.ctx.currentTime + 0.3);
+    }
+    
+    playClear() {
+        if (!this.initialized) return;
+        // Simple melody for round clear
+        const notes = [523.25, 659.25, 783.99, 1046.50];
+        let time = this.ctx.currentTime;
+        
+        notes.forEach((freq, i) => {
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'square';
+            osc.frequency.value = freq;
+            gain.gain.value = 0.2;
+            
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            
+            osc.start(time + i * 0.1);
+            osc.stop(time + i * 0.1 + 0.1);
+        });
+    }
+}
+
+/**
+ * GAME ENGINE
+ */
+const CANVAS = document.getElementById('gameCanvas');
+const CTX = CANVAS.getContext('2d');
+const RADAR_CANVAS = document.getElementById('radarCanvas');
+const RADAR_CTX = RADAR_CANVAS.getContext('2d');
+
+const TILE_SIZE = 40;
+const MAP_WIDTH = 40;
+const MAP_HEIGHT = 30;
+const PLAYER_SPEED = 4;
+const ENEMY_SPEED = 3.2; // Slightly slower than player
+const SMOKE_DURATION = 150; // Frames
+
+// Game State
+let gameState = 'MENU'; // MENU, PLAYING, GAMEOVER, WIN
+let score = 0;
+let highScore = 20000;
+let fuel = 0;
+let level = 1;
+let frameCount = 0;
+
+// Inputs
+const keys = {
+    ArrowUp: false,
+    ArrowDown: false,
+    ArrowLeft: false,
+    ArrowRight: false,
+    Space: false
+};
+
+// Map Data (0=Floor, 1=Wall)
+let mapGrid = [];
+let walls = []; // Array of collision rectangles
+
+// Entities
+let player;
+let enemies = [];
+let flags = [];
+let rocks = [];
+let smokes = [];
+
+const soundManager = new SoundManager();
+
+// Utils
+function rectIntersect(r1, r2) {
+    return !(r2.x > r1.x + r1.w || 
+             r2.x + r2.w < r1.x || 
+             r2.y > r1.y + r1.h || 
+             r2.y + r2.h < r1.y);
+}
+
+function getGridPos(x, y) {
+    return {
+        c: Math.floor(x / TILE_SIZE),
+        r: Math.floor(y / TILE_SIZE)
+    };
+}
+
+// Map Generation
+function generateMap() {
+    mapGrid = [];
+    walls = [];
+    // Initialize full walls
+    for(let r=0; r<MAP_HEIGHT; r++) {
+        let row = [];
+        for(let c=0; c<MAP_WIDTH; c++) {
+            // Borders are walls
+            if(r===0 || r===MAP_HEIGHT-1 || c===0 || c===MAP_WIDTH-1) {
+                row.push(1);
+            } else {
+                // Random internal walls with cellular automata-ish feel or just random blocks
+                // Making a simple maze-like structure
+                if (Math.random() < 0.2 && c > 2 && c < MAP_WIDTH-2 && r > 2 && r < MAP_HEIGHT-2) {
+                    row.push(1);
+                } else {
+                    row.push(0);
+                }
+            }
+        }
+        mapGrid.push(row);
+    }
+    
+    // Ensure connectivity / clear start area (simple clearing)
+    for(let r=1; r<5; r++) {
+        for(let c=1; c<5; c++) {
+            mapGrid[r][c] = 0;
+        }
+    }
+
+    // Build wall rects for rendering optimization
+    for(let r=0; r<MAP_HEIGHT; r++) {
+        for(let c=0; c<MAP_WIDTH; c++) {
+            if(mapGrid[r][c] === 1) {
+                walls.push({x: c * TILE_SIZE, y: r * TILE_SIZE, w: TILE_SIZE, h: TILE_SIZE});
+            }
+        }
+    }
+}
+
+// Classes
+class Car {
+    constructor(x, y, isPlayer) {
+        this.x = x;
+        this.y = y;
+        this.w = 28;
+        this.h = 28;
+        this.isPlayer = isPlayer;
+        this.dx = 0;
+        this.dy = 0;
+        this.speed = isPlayer ? PLAYER_SPEED : ENEMY_SPEED;
+        this.dir = 'RIGHT'; // UP, DOWN, LEFT, RIGHT
+        this.nextDir = null; // For corner buffering
+        this.stunned = 0;
+        this.angle = 0;
+    }
+
+    update() {
+        if (this.stunned > 0) {
+            this.stunned--;
+            this.angle += 0.5; // Spin effect
+            return;
+        }
+
+        // Logic for turning
+        // Check if we are centered enough in a tile to turn
+        const centerX = this.x + this.w/2;
+        const centerY = this.y + this.h/2;
+        const col = Math.floor(centerX / TILE_SIZE);
+        const row = Math.floor(centerY / TILE_SIZE);
+        
+        const tileCenterX = col * TILE_SIZE + TILE_SIZE/2;
+        const tileCenterY = row * TILE_SIZE + TILE_SIZE/2;
+
+        const distX = Math.abs(centerX - tileCenterX);
+        const distY = Math.abs(centerY - tileCenterY);
+        const SNAP_DIST = 4; // Pixel tolerance for turning
+
+        if (this.nextDir && distX <= SNAP_DIST && distY <= SNAP_DIST) {
+            // Try to turn
+            if (this.canMove(this.nextDir, col, row)) {
+                this.dir = this.nextDir;
+                this.nextDir = null;
+                // Snap to grid axis to prevent drift
+                if (this.dir === 'UP' || this.dir === 'DOWN') {
+                    this.x = tileCenterX - this.w/2;
+                } else {
+                    this.y = tileCenterY - this.h/2;
+                }
+            }
+        }
+
+        // Apply Velocity based on current direction
+        this.dx = 0; 
+        this.dy = 0;
+        if (this.dir === 'UP') this.dy = -this.speed;
+        if (this.dir === 'DOWN') this.dy = this.speed;
+        if (this.dir === 'LEFT') this.dx = -this.speed;
+        if (this.dir === 'RIGHT') this.dx = this.speed;
+
+        // Collision Check ahead
+        if (!this.checkWallCollision(this.x + this.dx, this.y + this.dy)) {
+            this.x += this.dx;
+            this.y += this.dy;
+            
+            // Set rotation angle for rendering
+            if (this.dir === 'RIGHT') this.angle = 0;
+            if (this.dir === 'DOWN') this.angle = Math.PI / 2;
+            if (this.dir === 'LEFT') this.angle = Math.PI;
+            if (this.dir === 'UP') this.angle = -Math.PI / 2;
+
+        } else {
+            // Hit a wall
+            if (!this.isPlayer) {
+                // Simple AI bounce
+                this.pickRandomDir();
+            }
+        }
+    }
+
+    checkWallCollision(newX, newY) {
+        // Check the four corners against map grid
+        const points = [
+            {x: newX, y: newY},
+            {x: newX + this.w, y: newY},
+            {x: newX, y: newY + this.h},
+            {x: newX + this.w, y: newY + this.h}
+        ];
+
+        for (let p of points) {
+            let c = Math.floor(p.x / TILE_SIZE);
+            let r = Math.floor(p.y / TILE_SIZE);
+            if (r < 0 || r >= MAP_HEIGHT || c < 0 || c >= MAP_WIDTH || mapGrid[r][c] === 1) {
+                return true;
+            }
+            // Rock collision
+            for(let rock of rocks) {
+                if(p.x > rock.x && p.x < rock.x + rock.w && p.y > rock.y && p.y < rock.y + rock.h) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    canMove(direction, col, row) {
+        let r = row;
+        let c = col;
+        if (direction === 'UP') r--;
+        if (direction === 'DOWN') r++;
+        if (direction === 'LEFT') c--;
+        if (direction === 'RIGHT') c++;
+
+        if (r < 0 || r >= MAP_HEIGHT || c < 0 || c >= MAP_WIDTH) return false;
+        if (mapGrid[r][c] === 1) return false;
+        
+        // Check for rocks in that tile
+        // Simplified: just check center of tile vs rocks
+        let tx = c * TILE_SIZE;
+        let ty = r * TILE_SIZE;
+        for(let rock of rocks) {
+            // Rough check if rock is in target tile
+            if (rock.x >= tx && rock.x < tx + TILE_SIZE && rock.y >= ty && rock.y < ty + TILE_SIZE) return false;
+        }
+
+        return true;
+    }
+
+    pickRandomDir() {
+        const dirs = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+        // Don't reverse immediately if possible
+        const reverse = {UP:'DOWN', DOWN:'UP', LEFT:'RIGHT', RIGHT:'LEFT'};
+        const opts = dirs.filter(d => d !== reverse[this.dir]);
+        this.nextDir = opts[Math.floor(Math.random() * opts.length)];
+    }
+
+    draw(ctx, camX, camY) {
+        ctx.save();
+        ctx.translate(this.x + this.w/2 - camX, this.y + this.h/2 - camY);
+        ctx.rotate(this.angle);
+        
+        // Draw Car Body
+        if (this.isPlayer) {
+            ctx.fillStyle = '#00f'; // Blue player
+        } else {
+            ctx.fillStyle = '#d00'; // Red enemy
+        }
+        
+        // Main Chassis
+        ctx.fillRect(-12, -10, 24, 20);
+        
+        // Cabin
+        ctx.fillStyle = this.isPlayer ? '#aaf' : '#faa';
+        ctx.fillRect(-6, -8, 12, 16);
+        
+        // Wheels
+        ctx.fillStyle = '#000';
+        ctx.fillRect(-10, -14, 8, 4);
+        ctx.fillRect(-10, 10, 8, 4);
+        ctx.fillRect(4, -14, 8, 4);
+        ctx.fillRect(4, 10, 8, 4);
+        
+        // Headlights
+        ctx.fillStyle = '#ff0';
+        ctx.fillRect(10, -8, 4, 4);
+        ctx.fillRect(10, 4, 4, 4);
+
+        if (this.stunned > 0) {
+            ctx.strokeStyle = '#fff';
+            ctx.beginPath();
+            ctx.arc(0, 0, 20, 0, Math.PI*2);
+            ctx.stroke();
+        }
+
+        ctx.restore();
+    }
+}
+
+class Flag {
+    constructor(x, y, isSpecial) {
+        this.x = x;
+        this.y = y;
+        this.w = 20;
+        this.h = 20;
+        this.isSpecial = isSpecial; // Special flags give fuel
+        this.collected = false;
+    }
+    
+    draw(ctx, camX, camY) {
+        if (this.collected) return;
+        const dx = this.x - camX + 10;
+        const dy = this.y - camY + 10;
+        
+        ctx.fillStyle = this.isSpecial ? '#ff00ff' : '#ffff00';
+        
+        // Pole
+        ctx.fillRect(dx - 2, dy, 4, 18);
+        
+        // Triangle Flag
+        ctx.beginPath();
+        ctx.moveTo(dx, dy);
+        ctx.lineTo(dx + 12, dy + 6);
+        ctx.lineTo(dx, dy + 12);
+        ctx.fill();
+        
+        // Base
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(dx - 5, dy + 16, 10, 4);
+        
+        if (this.isSpecial) {
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(dx - 10, dy - 5, 20, 28);
+        }
+    }
+}
+
+class Rock {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.w = 30;
+        this.h = 30;
+    }
+    
+    draw(ctx, camX, camY) {
+        ctx.fillStyle = '#666';
+        ctx.beginPath();
+        let cx = this.x - camX + this.w/2;
+        let cy = this.y - camY + this.h/2;
+        ctx.arc(cx, cy, 14, 0, Math.PI*2);
+        ctx.fill();
+        
+        // Detail
+        ctx.fillStyle = '#444';
+        ctx.beginPath();
+        ctx.arc(cx - 4, cy - 4, 6, 0, Math.PI*2);
+        ctx.fill();
+    }
+}
+
+class Smoke {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.life = SMOKE_DURATION;
+        this.w = 32;
+        this.h = 32;
+    }
+    
+    draw(ctx, camX, camY) {
+        ctx.globalAlpha = this.life / SMOKE_DURATION;
+        ctx.fillStyle = '#fff';
+        let cx = this.x - camX + 16;
+        let cy = this.y - camY + 16;
+        
+        // Puff cloud
+        ctx.beginPath();
+        ctx.arc(cx, cy, 16 + Math.sin(frameCount * 0.2) * 4, 0, Math.PI*2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx + 10, cy + 10, 10, 0, Math.PI*2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(cx - 10, cy - 5, 12, 0, Math.PI*2);
+        ctx.fill();
+        
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+// Game Logic Functions
+
+function initLevel() {
+    generateMap();
+    player = new Car(TILE_SIZE * 2, TILE_SIZE * 2, true);
+    
+    // Spawn Flags
+    flags = [];
+    let placed = 0;
+    while (placed < 10) {
+        let c = Math.floor(Math.random() * (MAP_WIDTH - 2)) + 1;
+        let r = Math.floor(Math.random() * (MAP_HEIGHT - 2)) + 1;
+        if (mapGrid[r][c] === 0) {
+            // Check distance from player
+            let dist = Math.hypot(c*TILE_SIZE - player.x, r*TILE_SIZE - player.y);
+            if (dist > 300) {
+                flags.push(new Flag(c * TILE_SIZE + 5, r * TILE_SIZE + 5, placed === 0)); // 1 special flag
+                placed++;
+            }
+        }
+    }
+
+    // Spawn Rocks
+    rocks = [];
+    placed = 0;
+    while (placed < 15) {
+        let c = Math.floor(Math.random() * (MAP_WIDTH - 2)) + 1;
+        let r = Math.floor(Math.random() * (MAP_HEIGHT - 2)) + 1;
+        // Don't place on flags or player
+        let safe = true;
+        if (mapGrid[r][c] !== 0) safe = false;
+        // Lazy check against other objects, usually fine in random map
+        if (safe) {
+            rocks.push(new Rock(c*TILE_SIZE + 5, r*TILE_SIZE + 5));
+            placed++;
+        }
+    }
+
+    // Spawn Enemies
+    enemies = [];
+    let enemyCount = 2 + Math.min(level, 5);
+    placed = 0;
+    while (placed < enemyCount) {
+        let c = Math.floor(Math.random() * (MAP_WIDTH - 2)) + 1;
+        let r = Math.floor(Math.random() * (MAP_HEIGHT - 2)) + 1;
+        if (mapGrid[r][c] === 0) {
+             let dist = Math.hypot(c*TILE_SIZE - player.x, r*TILE_SIZE - player.y);
+             if (dist > 400) {
+                 enemies.push(new Car(c * TILE_SIZE + 2, r * TILE_SIZE + 2, false));
+                 placed++;
+             }
+        }
+    }
+
+    smokes = [];
+    fuel = 1000;
+    document.getElementById('flags-display').innerText = `FLAGS: ${flags.length}`;
+}
+
+function update() {
+    if (gameState !== 'PLAYING') return;
+    
+    frameCount++;
+
+    // Fuel Decay
+    fuel -= 0.5;
+    if (fuel <= 0) {
+        fuel = 0;
+        // Game Over logic for fuel empty? In Rally-X you just move very slow, but here we'll kill.
+        // Actually Rally-X allows movement but you are vulnerable.
+        // Let's make it Game Over for simplicity of the clone.
+        gameOver();
+    }
+    document.getElementById('fuel-display').innerText = `FUEL: ${Math.floor(fuel)}`;
+    
+    // Player Input
+    if (keys.ArrowUp) player.nextDir = 'UP';
+    if (keys.ArrowDown) player.nextDir = 'DOWN';
+    if (keys.ArrowLeft) player.nextDir = 'LEFT';
+    if (keys.ArrowRight) player.nextDir = 'RIGHT';
+    
+    // Smoke Input
+    if (keys.Space) {
+        if (fuel > 50) { // Smoke costs fuel
+            fuel -= 50;
+            smokes.push(new Smoke(player.x, player.y));
+            soundManager.playSmoke();
+            keys.Space = false; // Toggle needed
+        }
+    }
+
+    player.update();
+    soundManager.updateEngine(Math.abs(player.dx) + Math.abs(player.dy) > 0 ? 1 : 0);
+
+    // Update Enemies
+    enemies.forEach(enemy => {
+        // AI Logic: Every 30 frames, adjust course towards player
+        if (frameCount % 30 === 0 && enemy.stunned === 0) {
+            const centerX = enemy.x + enemy.w/2;
+            const centerY = enemy.y + enemy.h/2;
+            const col = Math.floor(centerX / TILE_SIZE);
+            const row = Math.floor(centerY / TILE_SIZE);
+            
+            // Manhattan distance heuristic
+            let bestDir = enemy.dir;
+            let minDist = 999999;
+            
+            ['UP','DOWN','LEFT','RIGHT'].forEach(d => {
+                // Don't reverse
+                const rev = {UP:'DOWN', DOWN:'UP', LEFT:'RIGHT', RIGHT:'LEFT'};
+                if (d === rev[enemy.dir]) return;
+
+                if (enemy.canMove(d, col, row)) {
+                    // Predicted pos
+                    let tx = col, ty = row;
+                    if (d === 'UP') ty--;
+                    if (d === 'DOWN') ty++;
+                    if (d === 'LEFT') tx--;
+                    if (d === 'RIGHT') tx++;
+                    
+                    let pCol = Math.floor(player.x / TILE_SIZE);
+                    let pRow = Math.floor(player.y / TILE_SIZE);
+                    
+                    let dist = Math.abs(tx - pCol) + Math.abs(ty - pRow);
+                    if (dist < minDist) {
+                        minDist = dist;
+                        bestDir = d;
+                    }
+                }
+            });
+            enemy.nextDir = bestDir;
+        }
+        
+        enemy.update();
+
+        // Collision with Smoke
+        smokes.forEach(smoke => {
+            if (rectIntersect(enemy, smoke)) {
+                enemy.stunned = 60; // 1 second stun
+            }
+        });
+
+        // Collision with Player
+        if (enemy.stunned === 0 && rectIntersect(player, {x: enemy.x+4, y: enemy.y+4, w: enemy.w-8, h: enemy.h-8})) {
+            soundManager.playCrash();
+            gameOver();
+        }
+    });
+
+    // Update Smokes
+    for(let i = smokes.length-1; i>=0; i--) {
+        smokes[i].life--;
+        if(smokes[i].life <= 0) smokes.splice(i, 1);
+    }
+
+    // Flag Collection
+    let remainingFlags = 0;
+    flags.forEach(flag => {
+        if (!flag.collected) {
+            remainingFlags++;
+            if (rectIntersect(player, flag)) {
+                flag.collected = true;
+                score += flag.isSpecial ? 500 : 100;
+                if (flag.isSpecial) fuel += 200;
+                document.getElementById('score-display').innerText = `SCORE: ${score}`;
+                soundManager.playFlagPickup();
+            }
+        }
+    });
+    
+    document.getElementById('flags-display').innerText = `FLAGS: ${remainingFlags}`;
+
+    // Rock Collision
+    rocks.forEach(rock => {
+        if (rectIntersect(player, rock)) {
+            soundManager.playCrash();
+            gameOver();
+        }
+    });
+
+    // Level Clear
+    if (remainingFlags === 0) {
+        soundManager.playClear();
+        level++;
+        fuel += 500;
+        initLevel();
+    }
+}
+
+function draw() {
+    // Fill Background
+    CTX.fillStyle = '#000';
+    CTX.fillRect(0, 0, CANVAS.width, CANVAS.height);
+
+    if (gameState === 'MENU' || gameState === 'GAMEOVER') {
+        // Just draw a static background or the last frame
+        // We let the HTML overlay handle the text
+        if (gameState === 'MENU') return;
+    }
+
+    // Camera Calculation (Center on player)
+    let camX = player.x - CANVAS.width / 2;
+    let camY = player.y - CANVAS.height / 2;
+    
+    // Clamp Camera
+    camX = Math.max(0, Math.min(camX, MAP_WIDTH * TILE_SIZE - CANVAS.width));
+    camY = Math.max(0, Math.min(camY, MAP_HEIGHT * TILE_SIZE - CANVAS.height));
+
+    // Draw Map Walls
+    CTX.fillStyle = '#4488ff'; // Neon Blue walls
+    
+    // Optimization: Only draw visible walls
+    let startCol = Math.floor(camX / TILE_SIZE);
+    let endCol = startCol + (CANVAS.width / TILE_SIZE) + 1;
+    let startRow = Math.floor(camY / TILE_SIZE);
+    let endRow = startRow + (CANVAS.height / TILE_SIZE) + 1;
+
+    for (let r = startRow; r <= endRow; r++) {
+        for (let c = startCol; c <= endCol; c++) {
+            if (r >= 0 && r < MAP_HEIGHT && c >= 0 && c < MAP_WIDTH) {
+                if (mapGrid[r][c] === 1) {
+                    CTX.fillRect(c * TILE_SIZE - camX, r * TILE_SIZE - camY, TILE_SIZE, TILE_SIZE);
+                    // Inner detail for 3D look
+                    CTX.fillStyle = '#000';
+                    CTX.fillRect(c * TILE_SIZE - camX + 4, r * TILE_SIZE - camY + 4, TILE_SIZE-8, TILE_SIZE-8);
+                    CTX.fillStyle = '#4488ff';
+                    CTX.fillRect(c * TILE_SIZE - camX + 8, r * TILE_SIZE - camY + 8, TILE_SIZE-16, TILE_SIZE-16);
+                }
+            }
+        }
+    }
+
+    // Grid floor lines for speed sensation
+    CTX.strokeStyle = '#222';
+    CTX.lineWidth = 1;
+    CTX.beginPath();
+    for (let c = startCol; c <= endCol; c++) {
+        CTX.moveTo(c*TILE_SIZE - camX, 0);
+        CTX.lineTo(c*TILE_SIZE - camX, CANVAS.height);
+    }
+    for (let r = startRow; r <= endRow; r++) {
+        CTX.moveTo(0, r*TILE_SIZE - camY);
+        CTX.lineTo(CANVAS.width, r*TILE_SIZE - camY);
+    }
+    CTX.stroke();
+
+    // Draw Items
+    flags.forEach(f => f.draw(CTX, camX, camY));
+    rocks.forEach(r => r.draw(CTX, camX, camY));
+    smokes.forEach(s => s.draw(CTX, camX, camY));
+    
+    enemies.forEach(e => e.draw(CTX, camX, camY));
+    player.draw(CTX, camX, camY);
+
+    drawRadar();
+}
+
+function drawRadar() {
+    RADAR_CTX.fillStyle = '#000';
+    RADAR_CTX.fillRect(0, 0, RADAR_CANVAS.width, RADAR_CANVAS.height);
+
+    const scaleX = RADAR_CANVAS.width / (MAP_WIDTH * TILE_SIZE);
+    const scaleY = RADAR_CANVAS.height / (MAP_HEIGHT * TILE_SIZE);
+
+    // Draw Flags
+    RADAR_CTX.fillStyle = '#ff0';
+    flags.forEach(f => {
+        if (!f.collected) {
+            RADAR_CTX.fillRect(f.x * scaleX, f.y * scaleY, 4, 4);
+        }
+    });
+
+    // Draw Enemies
+    RADAR_CTX.fillStyle = '#f00';
+    enemies.forEach(e => {
+        RADAR_CTX.fillRect(e.x * scaleX, e.y * scaleY, 4, 4);
+    });
+
+    // Draw Player
+    RADAR_CTX.fillStyle = '#fff'; // Blinking logic could go here
+    if (Math.floor(Date.now() / 200) % 2 === 0) {
+        RADAR_CTX.fillRect(player.x * scaleX, player.y * scaleY, 5, 5);
+    }
+}
+
+function loop() {
+    update();
+    draw();
+    requestAnimationFrame(loop);
+}
+
+function gameOver() {
+    gameState = 'GAMEOVER';
+    soundManager.stopEngine();
+    soundManager.playCrash();
+    
+    if (score > highScore) {
+        highScore = score;
+        document.getElementById('high-score-display').innerText = `HI: ${highScore}`;
+    }
+    
+    document.getElementById('go-score').innerText = `SCORE: ${score}`;
+    document.getElementById('game-over-screen').classList.remove('hidden');
+}
+
+function startGame() {
+    soundManager.init();
+    soundManager.startEngine();
+    score = 0;
+    fuel = 1000;
+    level = 1;
+    document.getElementById('score-display').innerText = `SCORE: 0`;
+    document.getElementById('start-screen').classList.add('hidden');
+    document.getElementById('game-over-screen').classList.add('hidden');
+    gameState = 'PLAYING';
+    initLevel();
+}
+
+// Event Listeners
+window.addEventListener('keydown', e => {
+    if (gameState !== 'PLAYING') return;
+    if (keys.hasOwnProperty(e.code)) {
+        keys[e.code] = true;
+        // Prevent scrolling with arrows
+        if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].indexOf(e.code) > -1) {
+            e.preventDefault();
+        }
+    }
+});
+
+window.addEventListener('keyup', e => {
+    if (keys.hasOwnProperty(e.code)) {
+        keys[e.code] = false;
+        // Space logic handled in update for debounce, but keyup resets toggle
+        if (e.code === 'Space') {
+            keys.Space = false;
+        }
+    }
+});
+
+document.getElementById('start-btn').addEventListener('click', startGame);
+document.getElementById('restart-btn').addEventListener('click', startGame);
+
+// Start Loop
+generateMap(); // Generate one for menu background visualization (though covered)
+loop();
+
+</script>
+</body>
+</html>

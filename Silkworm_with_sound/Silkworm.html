@@ -1,0 +1,1010 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Silkworm Clone</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #111;
+            font-family: 'Courier New', Courier, monospace;
+            touch-action: none; /* Prevent browser zooming/scrolling */
+            user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            display: block;
+            background: linear-gradient(to bottom, #87CEEB 0%, #E0F7FA 70%, #d2b48c 70%, #8b4513 100%);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+
+        /* UI Overlays */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        .hud-bar {
+            padding: 10px;
+            color: yellow;
+            font-weight: bold;
+            text-shadow: 2px 2px 0 #000;
+            font-size: 20px;
+            display: flex;
+            justify-content: space-between;
+            width: 100%;
+            box-sizing: border-box;
+        }
+
+        #start-screen, #game-over-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            pointer-events: auto;
+            color: white;
+            text-align: center;
+        }
+
+        h1 {
+            font-size: 60px;
+            color: #00ff00;
+            text-shadow: 4px 4px 0 #003300;
+            margin-bottom: 10px;
+            letter-spacing: 5px;
+        }
+
+        .btn {
+            padding: 15px 30px;
+            font-size: 24px;
+            background: #d32f2f;
+            color: white;
+            border: 4px solid #fff;
+            cursor: pointer;
+            margin: 10px;
+            font-family: inherit;
+            text-transform: uppercase;
+            transition: transform 0.1s;
+        }
+
+        .btn:active {
+            transform: scale(0.95);
+        }
+
+        .vehicle-select {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .vehicle-card {
+            border: 2px solid #555;
+            padding: 20px;
+            cursor: pointer;
+            border-radius: 8px;
+            transition: all 0.2s;
+            background: #222;
+        }
+
+        .vehicle-card.selected {
+            border-color: #00ff00;
+            background: #003300;
+            box-shadow: 0 0 15px #00ff00;
+        }
+
+        /* Mobile Controls */
+        #controls {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            height: 150px;
+            pointer-events: auto;
+            display: none; /* Shown via JS on touch devices */
+            justify-content: space-between;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+
+        .d-pad {
+            position: relative;
+            width: 120px;
+            height: 120px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 50%;
+            border: 2px solid rgba(255,255,255,0.3);
+        }
+
+        .d-pad-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .action-btn-group {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+
+        .action-btn {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: rgba(255, 0, 0, 0.4);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: white;
+            font-weight: bold;
+            font-size: 14px;
+            user-select: none;
+        }
+
+        .action-btn.blue { background: rgba(0, 0, 255, 0.4); }
+
+        .hidden { display: none !important; }
+
+        .instructions {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #aaa;
+            max-width: 600px;
+        }
+        
+        .key-badge {
+            display: inline-block;
+            background: #444;
+            padding: 2px 6px;
+            border-radius: 4px;
+            border: 1px solid #777;
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+
+    <div id="ui-layer">
+        <div class="hud-bar">
+            <span id="score-display">P1: 000000</span>
+            <span id="lives-display">LIVES: 3</span>
+        </div>
+        
+        <div id="controls">
+            <div class="d-pad" id="joystick">
+                <div class="d-pad-center" id="joystick-knob"></div>
+            </div>
+            <div class="action-btn-group">
+                <div class="action-btn blue" id="btn-jump">JUMP</div>
+                <div class="action-btn" id="btn-fire">FIRE</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="start-screen">
+        <h1>SILKWORM</h1>
+        <p>SELECT YOUR VEHICLE</p>
+        
+        <div class="vehicle-select">
+            <div class="vehicle-card selected" onclick="selectVehicle('heli')" id="card-heli">
+                <h3>HELICOPTER</h3>
+                <small>Air Superiority<br>Fire Down/Forward</small>
+            </div>
+            <div class="vehicle-card" onclick="selectVehicle('jeep')" id="card-jeep">
+                <h3>JEEP</h3>
+                <small>Ground Assault<br>Jump + Anti-Air</small>
+            </div>
+        </div>
+
+        <button class="btn" onclick="startGame()">INSERT COIN / START</button>
+        
+        <div class="instructions">
+            <p><strong>PC:</strong> Arrow Keys/WASD to Move. Z/Space to Fire. X/Shift to Jump (Jeep only).</p>
+            <p><strong>Mobile:</strong> Use on-screen joystick and buttons.</p>
+        </div>
+    </div>
+
+    <div id="game-over-screen" class="hidden">
+        <h1>GAME OVER</h1>
+        <h2 id="final-score">SCORE: 0</h2>
+        <button class="btn" onclick="resetGame()">PLAY AGAIN</button>
+    </div>
+</div>
+
+<script>
+/**
+ * AUDIO ENGINE (Web Audio API)
+ * Synthesizes sounds to avoid external assets
+ */
+const AudioEngine = {
+    ctx: null,
+    masterGain: null,
+    bgmOscillators: [],
+    
+    init() {
+        window.AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioContext();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.value = 0.3; // Master volume
+        this.masterGain.connect(this.ctx.destination);
+    },
+
+    playTone(freq, type, duration, vol = 1) {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    },
+
+    playNoise(duration) {
+        if (!this.ctx) return;
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const gain = this.ctx.createGain();
+        
+        // Lowpass filter for explosion thud
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 1000;
+
+        gain.gain.setValueAtTime(0.5, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.masterGain);
+        noise.start();
+    },
+
+    playShoot() {
+        // Pew pew
+        this.playTone(800, 'square', 0.1, 0.1);
+        if(this.ctx){
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.frequency.setValueAtTime(1200, this.ctx.currentTime);
+            osc.frequency.exponentialRampToValueAtTime(400, this.ctx.currentTime + 0.1);
+            gain.gain.setValueAtTime(0.1, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.1);
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.1);
+        }
+    },
+
+    playExplosion() {
+        this.playNoise(0.4);
+    },
+    
+    playJump() {
+        if(this.ctx) {
+             const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'triangle';
+            osc.frequency.setValueAtTime(150, this.ctx.currentTime);
+            osc.frequency.linearRampToValueAtTime(600, this.ctx.currentTime + 0.3);
+            gain.gain.setValueAtTime(0.2, this.ctx.currentTime);
+            gain.gain.linearRampToValueAtTime(0, this.ctx.currentTime + 0.3);
+            osc.connect(gain);
+            gain.connect(this.masterGain);
+            osc.start();
+            osc.stop(this.ctx.currentTime + 0.3);
+        }
+    }
+};
+
+/**
+ * GAME CONSTANTS & STATE
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+let gameWidth, gameHeight;
+const GAME_SPEED = 2; // Base scroll speed
+let frameCount = 0;
+let score = 0;
+let lives = 3;
+let isGameOver = false;
+let isPaused = false;
+let selectedVehicleType = 'heli'; // 'heli' or 'jeep'
+
+// Entity Arrays
+let player;
+let bullets = [];
+let enemies = [];
+let particles = [];
+let powerups = [];
+
+// Input State
+const keys = {};
+const joystick = { x: 0, y: 0, active: false };
+let isFiring = false;
+let isJumping = false;
+
+/**
+ * CLASSES
+ */
+
+class Entity {
+    constructor(x, y, width, height, color) {
+        this.x = x;
+        this.y = y;
+        this.width = width;
+        this.height = height;
+        this.color = color;
+        this.markedForDeletion = false;
+        this.hp = 1;
+    }
+
+    draw(ctx) {
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+    }
+
+    update() {
+        // Base update
+    }
+
+    getBounds() {
+        return { x: this.x, y: this.y, w: this.width, h: this.height };
+    }
+}
+
+class Player extends Entity {
+    constructor(type) {
+        super(100, 0, 40, 30, '#0f0');
+        this.type = type;
+        this.vx = 0;
+        this.vy = 0;
+        this.speed = 5;
+        this.invincibleTimer = 0;
+        this.weaponLevel = 1;
+        
+        // Jeep specific
+        this.isGrounded = false;
+        this.gravity = 0.5;
+        this.jumpPower = -12;
+
+        if (type === 'heli') {
+            this.y = gameHeight / 2;
+        } else {
+            this.y = gameHeight - 50; // Ground level approx
+        }
+    }
+
+    update() {
+        if (this.invincibleTimer > 0) this.invincibleTimer--;
+
+        // Movement Logic
+        if (this.type === 'heli') {
+            this.vx = 0;
+            this.vy = 0;
+            if (keys['ArrowUp'] || keys['w'] || joystick.y < -0.3) this.vy = -this.speed;
+            if (keys['ArrowDown'] || keys['s'] || joystick.y > 0.3) this.vy = this.speed;
+            if (keys['ArrowLeft'] || keys['a'] || joystick.x < -0.3) this.vx = -this.speed;
+            if (keys['ArrowRight'] || keys['d'] || joystick.x > 0.3) this.vx = this.speed;
+
+            this.x += this.vx;
+            this.y += this.vy;
+
+            // Boundaries
+            this.x = Math.max(0, Math.min(gameWidth - this.width, this.x));
+            this.y = Math.max(0, Math.min(gameHeight - 60, this.y)); // Keep above ground
+
+        } else if (this.type === 'jeep') {
+            this.vx = 0;
+            if (keys['ArrowLeft'] || keys['a'] || joystick.x < -0.3) this.vx = -this.speed;
+            if (keys['ArrowRight'] || keys['d'] || joystick.x > 0.3) this.vx = this.speed;
+
+            // Jump
+            if ((keys['Shift'] || keys['x'] || isJumping) && this.isGrounded) {
+                this.vy = this.jumpPower;
+                this.isGrounded = false;
+                AudioEngine.playJump();
+                isJumping = false; // Reset trigger
+            }
+
+            this.vy += this.gravity;
+            this.x += this.vx;
+            this.y += this.vy;
+
+            // Ground Collision
+            const groundLevel = gameHeight - 50;
+            if (this.y + this.height >= groundLevel) {
+                this.y = groundLevel - this.height;
+                this.vy = 0;
+                this.isGrounded = true;
+            }
+            
+            this.x = Math.max(0, Math.min(gameWidth - this.width, this.x));
+        }
+
+        // Fire
+        if ((keys[' '] || keys['z'] || isFiring) && frameCount % 10 === 0) {
+            this.shoot();
+        }
+    }
+
+    shoot() {
+        AudioEngine.playShoot();
+        if (this.type === 'heli') {
+            // Forward
+            bullets.push(new Bullet(this.x + this.width, this.y + this.height/2, 12, 0, true));
+            // Twin shot powerup simulation (Down-forward)
+            if (this.weaponLevel > 1) {
+                bullets.push(new Bullet(this.x + this.width/2, this.y + this.height, 8, 4, true));
+            }
+        } else {
+            // Jeep shoots forward and diagonal
+            bullets.push(new Bullet(this.x + this.width, this.y + this.height/2, 12, 0, true)); // Forward
+            bullets.push(new Bullet(this.x + this.width/2, this.y, 8, -8, true)); // Diagonal Up
+             if (this.weaponLevel > 1) {
+                bullets.push(new Bullet(this.x, this.y, -8, -8, true)); // Back Diagonal
+             }
+        }
+    }
+
+    draw(ctx) {
+        if (this.invincibleTimer > 0 && Math.floor(Date.now() / 100) % 2 === 0) return;
+
+        ctx.save();
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 10;
+        
+        if (this.type === 'heli') {
+            // Draw Helicopter
+            ctx.fillStyle = '#444';
+            ctx.fillRect(this.x, this.y + 10, this.width, 15); // Body
+            ctx.fillStyle = '#666'; 
+            ctx.fillRect(this.x - 10, this.y + 12, 15, 10); // Tail
+            
+            // Rotors
+            ctx.fillStyle = '#ccc';
+            let offset = (Date.now() % 100) / 5;
+            ctx.fillRect(this.x - 5, this.y, this.width + 10, 4); // Top Rotor
+            ctx.fillRect(this.x - 12, this.y + 5, 4, 20); // Tail Rotor
+            
+            // Cockpit
+            ctx.fillStyle = '#8af';
+            ctx.beginPath();
+            ctx.arc(this.x + 30, this.y + 15, 8, 0, Math.PI * 2);
+            ctx.fill();
+
+        } else {
+            // Draw Jeep
+            ctx.fillStyle = '#343'; // Dark Camo
+            ctx.fillRect(this.x, this.y + 10, this.width, 20); // Body
+            
+            // Wheels
+            ctx.fillStyle = '#000';
+            let bounce = (this.vx !== 0 && this.isGrounded) ? Math.sin(Date.now() / 50) * 2 : 0;
+            ctx.beginPath();
+            ctx.arc(this.x + 8, this.y + 30 + bounce, 6, 0, Math.PI * 2);
+            ctx.arc(this.x + 32, this.y + 30 + bounce, 6, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Turret
+            ctx.fillStyle = '#565';
+            ctx.beginPath();
+            ctx.arc(this.x + 20, this.y + 10, 10, Math.PI, 0);
+            ctx.fill();
+            // Barrel
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#222';
+            ctx.beginPath();
+            ctx.moveTo(this.x + 20, this.y + 5);
+            ctx.lineTo(this.x + 35, this.y - 5); // 45 degree approx
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
+}
+
+class Bullet extends Entity {
+    constructor(x, y, vx, vy, isPlayer) {
+        super(x, y, 6, 6, isPlayer ? '#ff0' : '#f0f');
+        this.vx = vx;
+        this.vy = vy;
+        this.isPlayer = isPlayer;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        if (this.x < 0 || this.x > gameWidth || this.y < 0 || this.y > gameHeight) {
+            this.markedForDeletion = true;
+        }
+    }
+
+    draw(ctx) {
+        ctx.fillStyle = this.isPlayer ? '#ffff00' : '#ff5555';
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
+class Particle {
+    constructor(x, y, color, speed) {
+        this.x = x;
+        this.y = y;
+        this.color = color;
+        this.size = Math.random() * 5 + 2;
+        this.vx = (Math.random() - 0.5) * speed;
+        this.vy = (Math.random() - 0.5) * speed;
+        this.life = 1.0;
+        this.decay = Math.random() * 0.03 + 0.02;
+    }
+
+    update() {
+        this.x += this.vx;
+        this.y += this.vy;
+        this.life -= this.decay;
+    }
+
+    draw(ctx) {
+        ctx.globalAlpha = this.life;
+        ctx.fillStyle = this.color;
+        ctx.fillRect(this.x, this.y, this.size, this.size);
+        ctx.globalAlpha = 1.0;
+    }
+}
+
+class Enemy extends Entity {
+    constructor(type) {
+        let yPos, w, h, col;
+        
+        if (type === 'heli') {
+            yPos = Math.random() * (gameHeight / 2);
+            w = 40; h = 30; col = '#a55';
+        } else if (type === 'tank') {
+            yPos = gameHeight - 60;
+            w = 50; h = 30; col = '#55a';
+        } else if (type === 'mine') {
+            yPos = Math.random() * (gameHeight - 150);
+            w = 20; h = 20; col = '#aa0';
+        } else if (type === 'boss') {
+            yPos = gameHeight / 4;
+            w = 120; h = 80; col = '#722';
+        }
+
+        super(gameWidth + 50, yPos, w, h, col);
+        this.type = type;
+        this.hp = type === 'boss' ? 50 : (type === 'tank' ? 3 : 1);
+        this.maxHp = this.hp;
+        
+        // Movement patterns
+        this.timer = 0;
+        this.baseY = yPos;
+    }
+
+    update() {
+        this.timer++;
+
+        if (this.type === 'boss') {
+            // Boss Logic: Enter, Hover, Shoot
+            if (this.x > gameWidth - 200) {
+                this.x -= 2;
+            } else {
+                // Hover motion
+                this.y = this.baseY + Math.sin(this.timer * 0.05) * 50;
+                
+                // Shoot pattern
+                if (this.timer % 60 === 0) {
+                    let angle = Math.atan2(player.y - this.y, player.x - this.x);
+                    bullets.push(new Bullet(this.x, this.y + this.height/2, Math.cos(angle)*6, Math.sin(angle)*6, false));
+                    // Spread
+                    bullets.push(new Bullet(this.x, this.y + this.height/2, Math.cos(angle-0.2)*6, Math.sin(angle-0.2)*6, false));
+                    bullets.push(new Bullet(this.x, this.y + this.height/2, Math.cos(angle+0.2)*6, Math.sin(angle+0.2)*6, false));
+                    AudioEngine.playTone(200, 'sawtooth', 0.1);
+                }
+            }
+        } 
+        else if (this.type === 'heli') {
+            this.x -= (3 + GAME_SPEED);
+            this.y = this.baseY + Math.sin(this.timer * 0.05) * 30;
+            if (this.timer % 120 === 0 && this.x < gameWidth) {
+                let dx = player.x - this.x;
+                let dy = player.y - this.y;
+                let dist = Math.sqrt(dx*dx + dy*dy);
+                bullets.push(new Bullet(this.x, this.y+15, (dx/dist)*5, (dy/dist)*5, false));
+            }
+        } 
+        else if (this.type === 'tank') {
+            this.x -= (2 + GAME_SPEED); // Move with ground
+            // Tank turret logic
+            if (this.timer % 150 === 0 && this.x < gameWidth) {
+                 bullets.push(new Bullet(this.x, this.y, -4, -4, false)); // Arcing shot approx
+            }
+        }
+        else if (this.type === 'mine') {
+            this.x -= GAME_SPEED;
+            // Stationary floating mines
+        }
+
+        if (this.x < -150) this.markedForDeletion = true;
+    }
+
+    draw(ctx) {
+        if (this.type === 'boss') {
+            // Draw Goose Boss
+            ctx.fillStyle = this.color;
+            ctx.fillRect(this.x, this.y, this.width, this.height);
+            // Rotor
+            ctx.fillStyle = '#ccc';
+            ctx.fillRect(this.x - 20, this.y - 10, this.width + 40, 8);
+            // Cockpit
+            ctx.fillStyle = '#0ff';
+            ctx.fillRect(this.x + 10, this.y + 20, 30, 20);
+            
+            // Health bar
+            ctx.fillStyle = 'red';
+            ctx.fillRect(this.x, this.y - 20, this.width, 5);
+            ctx.fillStyle = 'green';
+            ctx.fillRect(this.x, this.y - 20, (this.hp / this.maxHp) * this.width, 5);
+        } else if (this.type === 'tank') {
+            ctx.fillStyle = '#654';
+            ctx.fillRect(this.x, this.y + 10, 50, 20); // Body
+            ctx.beginPath();
+            ctx.arc(this.x + 25, this.y+10, 15, Math.PI, 0); // Turret Dome
+            ctx.fill();
+            ctx.lineWidth = 4;
+            ctx.strokeStyle = '#333';
+            ctx.beginPath();
+            ctx.moveTo(this.x + 25, this.y + 5);
+            ctx.lineTo(this.x, this.y - 10);
+            ctx.stroke();
+        } else {
+            super.draw(ctx);
+        }
+    }
+}
+
+/**
+ * CORE FUNCTIONS
+ */
+
+function spawnEnemies() {
+    if (frameCount % 60 === 0) {
+        if (Math.random() < 0.4) enemies.push(new Enemy('heli'));
+    }
+    if (frameCount % 100 === 0) {
+        if (Math.random() < 0.4) enemies.push(new Enemy('tank'));
+    }
+    if (frameCount % 150 === 0) {
+        if (Math.random() < 0.3) enemies.push(new Enemy('mine'));
+    }
+    
+    // Boss Spawner (every 2000 frames)
+    if (score > 0 && score % 2000 < 50 && !enemies.some(e => e.type === 'boss')) {
+         // Check if we just passed a threshold to avoid spamming bosses
+         if(frameCount % 100 === 0) enemies.push(new Enemy('boss'));
+    }
+}
+
+function checkCollisions() {
+    // Bullets vs Enemies
+    bullets.forEach(b => {
+        if (!b.isPlayer) return; // Enemy bullets don't hurt enemies
+
+        enemies.forEach(e => {
+            if (rectIntersect(b.x-2, b.y-2, 4, 4, e.x, e.y, e.width, e.height)) {
+                b.markedForDeletion = true;
+                e.hp--;
+                createExplosion(b.x, b.y, '#fff', 5);
+                if (e.hp <= 0) {
+                    e.markedForDeletion = true;
+                    score += (e.type === 'boss' ? 500 : 100);
+                    AudioEngine.playExplosion();
+                    createExplosion(e.x + e.width/2, e.y + e.height/2, '#fa0', 20);
+                } else {
+                    AudioEngine.playTone(100, 'square', 0.05);
+                }
+            }
+        });
+    });
+
+    // Enemy Bullets/Bodies vs Player
+    if (player.invincibleTimer <= 0) {
+        let hit = false;
+        
+        // Check bullets
+        bullets.forEach(b => {
+            if (b.isPlayer) return;
+            if (rectIntersect(b.x-2, b.y-2, 4, 4, player.x, player.y, player.width, player.height)) {
+                hit = true;
+                b.markedForDeletion = true;
+            }
+        });
+
+        // Check bodies
+        enemies.forEach(e => {
+             if (rectIntersect(player.x, player.y, player.width, player.height, e.x, e.y, e.width, e.height)) {
+                hit = true;
+                e.hp--;
+                if(e.hp <= 0) e.markedForDeletion = true;
+             }
+        });
+
+        if (hit) {
+            player.invincibleTimer = 120; // 2 seconds at 60fps
+            lives--;
+            AudioEngine.playExplosion();
+            createExplosion(player.x, player.y, '#f00', 30);
+            if (lives <= 0) {
+                endGame();
+            } else {
+                // Reset position
+                player.x = 100;
+                player.y = player.type === 'heli' ? gameHeight/2 : gameHeight - 50;
+            }
+        }
+    }
+}
+
+function rectIntersect(x1, y1, w1, h1, x2, y2, w2, h2) {
+    return x2 < x1 + w1 && x2 + w2 > x1 && y2 < y1 + h1 && y2 + h2 > y1;
+}
+
+function createExplosion(x, y, color, count) {
+    for (let i = 0; i < count; i++) {
+        particles.push(new Particle(x, y, color, 4));
+    }
+}
+
+function drawBackground() {
+    // Sky
+    // Clouds (Simple parallax)
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+    let cloudOffset = (frameCount * 0.5) % gameWidth;
+    ctx.beginPath();
+    ctx.arc(gameWidth - cloudOffset + 100, 100, 40, 0, Math.PI*2);
+    ctx.arc(gameWidth - cloudOffset + 140, 100, 50, 0, Math.PI*2);
+    ctx.arc(gameWidth - cloudOffset + 180, 100, 40, 0, Math.PI*2);
+    ctx.fill();
+
+    // Ground Parallax
+    ctx.fillStyle = '#5d4037'; // Dirt
+    ctx.fillRect(0, gameHeight - 40, gameWidth, 40);
+    
+    // Scrolling texture
+    ctx.fillStyle = '#3e2723';
+    let stripeOffset = (frameCount * GAME_SPEED) % 50;
+    for (let i = -1; i < gameWidth / 50 + 1; i++) {
+        ctx.fillRect(i * 50 - stripeOffset, gameHeight - 40, 25, 40);
+    }
+    
+    // Green grass line
+    ctx.fillStyle = '#2e7d32';
+    ctx.fillRect(0, gameHeight - 45, gameWidth, 5);
+}
+
+function update() {
+    if (isGameOver || isPaused) return;
+
+    frameCount++;
+
+    player.update();
+    spawnEnemies();
+
+    // Update Arrays
+    bullets.forEach(b => b.update());
+    enemies.forEach(e => e.update());
+    particles.forEach(p => p.update());
+
+    // Clean Arrays
+    bullets = bullets.filter(b => !b.markedForDeletion);
+    enemies = enemies.filter(e => !e.markedForDeletion);
+    particles = particles.filter(p => p.life > 0);
+
+    checkCollisions();
+    
+    // UI Updates
+    document.getElementById('score-display').innerText = `SCORE: ${score.toString().padStart(6, '0')}`;
+    document.getElementById('lives-display').innerText = `LIVES: ${lives}`;
+}
+
+function draw() {
+    ctx.clearRect(0, 0, gameWidth, gameHeight);
+
+    drawBackground();
+
+    player.draw(ctx);
+    enemies.forEach(e => e.draw(ctx));
+    bullets.forEach(b => b.draw(ctx));
+    particles.forEach(p => p.draw(ctx));
+}
+
+function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+}
+
+/**
+ * SYSTEM / INPUTS
+ */
+
+function resize() {
+    gameWidth = window.innerWidth;
+    gameHeight = window.innerHeight;
+    canvas.width = gameWidth;
+    canvas.height = gameHeight;
+    // Keep ground logic consistent
+    if(player && player.type === 'jeep') {
+         if (player.y > gameHeight - 60) player.y = gameHeight - 60;
+    }
+}
+
+function selectVehicle(type) {
+    selectedVehicleType = type;
+    document.getElementById('card-heli').classList.remove('selected');
+    document.getElementById('card-jeep').classList.remove('selected');
+    document.getElementById(`card-${type}`).classList.add('selected');
+}
+
+function startGame() {
+    AudioEngine.init();
+    document.getElementById('start-screen').classList.add('hidden');
+    
+    // Detect mobile for controls
+    if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+        document.getElementById('controls').style.display = 'flex';
+        // Hide Jump button if Heli
+        if (selectedVehicleType === 'heli') {
+             document.getElementById('btn-jump').style.display = 'none';
+        } else {
+             document.getElementById('btn-jump').style.display = 'flex';
+        }
+    }
+
+    resetGameData();
+    player = new Player(selectedVehicleType);
+    gameLoop();
+}
+
+function resetGame() {
+    document.getElementById('game-over-screen').classList.add('hidden');
+    resetGameData();
+    player = new Player(selectedVehicleType);
+    isGameOver = false;
+    // Loop already running, no need to call again unless stopped
+}
+
+function endGame() {
+    isGameOver = true;
+    document.getElementById('game-over-screen').classList.remove('hidden');
+    document.getElementById('final-score').innerText = `FINAL SCORE: ${score}`;
+}
+
+function resetGameData() {
+    score = 0;
+    lives = 3;
+    enemies = [];
+    bullets = [];
+    particles = [];
+    frameCount = 0;
+}
+
+// Event Listeners
+window.addEventListener('resize', resize);
+window.addEventListener('load', resize);
+
+window.addEventListener('keydown', e => {
+    keys[e.key] = true;
+});
+
+window.addEventListener('keyup', e => {
+    keys[e.key] = false;
+});
+
+// Touch Logic
+const joystickEl = document.getElementById('joystick');
+const knob = document.getElementById('joystick-knob');
+const btnFire = document.getElementById('btn-fire');
+const btnJump = document.getElementById('btn-jump');
+
+joystickEl.addEventListener('touchstart', e => {
+    e.preventDefault();
+    joystick.active = true;
+    updateJoystick(e.touches[0]);
+}, {passive: false});
+
+joystickEl.addEventListener('touchmove', e => {
+    e.preventDefault();
+    if (joystick.active) updateJoystick(e.touches[0]);
+}, {passive: false});
+
+const endJoystick = (e) => {
+    e.preventDefault();
+    joystick.active = false;
+    joystick.x = 0;
+    joystick.y = 0;
+    knob.style.transform = `translate(-50%, -50%)`;
+};
+joystickEl.addEventListener('touchend', endJoystick);
+joystickEl.addEventListener('touchcancel', endJoystick);
+
+function updateJoystick(touch) {
+    const rect = joystickEl.getBoundingClientRect();
+    const centerX = rect.left + rect.width / 2;
+    const centerY = rect.top + rect.height / 2;
+    
+    let x = touch.clientX - centerX;
+    let y = touch.clientY - centerY;
+    
+    const dist = Math.sqrt(x*x + y*y);
+    const maxDist = rect.width / 2;
+    
+    if (dist > maxDist) {
+        x = (x / dist) * maxDist;
+        y = (y / dist) * maxDist;
+    }
+    
+    joystick.x = x / maxDist;
+    joystick.y = y / maxDist;
+    
+    knob.style.transform = `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))`;
+}
+
+btnFire.addEventListener('touchstart', (e) => { e.preventDefault(); isFiring = true; });
+btnFire.addEventListener('touchend', (e) => { e.preventDefault(); isFiring = false; });
+
+btnJump.addEventListener('touchstart', (e) => { e.preventDefault(); isJumping = true; });
+btnJump.addEventListener('touchend', (e) => { e.preventDefault(); isJumping = false; });
+
+</script>
+</body>
+</html>

@@ -1,0 +1,741 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Kong's Climb</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            background-color: #000;
+            color: white;
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            font-family: 'Press Start 2P', cursive;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            touch-action: none; /* Prevent pull-to-refresh on mobile */
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 600px; /* Aspect ratio constraint */
+            display: flex;
+            justify-content: center;
+        }
+
+        canvas {
+            background-color: #000;
+            image-rendering: pixelated; /* Sharp pixels */
+            box-shadow: 0 0 20px rgba(0, 100, 255, 0.2);
+            max-width: 100%;
+            max-height: 80vh;
+            border: 2px solid #333;
+        }
+
+        #ui-layer {
+            position: absolute;
+            top: 10px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            pointer-events: none;
+            text-shadow: 2px 2px 0 #000;
+            z-index: 10;
+        }
+
+        .score-board {
+            display: flex;
+            justify-content: space-between;
+            padding: 0 20px;
+            font-size: 14px;
+            color: #fff;
+        }
+
+        .high-score {
+            color: #f00;
+        }
+
+        /* Mobile Controls */
+        #controls {
+            display: none; /* Hidden on desktop by default, shown via JS if touch detected or small screen */
+            width: 100%;
+            max-width: 600px;
+            height: 120px;
+            margin-top: 10px;
+            justify-content: space-around;
+            align-items: center;
+            padding-bottom: 10px;
+        }
+
+        .d-pad {
+            display: grid;
+            grid-template-columns: 60px 60px 60px;
+            grid-template-rows: 60px 60px;
+            gap: 5px;
+        }
+
+        .btn {
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.4);
+            border-radius: 8px;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            user-select: none;
+            cursor: pointer;
+        }
+
+        .btn:active {
+            background: rgba(255, 255, 255, 0.5);
+        }
+
+        .btn-up { grid-column: 2; grid-row: 1; }
+        .btn-left { grid-column: 1; grid-row: 2; }
+        .btn-right { grid-column: 3; grid-row: 2; }
+        .btn-down { grid-column: 2; grid-row: 2; display: none; } /* Usually not needed for basic Mario, but included for ladders */
+        
+        .action-btn {
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 0, 0, 0.3);
+            border: 2px solid rgba(255, 0, 0, 0.6);
+            border-radius: 50%;
+            font-size: 14px;
+        }
+
+        @media (max-width: 768px) {
+            #controls { display: flex; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div class="score-board">
+            <div>SCORE<br><span id="scoreVal">000000</span></div>
+            <div>HIGH<br><span id="highScoreVal" class="high-score">000000</span></div>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <canvas id="gameCanvas" width="224" height="256"></canvas>
+    </div>
+
+    <div id="controls">
+        <div class="d-pad">
+            <div class="btn btn-up" id="btnUp">▲</div>
+            <div class="btn btn-left" id="btnLeft">◀</div>
+            <div class="btn btn-right" id="btnRight">▶</div>
+            <div class="btn btn-down" id="btnDown">▼</div>
+        </div>
+        <div class="btn action-btn" id="btnJump">JUMP</div>
+    </div>
+
+<script>
+/**
+ * AUDIO SYSTEM
+ * Uses Web Audio API to synthesize retro sounds without external files.
+ */
+const AudioSys = {
+    ctx: null,
+    enabled: false,
+    
+    init: function() {
+        if (!this.ctx) {
+            const AudioContext = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioContext();
+            this.enabled = true;
+        }
+        if (this.ctx.state === 'suspended') {
+            this.ctx.resume();
+        }
+    },
+
+    playTone: function(freq, type, duration, vol = 0.1, slideTo = null) {
+        if (!this.enabled) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, this.ctx.currentTime);
+        if (slideTo) {
+            osc.frequency.exponentialRampToValueAtTime(slideTo, this.ctx.currentTime + duration);
+        }
+
+        gain.gain.setValueAtTime(vol, this.ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(this.ctx.destination);
+        osc.start();
+        osc.stop(this.ctx.currentTime + duration);
+    },
+
+    playNoise: function(duration) {
+        if (!this.enabled) return;
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const gain = this.ctx.createGain();
+        gain.gain.value = 0.05;
+        gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+        
+        noise.connect(gain);
+        gain.connect(this.ctx.destination);
+        noise.start();
+    },
+
+    playJump: function() { this.playTone(150, 'square', 0.1, 0.1, 300); },
+    playLand: function() { this.playTone(100, 'sawtooth', 0.05, 0.1); },
+    playClimb: function() { this.playTone(200, 'triangle', 0.05, 0.05, 220); },
+    playScore: function() { this.playTone(600, 'square', 0.1, 0.1, 900); },
+    playDie: function() { 
+        this.playTone(400, 'sawtooth', 0.5, 0.2, 50); 
+        setTimeout(() => this.playTone(300, 'sawtooth', 0.6, 0.2, 20), 400);
+    },
+    playWin: function() {
+        const notes = [523.25, 659.25, 783.99, 1046.50]; // C Major
+        notes.forEach((n, i) => setTimeout(() => this.playTone(n, 'square', 0.2, 0.1), i * 150));
+    },
+    
+    // Simple background music loop
+    bgmInterval: null,
+    startMusic: function() {
+        if (this.bgmInterval) clearInterval(this.bgmInterval);
+        let note = 0;
+        const notes = [110, 100, 90]; // Tension bass
+        this.bgmInterval = setInterval(() => {
+            if(Game.state === 'PLAYING') {
+                this.playTone(notes[note % 3], 'triangle', 0.1, 0.05);
+                note++;
+            }
+        }, 800);
+    },
+    stopMusic: function() {
+        if (this.bgmInterval) clearInterval(this.bgmInterval);
+    }
+};
+
+/**
+ * GAME ENGINE
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const scoreEl = document.getElementById('scoreVal');
+const highScoreEl = document.getElementById('highScoreVal');
+
+// Game Constants
+const GRAVITY = 0.25;
+const JUMP_FORCE = -3.5;
+const MOVE_SPEED = 1.2;
+const CLIMB_SPEED = 0.8;
+const BLOCK_SIZE = 8; // Base unit for pixels
+
+const KEYS = { UP: false, DOWN: false, LEFT: false, RIGHT: false, JUMP: false };
+
+const Game = {
+    state: 'START', // START, PLAYING, GAMEOVER, WIN
+    score: 0,
+    highScore: 0,
+    level: 1,
+    frameCount: 0,
+    
+    player: null,
+    barrels: [],
+    platforms: [],
+    ladders: [],
+    dk: null,
+    princess: null,
+
+    init: function() {
+        this.resetLevel();
+        this.loop();
+    },
+
+    resetLevel: function() {
+        this.player = new Player(20, 232);
+        this.dk = { x: 20, y: 34, frame: 0, throwTimer: 0 };
+        this.princess = { x: 100, y: 18 };
+        this.barrels = [];
+        this.frameCount = 0;
+        
+        // Build Level (224x256)
+        this.platforms = [
+            // Bottom
+            {x: 0, y: 248, w: 224, h: 8, type: 'floor'}, 
+            // 1st Level (slanted slightly visually, but flat for physics simplicity in this clone)
+            {x: 0, y: 215, w: 180, h: 4, type: 'girder'},
+            // 2nd Level
+            {x: 44, y: 175, w: 180, h: 4, type: 'girder'},
+            // 3rd Level
+            {x: 0, y: 135, w: 180, h: 4, type: 'girder'},
+            // 4th Level
+            {x: 44, y: 95, w: 180, h: 4, type: 'girder'},
+            // Top (DK)
+            {x: 0, y: 55, w: 140, h: 4, type: 'girder'},
+            // Princess Platform
+            {x: 90, y: 26, w: 40, h: 4, type: 'girder'}
+        ];
+
+        this.ladders = [
+            {x: 160, y: 215, h: 33},
+            {x: 60, y: 175, h: 40},
+            {x: 140, y: 135, h: 40},
+            {x: 60, y: 95, h: 40},
+            {x: 120, y: 55, h: 40},
+            // Princess Ladder
+            {x: 100, y: 26, h: 29},
+            // Broken ladders (visual only, physics ignore if not in array, but lets make them functional)
+            {x: 80, y: 215, h: 33},
+            {x: 180, y: 95, h: 40}
+        ];
+    },
+
+    start: function() {
+        this.score = 0;
+        this.updateScore();
+        this.state = 'PLAYING';
+        this.resetLevel();
+        AudioSys.init();
+        AudioSys.startMusic();
+    },
+
+    update: function() {
+        if (this.state !== 'PLAYING') return;
+        this.frameCount++;
+
+        this.player.update();
+
+        // DK Logic
+        if (this.frameCount % 120 === 0) {
+            this.spawnBarrel();
+        }
+        // DK Animation
+        if (this.frameCount % 60 < 30) this.dk.frame = 0; else this.dk.frame = 1;
+
+        // Barrels
+        for (let i = this.barrels.length - 1; i >= 0; i--) {
+            let b = this.barrels[i];
+            b.update();
+            if (b.x < -20 || b.x > 244 || b.y > 260) {
+                this.barrels.splice(i, 1);
+            }
+            
+            // Collision Player vs Barrel
+            if (rectIntersect(this.player.hitbox(), b.hitbox())) {
+                this.gameOver();
+            }
+        }
+
+        // Win Condition
+        if (rectIntersect(this.player.hitbox(), {x: this.princess.x, y: this.princess.y, w: 12, h: 16})) {
+            this.win();
+        }
+    },
+
+    draw: function() {
+        // Clear
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        if (this.state === 'START') {
+            this.drawText("KONG'S CLIMB", 112, 80, 20, '#f00');
+            this.drawText("PRESS SPACE / TAP", 112, 140, 10, '#fff');
+            this.drawText("TO START", 112, 155, 10, '#fff');
+            this.drawText("CREDIT 01", 180, 240, 8, '#fff');
+            // Draw iconic view
+            this.drawSprite(100, 180, 'mario', 0);
+            this.drawSprite(100, 100, 'dk', 0);
+            return;
+        }
+
+        // Draw Platforms
+        ctx.fillStyle = '#d00040'; // Girder red
+        this.platforms.forEach(p => {
+            ctx.fillRect(p.x, p.y, p.w, p.h);
+            // Girder pattern
+            ctx.fillStyle = '#000';
+            for(let i=0; i<p.w; i+=8) ctx.fillRect(p.x+i+2, p.y+1, 4, 2);
+            ctx.fillStyle = '#d00040';
+        });
+
+        // Draw Ladders
+        ctx.fillStyle = '#40a0f0';
+        this.ladders.forEach(l => {
+            for(let y=0; y<l.h; y+=4) {
+                ctx.fillRect(l.x, l.y + y, 1, 4);
+                ctx.fillRect(l.x+7, l.y + y, 1, 4);
+                if (y % 8 === 0) ctx.fillRect(l.x, l.y+y, 8, 1);
+            }
+        });
+
+        // Draw Princess
+        this.drawSprite(this.princess.x, this.princess.y, 'princess');
+
+        // Draw DK
+        this.drawSprite(this.dk.x, this.dk.y, 'dk', this.dk.frame);
+
+        // Draw Barrels
+        this.barrels.forEach(b => this.drawSprite(b.x, b.y, 'barrel', Math.floor(this.frameCount/10)%2));
+
+        // Draw Player
+        this.drawSprite(this.player.x, this.player.y, 'mario', this.player.frame, this.player.facingLeft);
+
+        if (this.state === 'GAMEOVER') {
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(0, 100, 224, 60);
+            this.drawText("GAME OVER", 112, 135, 16, '#fff');
+        } else if (this.state === 'WIN') {
+            ctx.fillStyle = 'rgba(0,0,0,0.7)';
+            ctx.fillRect(0, 100, 224, 60);
+            this.drawText("YOU WON!", 112, 135, 16, '#0f0');
+        }
+    },
+
+    spawnBarrel: function() {
+        // Start at DK's hands
+        this.barrels.push(new Barrel(50, 55));
+        AudioSys.playNoise(0.1); // Thud sound
+    },
+
+    gameOver: function() {
+        this.state = 'GAMEOVER';
+        AudioSys.stopMusic();
+        AudioSys.playDie();
+        setTimeout(() => {
+            this.state = 'START';
+        }, 3000);
+    },
+
+    win: function() {
+        this.state = 'WIN';
+        AudioSys.stopMusic();
+        AudioSys.playWin();
+        this.score += 1000;
+        this.updateScore();
+        setTimeout(() => {
+            this.state = 'START';
+        }, 4000);
+    },
+
+    updateScore: function() {
+        scoreEl.innerText = this.score.toString().padStart(6, '0');
+        if (this.score > this.highScore) {
+            this.highScore = this.score;
+            highScoreEl.innerText = this.highScore.toString().padStart(6, '0');
+        }
+    },
+
+    drawText: function(text, x, y, size, color) {
+        ctx.fillStyle = color;
+        ctx.font = `${size}px "Press Start 2P"`;
+        ctx.textAlign = "center";
+        ctx.fillText(text, x, y);
+    },
+
+    // Simple pixel art drawer
+    drawSprite: function(x, y, type, frame = 0, flip = false) {
+        ctx.save();
+        ctx.translate(Math.floor(x), Math.floor(y));
+        if (flip) {
+            ctx.scale(-1, 1);
+            ctx.translate(-12, 0); // Width offset
+        }
+
+        if (type === 'mario') {
+            // Draw Mario (10x12 approx)
+            ctx.fillStyle = '#f00'; // Shirt/Hat
+            ctx.fillRect(2, 0, 8, 2); // Hat
+            ctx.fillRect(2, 2, 6, 2); // Face
+            ctx.fillStyle = '#b83'; // Skin
+            ctx.fillRect(2, 2, 5, 2); 
+            ctx.fillRect(8, 2, 2, 1); // Nose
+            ctx.fillStyle = '#f00';
+            ctx.fillRect(2, 4, 8, 4); // Body
+            ctx.fillStyle = '#00f'; // Overalls
+            ctx.fillRect(3, 6, 6, 4);
+            ctx.fillStyle = '#640'; // Boots
+            if (frame === 0) { // Idle
+                ctx.fillRect(2, 10, 3, 2);
+                ctx.fillRect(7, 10, 3, 2);
+            } else { // Run
+                ctx.fillRect(0, 9, 3, 2);
+                ctx.fillRect(8, 10, 3, 2);
+            }
+        } else if (type === 'barrel') {
+            ctx.fillStyle = '#c60';
+            ctx.beginPath();
+            ctx.arc(5, 5, 5, 0, Math.PI*2);
+            ctx.fill();
+            ctx.fillStyle = '#000';
+            ctx.font = '8px monospace';
+            ctx.fillText(frame === 0 ? "H" : "I", 5, 8);
+        } else if (type === 'dk') {
+            ctx.fillStyle = '#630';
+            // Body
+            ctx.fillRect(0, 0, 30, 20);
+            // Face
+            ctx.fillStyle = '#fa8';
+            ctx.fillRect(10, 5, 14, 8);
+            // Eyes
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(12, 6, 4, 2);
+            ctx.fillRect(18, 6, 4, 2);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(14, 6, 2, 2);
+            ctx.fillRect(18, 6, 2, 2);
+            // Arms
+            ctx.fillStyle = '#630';
+            if (frame === 1) {
+                ctx.fillRect(-5, -5, 10, 15); // Arm Up
+            } else {
+                ctx.fillRect(-5, 5, 10, 15); // Arm Down
+            }
+        } else if (type === 'princess') {
+            ctx.fillStyle = '#fbb';
+            ctx.fillRect(2, 0, 8, 4); // Face
+            ctx.fillStyle = '#f0f';
+            ctx.fillRect(1, 4, 10, 12); // Dress
+            ctx.fillStyle = '#ff0';
+            ctx.fillRect(1, 6, 10, 2); // Belt
+        }
+
+        ctx.restore();
+    },
+
+    loop: function() {
+        requestAnimationFrame(() => Game.loop());
+        let now = Date.now();
+        let elapsed = now - Game.lastTime;
+        // Cap at 60fps logic
+        Game.update();
+        Game.draw();
+    }
+};
+
+/**
+ * ENTITIES
+ */
+class Player {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.w = 12;
+        this.h = 14;
+        this.vx = 0;
+        this.vy = 0;
+        this.onGround = false;
+        this.climbing = false;
+        this.facingLeft = false;
+        this.frame = 0;
+    }
+
+    update() {
+        // Horizontal Movement
+        if (KEYS.LEFT) { this.vx = -MOVE_SPEED; this.facingLeft = true; }
+        else if (KEYS.RIGHT) { this.vx = MOVE_SPEED; this.facingLeft = false; }
+        else { this.vx = 0; }
+
+        // Ladder Check
+        let touchingLadder = false;
+        let ladderObj = null;
+        Game.ladders.forEach(l => {
+            if (rectIntersect(this.hitbox(), {x: l.x + 2, y: l.y, w: 4, h: l.h})) {
+                touchingLadder = true;
+                ladderObj = l;
+            }
+        });
+
+        if (touchingLadder) {
+            if (KEYS.UP || KEYS.DOWN) {
+                this.climbing = true;
+                this.onGround = false;
+                this.x = ladderObj.x - 2; // Snap to ladder center
+            }
+        } else {
+            this.climbing = false;
+        }
+
+        if (this.climbing) {
+            this.vy = 0;
+            if (KEYS.UP) { this.vy = -CLIMB_SPEED; AudioSys.playClimb(); }
+            if (KEYS.DOWN) { this.vy = CLIMB_SPEED; AudioSys.playClimb(); }
+            // Cap climbing
+            if (this.y + this.h < ladderObj.y && this.vy < 0) { // Top of ladder
+                this.climbing = false;
+                this.vy = 0;
+                this.y = ladderObj.y - this.h;
+            }
+        } else {
+            // Jump
+            if (KEYS.JUMP && this.onGround) {
+                this.vy = JUMP_FORCE;
+                this.onGround = false;
+                AudioSys.playJump();
+            }
+            // Gravity
+            this.vy += GRAVITY;
+        }
+
+        this.x += this.vx;
+        this.y += this.vy;
+
+        // Screen Bounds
+        if (this.x < 0) this.x = 0;
+        if (this.x > 212) this.x = 212;
+
+        // Platform Collision (Only if falling and not climbing)
+        this.onGround = false;
+        if (!this.climbing && this.vy >= 0) {
+            Game.platforms.forEach(p => {
+                // Check if feet are near platform top
+                if (this.x + this.w > p.x && this.x < p.x + p.w) {
+                    if (this.y + this.h >= p.y && this.y + this.h <= p.y + p.h + 4) {
+                        this.y = p.y - this.h;
+                        this.vy = 0;
+                        this.onGround = true;
+                    }
+                }
+            });
+        }
+
+        // Animation
+        if (this.vx !== 0) {
+            if (Game.frameCount % 10 === 0) this.frame = 1 - this.frame;
+        } else {
+            this.frame = 0;
+        }
+        if (!this.onGround && !this.climbing) this.frame = 1; // Jump frame
+    }
+
+    hitbox() { return {x: this.x+2, y: this.y+2, w: this.w-4, h: this.h-2}; }
+}
+
+class Barrel {
+    constructor(x, y) {
+        this.x = x;
+        this.y = y;
+        this.w = 10;
+        this.h = 10;
+        this.vx = 2; // Initial speed
+        this.vy = 0;
+        this.falling = false;
+    }
+
+    update() {
+        this.vy += GRAVITY;
+        
+        // Platform interaction
+        let onGround = false;
+        Game.platforms.forEach(p => {
+            if (this.x + this.w > p.x && this.x < p.x + p.w) {
+                if (this.y + this.h >= p.y && this.y + this.h <= p.y + 10) {
+                    if (this.vy > 0) {
+                        this.y = p.y - this.h;
+                        this.vy = 0;
+                        onGround = true;
+                    }
+                }
+            }
+        });
+
+        // Ladder interaction (Random chance to go down)
+        if (onGround) {
+            Game.ladders.forEach(l => {
+                if (Math.abs(this.x - l.x) < 2 && Math.abs((this.y + this.h) - l.y) < 4) {
+                    if (Math.random() < 0.4) { // 40% chance to fall down ladder
+                        this.falling = true;
+                        this.x = l.x; // Snap
+                    }
+                }
+            });
+        }
+
+        if (this.falling) {
+            this.vx = 0;
+            // If hit ground again, stop falling
+            if (onGround && this.vy === 0) {
+                 this.falling = false;
+                 // Pick direction based on alternating levels or screen pos
+                 this.vx = (Math.floor(this.y / 40) % 2 === 0) ? 2 : -2;
+            }
+        } else {
+            // If hitting screen edge, flip
+            if (this.x <= 0) { this.vx = 2; }
+            if (this.x >= 214) { this.vx = -2; }
+            
+            // Ensure it moves
+            if (this.vx === 0) this.vx = 2;
+        }
+
+        this.x += this.vx;
+        this.y += this.vy;
+    }
+
+    hitbox() { return {x: this.x, y: this.y, w: this.w, h: this.h}; }
+}
+
+function rectIntersect(r1, r2) {
+    return !(r2.x > r1.x + r1.w || 
+             r2.x + r2.w < r1.x || 
+             r2.y > r1.y + r1.h || 
+             r2.y + r2.h < r1.y);
+}
+
+/**
+ * INPUT HANDLING
+ */
+window.addEventListener('keydown', e => {
+    if (Game.state === 'START' && (e.code === 'Space' || e.key === ' ')) {
+        Game.start();
+        return;
+    }
+    if (e.code === 'ArrowUp') KEYS.UP = true;
+    if (e.code === 'ArrowDown') KEYS.DOWN = true;
+    if (e.code === 'ArrowLeft') KEYS.LEFT = true;
+    if (e.code === 'ArrowRight') KEYS.RIGHT = true;
+    if (e.code === 'Space') KEYS.JUMP = true;
+});
+
+window.addEventListener('keyup', e => {
+    if (e.code === 'ArrowUp') KEYS.UP = false;
+    if (e.code === 'ArrowDown') KEYS.DOWN = false;
+    if (e.code === 'ArrowLeft') KEYS.LEFT = false;
+    if (e.code === 'ArrowRight') KEYS.RIGHT = false;
+    if (e.code === 'Space') KEYS.JUMP = false;
+});
+
+// Touch Controls
+const setupTouch = (id, key) => {
+    const el = document.getElementById(id);
+    el.addEventListener('touchstart', (e) => { e.preventDefault(); KEYS[key] = true; if(Game.state === 'START') Game.start(); });
+    el.addEventListener('touchend', (e) => { e.preventDefault(); KEYS[key] = false; });
+};
+
+setupTouch('btnUp', 'UP');
+setupTouch('btnDown', 'DOWN');
+setupTouch('btnLeft', 'LEFT');
+setupTouch('btnRight', 'RIGHT');
+setupTouch('btnJump', 'JUMP');
+
+// Init
+Game.init();
+
+</script>
+</body>
+</html>
