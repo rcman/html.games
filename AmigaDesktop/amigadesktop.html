@@ -1,0 +1,1076 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amiga Workbench 1.3 Clone</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <style>
+        @font-face {
+            font-family: 'Topaz';
+            src: url('data:font/woff2;base64,d09GMgABAAAAAAZQAA0AAAAAC+AAAAYDAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGhYbg2ocNAZgAIEMEQgKgViBSQsQAAE2AiQDCAQgBYRHB1wbvwbILgpsY+rQD0KoRTRGHcWy/fhhPMLgePh+v3buf/+tpkVMm0g0TxDxTMkmEqHSfRolUenk0e3/P/d3v4ByQJNaSqzAO8CjvbDCA8RP4FW1VmVVYAW2YYH/n97Pe9/MPTUAyoHLCm3LUJwI0/8f51lWFNOEA0rXJbPQ7jfUTYKwMJqgSSacT0Ds58r3YeMSoA+IEk4DLqIJHyJaIH3GRTQhZrDuwkU0oWKw3nGhMwIOxnAAeABPeP0gLbX0j9vNtgR0f/yAXQAAgI1u7wEFjAmAS81OAADlFgAA0I+DAAAAAMy2AAAA') format('woff2');
+            font-weight: normal;
+            font-style: normal;
+        }
+
+        :root {
+            --amiga-blue: #0055AA;
+            --amiga-blue-light: #2277CC;
+            --amiga-blue-dark: #003388;
+            --amiga-orange: #FF8800;
+            --amiga-orange-light: #FFAA33;
+            --amiga-orange-dark: #CC6600;
+            --amiga-white: #FFFFFF;
+            --amiga-black: #000000;
+            --amiga-grey: #AAAAAA;
+            --amiga-grey-light: #CCCCCC;
+            --amiga-grey-dark: #888888;
+            --amiga-dark-blue: #000020;
+        }
+
+        * {
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        body {
+            background-color: var(--amiga-dark-blue); /* Bezel color */
+            font-family: 'Topaz', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.2;
+            overflow: hidden;
+            user-select: none;
+            cursor: default;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin: 0;
+            padding: 20px;
+        }
+
+        /* CRT Screen Container */
+        #monitor {
+            width: 100%;
+            max-width: 1280px;
+            height: 100%;
+            max-height: 1024px;
+            background: linear-gradient(180deg, #0066CC 0%, #0055AA 50%, #004488 100%);
+            position: relative;
+            overflow: hidden;
+            box-shadow:
+                inset 0 0 100px rgba(0,0,0,0.3),
+                inset 0 2px 4px rgba(255,255,255,0.1),
+                0 0 40px rgba(0,85,170,0.4),
+                0 0 80px rgba(0,85,170,0.2);
+            border: 8px solid #1a1a1a;
+            border-radius: 4px;
+        }
+
+        /* Subtle scanline effect */
+        #monitor::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(0,0,0,0.05) 0px,
+                rgba(0,0,0,0.05) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            pointer-events: none;
+            z-index: 10000;
+        }
+
+        /* Top Bar */
+        #top-bar {
+            height: 11px;
+            background: linear-gradient(180deg, var(--amiga-orange-light) 0%, var(--amiga-orange) 50%, var(--amiga-orange-dark) 100%);
+            color: var(--amiga-black);
+            border-bottom: 1px solid var(--amiga-black);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0 4px;
+            font-size: 13px;
+            z-index: 5000;
+            position: relative;
+            font-weight: bold;
+        }
+
+        .amiga-menu-item {
+            padding: 0 6px;
+            height: 100%;
+            display: flex;
+            align-items: center;
+        }
+
+        .amiga-menu-item:hover {
+            background-color: var(--amiga-white);
+            color: var(--amiga-black);
+            cursor: pointer;
+        }
+
+        /* Icons */
+        .desktop-icon {
+            width: 80px;
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            cursor: pointer;
+            z-index: 10;
+        }
+
+        .desktop-icon img, .desktop-icon svg {
+            width: 56px;
+            height: 40px;
+            image-rendering: pixelated;
+        }
+
+        .desktop-icon span {
+            background-color: transparent;
+            color: var(--amiga-black);
+            padding: 1px 2px;
+            margin-top: 2px;
+            font-size: 13px;
+            border: 1px solid transparent;
+            text-align: center;
+            text-shadow:
+                1px 1px 0 var(--amiga-white),
+                -1px -1px 0 var(--amiga-white),
+                1px -1px 0 var(--amiga-white),
+                -1px 1px 0 var(--amiga-white);
+        }
+
+        .desktop-icon.selected span {
+            background-color: var(--amiga-orange);
+            color: var(--amiga-white);
+            text-shadow: none;
+        }
+
+        /* Windows */
+        .window {
+            position: absolute;
+            background-color: var(--amiga-black);
+            border: none;
+            box-shadow: 2px 2px 0px rgba(0,0,0,0.5);
+            display: flex;
+            flex-direction: column;
+            min-width: 200px;
+            min-height: 100px;
+        }
+
+        .window-header {
+            height: 11px;
+            background: linear-gradient(180deg, var(--amiga-blue-light) 0%, var(--amiga-blue) 50%, var(--amiga-blue-dark) 100%);
+            color: var(--amiga-white);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 2px;
+            cursor: grab;
+            border: none;
+            font-size: 13px;
+            font-weight: bold;
+        }
+
+        .window.active .window-header {
+            background: linear-gradient(180deg, var(--amiga-orange-light) 0%, var(--amiga-orange) 50%, var(--amiga-orange-dark) 100%);
+            color: var(--amiga-black);
+            box-shadow: inset 0 1px 0 rgba(255,255,255,0.3);
+        }
+
+        .window-gadget {
+            width: 20px;
+            height: 9px;
+            border: 1px solid var(--amiga-black);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 11px;
+            cursor: pointer;
+            background: linear-gradient(180deg, #FFFFFF 0%, #DDDDDD 100%);
+            color: var(--amiga-black);
+            flex-shrink: 0;
+            box-sizing: border-box;
+            box-shadow: inset 1px 1px 0 rgba(255,255,255,0.5), inset -1px -1px 0 rgba(0,0,0,0.2);
+        }
+
+        .window-gadget:hover {
+            background: linear-gradient(180deg, #FFDDAA 0%, #FFCC88 100%);
+        }
+
+        .window-gadget:active {
+            background: linear-gradient(180deg, #CCCCCC 0%, #AAAAAA 100%);
+            box-shadow: inset -1px -1px 0 rgba(255,255,255,0.5), inset 1px 1px 0 rgba(0,0,0,0.3);
+        }
+
+        .window-gadget.close-gadget {
+            position: relative;
+        }
+
+        .window-gadget.close-gadget::before,
+        .window-gadget.close-gadget::after {
+            content: '';
+            position: absolute;
+            width: 10px;
+            height: 1px;
+            background: var(--amiga-black);
+        }
+
+        .window-gadget.close-gadget::before {
+            transform: rotate(45deg);
+        }
+
+        .window-gadget.close-gadget::after {
+            transform: rotate(-45deg);
+        }
+
+        .window-gadget.depth-gadget {
+            position: relative;
+        }
+
+        .window-gadget.depth-gadget::before {
+            content: '';
+            position: absolute;
+            width: 8px;
+            height: 1px;
+            background: var(--amiga-black);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .window-gadget.depth-gadget::after {
+            content: '';
+            position: absolute;
+            width: 8px;
+            height: 1px;
+            background: var(--amiga-black);
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%) rotate(90deg);
+        }
+
+        .window-title {
+            flex-grow: 1;
+            text-align: left;
+            padding: 0 4px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: clip;
+        }
+
+        .window-content {
+            flex-grow: 1;
+            background-color: var(--amiga-white);
+            border: 2px solid var(--amiga-black);
+            border-top: 1px solid var(--amiga-black);
+            overflow: auto;
+            padding: 4px;
+            position: relative;
+            color: var(--amiga-black);
+        }
+
+        /* Resizer */
+        .resizer {
+            width: 18px;
+            height: 10px;
+            background-color: var(--amiga-white);
+            border: 1px solid var(--amiga-black);
+            border-left: 2px solid var(--amiga-black);
+            border-top: 1px solid var(--amiga-black);
+            position: absolute;
+            bottom: 2px;
+            right: 2px;
+            cursor: se-resize;
+            z-index: 20;
+            box-sizing: border-box;
+        }
+
+        .resizer::before {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(135deg,
+                transparent 0%,
+                transparent 45%,
+                var(--amiga-black) 45%,
+                var(--amiga-black) 47%,
+                transparent 47%,
+                transparent 55%,
+                var(--amiga-black) 55%,
+                var(--amiga-black) 57%,
+                transparent 57%,
+                transparent 65%,
+                var(--amiga-black) 65%,
+                var(--amiga-black) 67%,
+                transparent 67%);
+        }
+
+        /* Shell Styles */
+        .shell-output {
+            font-family: 'Topaz', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.3;
+            color: var(--amiga-black);
+        }
+        .shell-input-line {
+            display: flex;
+            font-family: 'Topaz', 'Courier New', monospace;
+            font-size: 13px;
+        }
+        .shell-input {
+            border: none;
+            outline: none;
+            background: transparent;
+            font-family: inherit;
+            font-size: inherit;
+            flex-grow: 1;
+            color: var(--amiga-black);
+            caret-color: var(--amiga-black);
+        }
+
+        /* Guru Meditation */
+        #guru-meditation {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            z-index: 9999;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-start;
+            padding-top: 10%;
+            border: 20px solid #FF0000;
+            animation: blinkBorder 1s infinite;
+            color: #FF0000;
+            font-family: 'Topaz', 'Courier New', monospace;
+            font-size: 16px;
+            text-align: center;
+        }
+
+        @keyframes blinkBorder {
+            0%, 50% { border-color: #FF0000; }
+            51%, 100% { border-color: #000000; }
+        }
+
+        .guru-box {
+            border: 2px solid #FF0000;
+            padding: 20px 40px;
+            margin-bottom: 20px;
+            font-size: 13px;
+        }
+        
+        /* Scrollbar styling to look retro */
+        ::-webkit-scrollbar {
+            width: 14px;
+            height: 14px;
+        }
+        ::-webkit-scrollbar-track {
+            background: var(--amiga-white);
+            border: 1px solid var(--amiga-black);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--amiga-blue);
+            border: 1px solid var(--amiga-black);
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--amiga-orange);
+        }
+        ::-webkit-scrollbar-corner {
+            background: var(--amiga-white);
+            border: 1px solid var(--amiga-black);
+        }
+
+        /* Canvas for Boing Ball */
+        #boing-canvas {
+            width: 100%;
+            height: 100%;
+            background-color: #888;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Guru Meditation Screen -->
+    <div id="guru-meditation">
+        <div class="guru-box">
+            Software Failure.  Press Left Mouse Button to Continue.<br>
+            Guru Meditation #00000004.0000AAC0
+        </div>
+    </div>
+
+    <!-- Main Monitor Area -->
+    <div id="monitor">
+        <!-- Top Bar -->
+        <div id="top-bar">
+            <div class="flex gap-4">
+                <span class="amiga-menu-item font-bold">Workbench Release 1.3</span>
+                <span class="amiga-menu-item">Window</span>
+                <span class="amiga-menu-item">Tools</span>
+            </div>
+            <div id="clock" class="amiga-menu-item">12:00 PM</div>
+            <div class="text-xs text-blue-300 absolute right-2 -bottom-3 opacity-50 pointer-events-none">Mem: 512K</div>
+        </div>
+
+        <!-- Icons -->
+        <div class="desktop-icon" id="icon-wb" style="top: 20px; left: 20px;" ondblclick="app.openWindow('wb')">
+            <svg viewBox="0 0 56 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="diskGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" style="stop-color:#CCCCCC;stop-opacity:1" />
+                        <stop offset="50%" style="stop-color:#AAAAAA;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#888888;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="drawerGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" style="stop-color:#2277CC;stop-opacity:1" />
+                        <stop offset="50%" style="stop-color:#0055AA;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#003388;stop-opacity:1" />
+                    </linearGradient>
+                    <linearGradient id="metalGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" style="stop-color:#333333;stop-opacity:1" />
+                        <stop offset="50%" style="stop-color:#888888;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#333333;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                <!-- Shadow -->
+                <rect x="8" y="6" width="44" height="32" fill="rgba(0,0,0,0.2)" />
+                <!-- Disk body -->
+                <rect x="6" y="4" width="44" height="32" fill="url(#diskGrad)" stroke="black" stroke-width="1.5"/>
+                <!-- Highlight -->
+                <rect x="7" y="5" width="42" height="2" fill="rgba(255,255,255,0.3)" />
+                <!-- Label area -->
+                <rect x="10" y="6" width="36" height="10" fill="white" stroke="black" stroke-width="1"/>
+                <!-- Write protect notch -->
+                <rect x="42" y="7" width="4" height="5" fill="#000000"/>
+                <!-- Disk drawer -->
+                <rect x="8" y="24" width="40" height="10" fill="url(#drawerGrad)" stroke="black" stroke-width="1"/>
+                <rect x="9" y="25" width="38" height="2" fill="rgba(255,255,255,0.2)" />
+                <!-- Metal shutter -->
+                <rect x="8" y="18" width="6" height="4" fill="url(#metalGrad)" stroke="black" stroke-width="1"/>
+            </svg>
+            <span>Workbench</span>
+        </div>
+
+        <div class="desktop-icon" id="icon-ram" style="top: 80px; left: 20px;" ondblclick="app.openWindow('ram')">
+            <svg viewBox="0 0 56 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <linearGradient id="orangeGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+                        <stop offset="0%" style="stop-color:#FFAA33;stop-opacity:1" />
+                        <stop offset="50%" style="stop-color:#FF8800;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#CC6600;stop-opacity:1" />
+                    </linearGradient>
+                </defs>
+                <!-- Shadow -->
+                <rect x="8" y="6" width="44" height="32" fill="rgba(0,0,0,0.2)" />
+                <!-- Disk body -->
+                <rect x="6" y="4" width="44" height="32" fill="url(#orangeGrad)" stroke="black" stroke-width="1.5"/>
+                <!-- Highlight -->
+                <rect x="7" y="5" width="42" height="2" fill="rgba(255,255,255,0.4)" />
+                <!-- Label area -->
+                <rect x="10" y="6" width="36" height="10" fill="white" stroke="black" stroke-width="1"/>
+                <!-- Disk drawer -->
+                <rect x="8" y="24" width="40" height="10" fill="url(#drawerGrad)" stroke="black" stroke-width="1"/>
+                <rect x="9" y="25" width="38" height="2" fill="rgba(255,255,255,0.2)" />
+                <!-- Metal shutter -->
+                <rect x="8" y="18" width="6" height="4" fill="url(#metalGrad)" stroke="black" stroke-width="1"/>
+            </svg>
+            <span>Ram Disk</span>
+        </div>
+
+        <div class="desktop-icon" id="icon-shell" style="top: 140px; left: 20px;" ondblclick="app.openWindow('shell')">
+             <svg viewBox="0 0 56 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <radialGradient id="screenGlow" cx="50%" cy="50%" r="50%">
+                        <stop offset="0%" style="stop-color:#001100;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#000000;stop-opacity:1" />
+                    </radialGradient>
+                </defs>
+                <!-- Shadow -->
+                <rect x="6" y="6" width="48" height="32" fill="rgba(0,0,0,0.3)" />
+                <!-- Terminal window -->
+                <rect x="4" y="4" width="48" height="32" fill="url(#screenGlow)" stroke="white" stroke-width="2"/>
+                <!-- Screen glow -->
+                <rect x="6" y="6" width="44" height="28" fill="rgba(255,136,0,0.1)" />
+                <!-- Prompt with glow -->
+                <text x="8" y="20" fill="#FF8800" font-family="monospace" font-size="12" font-weight="bold" style="filter: drop-shadow(0 0 2px #FF8800);">1></text>
+                <!-- Cursor with glow -->
+                <rect x="26" y="12" width="6" height="10" fill="#FF8800" style="filter: drop-shadow(0 0 3px #FF8800);"/>
+            </svg>
+            <span>Shell</span>
+        </div>
+
+        <div class="desktop-icon" id="icon-boing" style="top: 200px; left: 20px;" ondblclick="app.openWindow('boing')">
+            <svg viewBox="0 0 56 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <defs>
+                    <radialGradient id="ballGrad" cx="40%" cy="40%" r="60%">
+                        <stop offset="0%" style="stop-color:#FFFFFF;stop-opacity:1" />
+                        <stop offset="70%" style="stop-color:#DDDDDD;stop-opacity:1" />
+                        <stop offset="100%" style="stop-color:#AAAAAA;stop-opacity:1" />
+                    </radialGradient>
+                </defs>
+                <!-- Shadow -->
+                <ellipse cx="30" cy="34" rx="14" ry="4" fill="rgba(0,0,0,0.3)" />
+                <!-- Ball with gradient -->
+                <circle cx="28" cy="20" r="16" fill="url(#ballGrad)" stroke="black" stroke-width="1.5"/>
+                <!-- Red checkered pattern (simplified) -->
+                <path d="M28 4 L28 36 M12 20 L44 20" stroke="#FF0000" stroke-width="3" opacity="0.9"/>
+                <path d="M20 8 L36 32 M20 32 L36 8" stroke="#FF0000" stroke-width="3" opacity="0.9"/>
+                <!-- Shine highlight -->
+                <circle cx="22" cy="14" r="4" fill="rgba(255,255,255,0.6)" />
+            </svg>
+            <span>Boing!</span>
+        </div>
+
+    </div>
+
+    <script>
+        /**
+         * Amiga OS Simulation Logic
+         */
+        class AmigaOS {
+            constructor() {
+                this.monitor = document.getElementById('monitor');
+                this.guruScreen = document.getElementById('guru-meditation');
+                this.zIndex = 100;
+                this.windows = {};
+                this.dragItem = null;
+                this.dragOffset = { x: 0, y: 0 };
+                
+                this.initClock();
+                this.initDragDrop();
+                this.initBoing();
+                
+                // Open default windows
+                this.openWindow('wb');
+                this.openWindow('shell');
+            }
+
+            initClock() {
+                const updateClock = () => {
+                    const now = new Date();
+                    document.getElementById('clock').textContent = now.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+                };
+                setInterval(updateClock, 1000);
+                updateClock();
+            }
+
+            initDragDrop() {
+                // Handle Window and Icon Dragging
+                document.addEventListener('mousedown', (e) => {
+                    // Check for window header drag
+                    const header = e.target.closest('.window-header');
+                    if (header) {
+                        const win = header.closest('.window');
+                        // Maximize/Close button check
+                        if (e.target.classList.contains('window-gadget')) return;
+                        
+                        this.activateWindow(win);
+                        this.dragItem = win;
+                        const rect = win.getBoundingClientRect();
+                        this.dragOffset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                        return;
+                    }
+
+                    // Check for icon drag
+                    const icon = e.target.closest('.desktop-icon');
+                    if (icon) {
+                        this.selectIcon(icon);
+                        this.dragItem = icon;
+                        const rect = icon.getBoundingClientRect();
+                        this.dragOffset = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+                    }
+                    
+                    // Check for Resize
+                    if (e.target.classList.contains('resizer')) {
+                         const win = e.target.closest('.window');
+                         this.activateWindow(win);
+                         this.resizeItem = win;
+                         this.resizeStart = { x: e.clientX, y: e.clientY, w: win.offsetWidth, h: win.offsetHeight };
+                         e.preventDefault(); // prevent text selection
+                    }
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (this.dragItem) {
+                        let x = e.clientX - this.dragOffset.x;
+                        let y = e.clientY - this.dragOffset.y;
+                        
+                        // Bounds check (basic)
+                        if (y < 24) y = 24; // Below top bar
+                        
+                        this.dragItem.style.left = x + 'px';
+                        this.dragItem.style.top = y + 'px';
+                    }
+                    
+                    if (this.resizeItem) {
+                        const dx = e.clientX - this.resizeStart.x;
+                        const dy = e.clientY - this.resizeStart.y;
+                        this.resizeItem.style.width = (this.resizeStart.w + dx) + 'px';
+                        this.resizeItem.style.height = (this.resizeStart.h + dy) + 'px';
+                        
+                        // If it's the boing window, we might need to resize canvas, but canvas resizes automatically via CSS 100%
+                    }
+                });
+
+                document.addEventListener('mouseup', () => {
+                    this.dragItem = null;
+                    this.resizeItem = null;
+                });
+                
+                // Deselect icons on bg click
+                this.monitor.addEventListener('mousedown', (e) => {
+                    if(e.target === this.monitor) {
+                        document.querySelectorAll('.desktop-icon').forEach(i => i.classList.remove('selected'));
+                    }
+                });
+                
+                // Guru Reset
+                this.guruScreen.addEventListener('mousedown', () => {
+                     this.guruScreen.style.display = 'none';
+                     // location.reload(); // Real hardware would reboot, we just hide it
+                });
+            }
+
+            selectIcon(icon) {
+                document.querySelectorAll('.desktop-icon').forEach(i => i.classList.remove('selected'));
+                icon.classList.add('selected');
+            }
+
+            activateWindow(win) {
+                if (!win) return;
+                this.zIndex++;
+                win.style.zIndex = this.zIndex;
+                document.querySelectorAll('.window').forEach(w => w.classList.remove('active'));
+                win.classList.add('active');
+            }
+
+            createWindow(id, title, contentHTML, x, y, w, h) {
+                if (this.windows[id]) {
+                    this.activateWindow(this.windows[id]);
+                    return this.windows[id];
+                }
+
+                const win = document.createElement('div');
+                win.className = 'window active';
+                win.style.left = x + 'px';
+                win.style.top = y + 'px';
+                win.style.width = w + 'px';
+                win.style.height = h + 'px';
+                win.style.zIndex = ++this.zIndex;
+                win.id = `win-${id}`;
+
+                win.innerHTML = `
+                    <div class="window-header">
+                        <div class="window-gadget close-gadget" onclick="app.closeWindow('${id}')"></div>
+                        <span class="window-title">${title}</span>
+                        <div class="window-gadget depth-gadget"></div>
+                    </div>
+                    <div class="window-content">
+                        ${contentHTML}
+                    </div>
+                    <div class="resizer"></div>
+                `;
+
+                this.monitor.appendChild(win);
+                this.windows[id] = win;
+                
+                // Focus logic
+                win.addEventListener('mousedown', () => this.activateWindow(win));
+                
+                return win;
+            }
+
+            closeWindow(id) {
+                if (this.windows[id]) {
+                    this.windows[id].remove();
+                    delete this.windows[id];
+                    if (id === 'boing') this.boingActive = false;
+                }
+            }
+            
+            triggerGuru() {
+                this.guruScreen.style.display = 'flex';
+            }
+
+            openWindow(type) {
+                if (type === 'wb') {
+                    const content = `
+                        <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; padding: 8px;">
+                            <div style="display: flex; flex-direction: column; align-items: center; cursor: pointer;" onclick="app.openWindow('shell')">
+                                <div style="width: 32px; height: 32px; background: #AAAAAA; border: 1px solid black; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;">S</div>
+                                <span style="font-size: 11px; margin-top: 4px;">Shell</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; align-items: center; cursor: pointer;" onclick="app.openWindow('boing')">
+                                <div style="width: 32px; height: 32px; background: #AAAAAA; border: 1px solid black; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;">B</div>
+                                <span style="font-size: 11px; margin-top: 4px;">Demos</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; align-items: center; cursor: pointer;" onclick="app.openWindow('sys')">
+                                <div style="width: 32px; height: 32px; background: #AAAAAA; border: 1px solid black; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: bold;">?</div>
+                                <span style="font-size: 11px; margin-top: 4px;">System</span>
+                            </div>
+                            <div style="display: flex; flex-direction: column; align-items: center; cursor: pointer;" onclick="app.openWindow('readme')">
+                                <div style="width: 32px; height: 32px; background: white; border: 1px solid black;"></div>
+                                <span style="font-size: 11px; margin-top: 4px;">ReadMe</span>
+                            </div>
+                        </div>
+                        <div style="margin-top: 16px; font-size: 11px; padding: 0 8px;">
+                            Disk: Workbench 1.3<br>
+                            512K Free<br>
+                            0% Fragmented
+                        </div>
+                    `;
+                    this.createWindow('wb', 'Workbench', content, 100, 40, 380, 220);
+                }
+                else if (type === 'shell') {
+                    const content = `
+                        <div id="shell-output" class="shell-output">
+                            Amiga DOS. Copyright (c) 1985 Commodore-Amiga, Inc.<br>
+                            All Rights Reserved.<br><br>
+                            1> 
+                        </div>
+                        <div class="shell-input-line">
+                            <input type="text" class="shell-input" id="shell-cmd" autofocus onkeydown="app.handleShell(event)">
+                        </div>
+                    `;
+                    const win = this.createWindow('shell', 'Shell', content, 150, 120, 480, 260);
+                    setTimeout(() => win.querySelector('input').focus(), 100);
+                }
+                else if (type === 'boing') {
+                    const content = `<canvas id="boing-canvas"></canvas>`;
+                    this.createWindow('boing', 'Boing!', content, 380, 80, 320, 280);
+                    this.startBoingAnimation();
+                }
+                else if (type === 'ram') {
+                    this.createWindow('ram', 'Ram Disk', '<div style="padding: 16px; text-align: center; font-size: 11px;">Ram Disk: Empty<br><br>0 bytes used<br>512K available</div>', 200, 180, 280, 140);
+                }
+                else if (type === 'readme') {
+                    const readmeContent = `<div style="font-size: 11px; line-height: 1.4;">Welcome to Amiga Workbench 1.3!<br><br>This is a faithful recreation of the<br>classic Amiga operating system.<br><br>Try double-clicking icons to open<br>windows. Drag windows by their<br>title bars.<br><br>Type "help" in the Shell for<br>available commands.<br><br>Type "guru" to see the famous<br>Guru Meditation screen!</div>`;
+                    this.createWindow('readme', 'ReadMe', readmeContent, 250, 140, 320, 260);
+                }
+                 else if (type === 'sys') {
+                    this.createWindow('sys', 'System', '<div style="padding: 16px; text-align: center;"><button style="background: #CC0000; color: white; padding: 8px 16px; border: 2px solid black; font-size: 11px; font-weight: bold; cursor: pointer;" onclick="app.triggerGuru()">GURU MEDITATION</button></div>', 300, 280, 240, 120);
+                }
+            }
+
+            handleShell(e) {
+                if (e.key === 'Enter') {
+                    const input = e.target;
+                    const val = input.value.trim();
+                    const output = document.getElementById('shell-output');
+                    
+                    // Add command to output
+                    output.innerHTML += `<span>${val}</span><br>`;
+                    
+                    // Process command
+                    this.processCommand(val, output);
+                    
+                    input.value = '';
+                    // Scroll to bottom
+                    const content = input.closest('.window-content');
+                    content.scrollTop = content.scrollHeight;
+                    
+                    // Reset prompt line
+                     output.innerHTML += `<span>1> </span>`;
+                }
+            }
+
+            processCommand(cmd, output) {
+                const c = cmd.toLowerCase();
+                let response = "";
+                
+                if (c === "") return;
+                else if (c === "help") response = "Available commands: dir, list, date, time, echo, cls, version, guru, boing";
+                else if (c === "dir" || c === "list") response = "Workbench  System  Utilities  Trash  Demos  ReadMe";
+                else if (c === "date" || c === "time") response = new Date().toString();
+                else if (c.startsWith("echo ")) response = cmd.substring(5);
+                else if (c === "cls") { output.innerHTML = ""; return; }
+                else if (c === "version") response = "Workbench 1.3 (Gemini Build 42.1)";
+                else if (c === "guru") { this.triggerGuru(); return; }
+                else if (c === "boing") { this.openWindow('boing'); response = "Starting demo..."; }
+                else response = `Unknown command: ${cmd}`;
+
+                if (response) output.innerHTML += `<span>${response}</span><br>`;
+            }
+
+            /* * Boing Ball Logic
+             * Enhanced 3D rendering using Three.js
+             */
+            initBoing() {
+                this.boingActive = false;
+                this.boingRenderer = null;
+                this.boingScene = null;
+            }
+
+            startBoingAnimation() {
+                const canvas = document.getElementById('boing-canvas');
+                if (!canvas || typeof THREE === 'undefined') {
+                    // Fallback to 2D if Three.js not loaded
+                    this.startBoing2D();
+                    return;
+                }
+
+                this.boingActive = true;
+
+                // Three.js Setup
+                const width = canvas.clientWidth;
+                const height = canvas.clientHeight;
+
+                const scene = new THREE.Scene();
+                this.boingScene = scene;
+                scene.background = new THREE.Color(0x666666);
+
+                const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 1000);
+                camera.position.set(0, 2, 8);
+                camera.lookAt(0, 0, 0);
+
+                const renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
+                this.boingRenderer = renderer;
+                renderer.setSize(width, height);
+                renderer.shadowMap.enabled = true;
+                renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+                // Lighting
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+                scene.add(ambientLight);
+
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                directionalLight.position.set(5, 10, 5);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.camera.left = -10;
+                directionalLight.shadow.camera.right = 10;
+                directionalLight.shadow.camera.top = 10;
+                directionalLight.shadow.camera.bottom = -10;
+                scene.add(directionalLight);
+
+                // Grid floor
+                const gridHelper = new THREE.GridHelper(20, 20, 0x9933ff, 0x7722cc);
+                gridHelper.position.y = -3;
+                scene.add(gridHelper);
+
+                // Floor plane for shadows
+                const floorGeometry = new THREE.PlaneGeometry(20, 20);
+                const floorMaterial = new THREE.ShadowMaterial({ opacity: 0.3 });
+                const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                floor.rotation.x = -Math.PI / 2;
+                floor.position.y = -3;
+                floor.receiveShadow = true;
+                scene.add(floor);
+
+                // Create Boing Ball with checkered texture
+                const ballGeometry = new THREE.SphereGeometry(1, 32, 32);
+
+                // Create checkered pattern texture using canvas
+                const textureCanvas = document.createElement('canvas');
+                textureCanvas.width = 512;
+                textureCanvas.height = 512;
+                const texCtx = textureCanvas.getContext('2d');
+
+                const gridSize = 8;
+                const cellSize = textureCanvas.width / gridSize;
+
+                for (let i = 0; i < gridSize; i++) {
+                    for (let j = 0; j < gridSize; j++) {
+                        texCtx.fillStyle = (i + j) % 2 === 0 ? '#FFFFFF' : '#FF0000';
+                        texCtx.fillRect(i * cellSize, j * cellSize, cellSize, cellSize);
+                    }
+                }
+
+                const texture = new THREE.CanvasTexture(textureCanvas);
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+
+                const ballMaterial = new THREE.MeshPhongMaterial({
+                    map: texture,
+                    shininess: 80,
+                    specular: 0x444444
+                });
+                const ball = new THREE.Mesh(ballGeometry, ballMaterial);
+                ball.castShadow = true;
+                ball.receiveShadow = true;
+                scene.add(ball);
+
+                // Animation state
+                let ballPos = { x: 0, y: 0, z: 0 };
+                let ballVel = { x: 0.08, y: 0.05, z: 0.06 };
+                const gravity = -0.003;
+                const bounds = { x: 4, y: 3, z: 4 };
+                let rotation = 0;
+
+                // Animation loop
+                const animate = () => {
+                    if (!this.boingActive || !document.getElementById('boing-canvas')) {
+                        this.boingActive = false;
+                        if (this.boingRenderer) {
+                            this.boingRenderer.dispose();
+                            this.boingRenderer = null;
+                        }
+                        return;
+                    }
+
+                    // Handle window resize
+                    const currentWidth = canvas.clientWidth;
+                    const currentHeight = canvas.clientHeight;
+                    if (currentWidth !== width || currentHeight !== height) {
+                        camera.aspect = currentWidth / currentHeight;
+                        camera.updateProjectionMatrix();
+                        renderer.setSize(currentWidth, currentHeight);
+                    }
+
+                    // Physics
+                    ballVel.y += gravity;
+                    ballPos.x += ballVel.x;
+                    ballPos.y += ballVel.y;
+                    ballPos.z += ballVel.z;
+
+                    // Collision detection
+                    if (ballPos.x > bounds.x || ballPos.x < -bounds.x) {
+                        ballVel.x = -ballVel.x;
+                        ballPos.x = ballPos.x > 0 ? bounds.x : -bounds.x;
+                    }
+                    if (ballPos.y > bounds.y || ballPos.y < -bounds.y) {
+                        ballVel.y = -ballVel.y * 0.95; // Energy loss
+                        ballPos.y = ballPos.y > 0 ? bounds.y : -bounds.y;
+                    }
+                    if (ballPos.z > bounds.z || ballPos.z < -bounds.z) {
+                        ballVel.z = -ballVel.z;
+                        ballPos.z = ballPos.z > 0 ? bounds.z : -bounds.z;
+                    }
+
+                    // Update ball position
+                    ball.position.set(ballPos.x, ballPos.y, ballPos.z);
+
+                    // Rotate ball based on velocity
+                    rotation += Math.abs(ballVel.x) * 0.5;
+                    ball.rotation.y = rotation;
+                    ball.rotation.x = rotation * 0.7;
+
+                    renderer.render(scene, camera);
+                    requestAnimationFrame(animate);
+                };
+                animate();
+            }
+
+            // Fallback 2D Boing Ball (if Three.js not available)
+            startBoing2D() {
+                const canvas = document.getElementById('boing-canvas');
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                this.boingActive = true;
+
+                let width = canvas.clientWidth;
+                let height = canvas.clientHeight;
+                canvas.width = width;
+                canvas.height = height;
+
+                let x = width / 2;
+                let y = height / 2;
+                let dx = 3;
+                let dy = 2;
+                const radius = 80;
+                const g = 0.1;
+                let rotation = 0;
+
+                const draw = () => {
+                    if (!this.boingActive || !document.getElementById('boing-canvas')) {
+                        this.boingActive = false;
+                        return;
+                    }
+
+                    if (canvas.clientWidth !== width || canvas.clientHeight !== height) {
+                        width = canvas.clientWidth;
+                        height = canvas.clientHeight;
+                        canvas.width = width;
+                        canvas.height = height;
+                    }
+
+                    x += dx;
+                    y += dy;
+                    dy += g;
+
+                    if (x + radius > width) { x = width - radius; dx = -dx; }
+                    if (x - radius < 0) { x = radius; dx = -dx; }
+                    if (y + radius > height) { y = height - radius; dy = -dy * 0.95; }
+                    if (y - radius < 0) { y = radius; dy = -dy; }
+
+                    rotation += dx * 0.02;
+
+                    ctx.fillStyle = '#888';
+                    ctx.fillRect(0, 0, width, height);
+
+                    ctx.strokeStyle = '#A020F0';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    for(let i=0; i<width; i+=40) { ctx.moveTo(i,0); ctx.lineTo(i,height); }
+                    for(let i=0; i<height; i+=40) { ctx.moveTo(0,i); ctx.lineTo(width,i); }
+                    ctx.stroke();
+
+                    ctx.save();
+                    ctx.translate(x, y);
+
+                    ctx.fillStyle = 'rgba(0,0,0,0.5)';
+                    ctx.beginPath();
+                    ctx.ellipse(20, 80, radius, radius/4, 0, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    ctx.beginPath();
+                    ctx.arc(0, 0, radius, 0, Math.PI * 2);
+                    ctx.clip();
+
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(-radius, -radius, radius*2, radius*2);
+
+                    for (let lat = -Math.PI/2; lat < Math.PI/2; lat += 0.4) {
+                        for (let lon = 0; lon < Math.PI * 2; lon += 0.4) {
+                            if ((Math.floor(lat*2.5) + Math.floor(lon*2.5)) % 2 === 0) {
+                                ctx.fillStyle = 'red';
+                            } else {
+                                ctx.fillStyle = 'white';
+                            }
+
+                            let r = radius * Math.cos(lat);
+                            let py = radius * Math.sin(lat);
+                            let px = r * Math.sin(lon + rotation);
+                            let pz = r * Math.cos(lon + rotation);
+
+                            let size = (pz + radius) / (radius * 2) * 15 + 2;
+                            if (pz > -20) {
+                                ctx.fillRect(px, py, size, size * 1.2);
+                            }
+                        }
+                    }
+
+                    ctx.strokeStyle = 'black';
+                    ctx.lineWidth = 1;
+                    ctx.beginPath();
+                    ctx.arc(0, 0, radius, 0, Math.PI*2);
+                    ctx.stroke();
+
+                    ctx.restore();
+
+                    requestAnimationFrame(draw);
+                };
+                draw();
+            }
+        }
+
+        const app = new AmigaOS();
+    </script>
+</body>
+</html>
