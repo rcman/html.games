@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Modern Voxel Sandbox</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #1a1a1a;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            user-select: none;
+        }
+
+        #ui-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 20px;
+            height: 20px;
+            transform: translate(-50%, -50%);
+            mix-blend-mode: difference;
+        }
+        
+        #crosshair::before, #crosshair::after {
+            content: '';
+            position: absolute;
+            background: rgba(255, 255, 255, 0.8);
+        }
+
+        #crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; }
+        #crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; }
+
+        #instructions {
+            padding: 20px;
+            color: rgba(255, 255, 255, 0.8);
+            text-shadow: 1px 1px 2px black;
+            font-size: 14px;
+        }
+
+        #hotbar {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            padding-bottom: 20px;
+            pointer-events: auto;
+        }
+
+        .slot {
+            width: 50px;
+            height: 50px;
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid rgba(255, 255, 255, 0.2);
+            border-radius: 8px;
+            position: relative; /* Changed for absolute positioning of children */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: transform 0.1s, border-color 0.1s;
+        }
+
+        .slot.active {
+            border-color: #fff;
+            transform: scale(1.1);
+            background: rgba(255, 255, 255, 0.2);
+            box-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+        }
+
+        .slot img {
+            width: 100%;
+            height: 100%;
+            border-radius: 6px;
+            image-rendering: pixelated; /* Keeps the blocky look */
+        }
+
+        .slot span {
+            position: absolute;
+            top: 2px;
+            left: 5px;
+            font-size: 14px;
+            font-weight: bold;
+            color: white;
+            text-shadow: 1px 1px 2px black;
+            z-index: 2;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            color: white;
+            z-index: 10;
+            pointer-events: auto;
+            backdrop-filter: blur(5px);
+        }
+
+        button {
+            padding: 15px 40px;
+            font-size: 20px;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+            transition: background 0.2s;
+        }
+
+        button:hover {
+            background: #45a049;
+        }
+
+        h1 { margin: 0 0 10px 0; font-size: 3em; letter-spacing: 2px; }
+        p { max-width: 600px; text-align: center; line-height: 1.6; }
+
+    </style>
+</head>
+<body>
+
+    <!-- Three.js CDN -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <div id="ui-container">
+        <div id="instructions">
+            <b>WASD</b> Move | <b>SPACE</b> Jump | <b>L-Click</b> Mine | <b>R-Click</b> Place<br>
+            <b>1-5</b> Select Block
+        </div>
+        <div id="crosshair"></div>
+        <div id="hotbar">
+            <!-- Populated by JS -->
+        </div>
+    </div>
+
+    <div id="overlay">
+        <h1>VOXEL WORLD</h1>
+        <p>A procedural sandbox experiment.</p>
+        <p>Click "Start Game" to lock cursor. Press ESC to unlock.</p>
+        <button id="startBtn">START GAME</button>
+    </div>
+
+    <script>
+        // --- CONSTANTS & CONFIG ---
+        const CHUNK_SIZE = 32;
+        const WORLD_SIZE = 6; // Size in chunks (2x2)
+        const BLOCK_SIZE = 1;
+        const GRAVITY = 25.0; // m/s^2
+        const JUMP_FORCE = 10.0;
+        const MOVE_SPEED = 6.0;
+        const REACH = 5;
+
+        // Block Types
+        const BLOCKS = {
+            AIR: 0,
+            GRASS: 1,
+            DIRT: 2,
+            STONE: 3,
+            WOOD: 4,
+            LEAVES: 5,
+            SAND: 6
+        };
+
+        // --- TEXTURE GENERATION ---
+        // Generates procedural textures using canvas to avoid external assets
+        function createTexture(type) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            
+            // Base color
+            let baseHue, baseSat, baseLight, noiseAlpha;
+            
+            switch(type) {
+                case BLOCKS.GRASS:
+                    baseHue = 100; baseSat = 60; baseLight = 40; noiseAlpha = 0.1;
+                    break;
+                case BLOCKS.DIRT:
+                    baseHue = 30; baseSat = 50; baseLight = 30; noiseAlpha = 0.15;
+                    break;
+                case BLOCKS.STONE:
+                    baseHue = 0; baseSat = 0; baseLight = 50; noiseAlpha = 0.2;
+                    break;
+                case BLOCKS.WOOD:
+                    baseHue = 35; baseSat = 60; baseLight = 30; noiseAlpha = 0.1;
+                    // Wood rings pattern
+                    ctx.fillStyle = `hsl(${baseHue}, ${baseSat}%, ${baseLight}%)`;
+                    ctx.fillRect(0,0,64,64);
+                    ctx.strokeStyle = `hsl(${baseHue}, ${baseSat}%, ${baseLight-10}%)`;
+                    ctx.lineWidth = 2;
+                    for(let i=0; i<4; i++) {
+                        ctx.beginPath();
+                        ctx.moveTo(10 + i*10, 0);
+                        ctx.lineTo(10 + i*10, 64);
+                        ctx.stroke();
+                    }
+                    noiseAlpha = 0.05; // Less noise on top of pattern
+                    break;
+                case BLOCKS.LEAVES:
+                    baseHue = 120; baseSat = 40; baseLight = 35; noiseAlpha = 0.2;
+                    break;
+                case BLOCKS.SAND:
+                    baseHue = 50; baseSat = 60; baseLight = 70; noiseAlpha = 0.1;
+                    break;
+                default:
+                    baseHue = 0; baseSat = 0; baseLight = 50; noiseAlpha = 0.1;
+            }
+
+            if (type !== BLOCKS.WOOD) {
+                ctx.fillStyle = `hsl(${baseHue}, ${baseSat}%, ${baseLight}%)`;
+                ctx.fillRect(0, 0, 64, 64);
+            }
+
+            // Add noise
+            for (let i = 0; i < 400; i++) {
+                const x = Math.random() * 64;
+                const y = Math.random() * 64;
+                const size = Math.random() * 3 + 1;
+                const shade = Math.random() > 0.5 ? 255 : 0;
+                ctx.fillStyle = `rgba(${shade}, ${shade}, ${shade}, ${noiseAlpha})`;
+                ctx.fillRect(x, y, size, size);
+            }
+
+            // Grass specific top detail
+            if (type === BLOCKS.GRASS) {
+                // We handle side grass in UV mapping logic or material logic usually, 
+                // but here we simplify to full grass block for aesthetics or add a border
+                ctx.fillStyle = 'rgba(50, 200, 50, 0.1)';
+                ctx.fillRect(0,0,64,64);
+            }
+
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter; // Pixelated look
+            texture.minFilter = THREE.NearestFilter;
+            return texture;
+        }
+
+        const textures = {};
+        for (let key in BLOCKS) {
+            if (BLOCKS[key] !== BLOCKS.AIR) {
+                textures[BLOCKS[key]] = createTexture(BLOCKS[key]);
+            }
+        }
+
+        // --- ENGINE SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB); // Sky blue
+        scene.fog = new THREE.Fog(0x87CEEB, 10, 90);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xaaaaaa, 0.6);
+        scene.add(ambientLight);
+
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(50, 100, 50);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        dirLight.shadow.camera.near = 0.5;
+        dirLight.shadow.camera.far = 200;
+        dirLight.shadow.bias = -0.001;
+        // Adjust shadow camera for world size
+        const d = 50;
+        dirLight.shadow.camera.left = -d;
+        dirLight.shadow.camera.right = d;
+        dirLight.shadow.camera.top = d;
+        dirLight.shadow.camera.bottom = -d;
+        scene.add(dirLight);
+
+        // --- WORLD GENERATION ---
+        const chunks = {};
+        const worldData = new Map(); // Global block store for simplicity: "x,y,z" -> type
+
+        function getKey(x, y, z) { return `${x},${y},${z}`; }
+
+        function getBlock(x, y, z) {
+            return worldData.get(getKey(x, y, z)) || BLOCKS.AIR;
+        }
+
+        function setBlock(x, y, z, type) {
+            worldData.set(getKey(x, y, z), type);
+            // Trigger mesh update - simplified: regenerate entire affected chunk
+            // For this single-file demo, we rebuild all chunks when modified
+            // In a real engine, you'd only rebuild the specific chunk
+            rebuildWorldMesh(); 
+        }
+
+        // Simple Perlin-ish noise (placeholder for a large library)
+        function noise(x, z) {
+            return Math.sin(x / 10) * Math.cos(z / 10) * 4 + Math.sin(x/3)*Math.cos(z/3);
+        }
+
+        function generateWorld() {
+            const size = CHUNK_SIZE * WORLD_SIZE;
+            const offset = size / 2;
+
+            for (let x = -offset; x < offset; x++) {
+                for (let z = -offset; z < offset; z++) {
+                    // Heightmap
+                    const h = Math.floor(noise(x, z) + 5); 
+                    
+                    for (let y = -5; y <= h; y++) {
+                        let type = BLOCKS.STONE;
+                        if (y === h) type = BLOCKS.GRASS;
+                        else if (y > h - 3) type = BLOCKS.DIRT;
+                        
+                        // Bedrock
+                        if (y === -5) type = BLOCKS.STONE;
+
+                        worldData.set(getKey(x, y, z), type);
+                    }
+                    
+                    // Simple Trees
+                    if (x % 7 === 0 && z % 7 === 0 && Math.random() > 0.3) {
+                         const treeH = h + 1;
+                         for(let i=0; i<4; i++) worldData.set(getKey(x, treeH+i, z), BLOCKS.WOOD);
+                         // Leaves
+                         for(let lx=-2; lx<=2; lx++) {
+                             for(let lz=-2; lz<=2; lz++) {
+                                 for(let ly=2; ly<=4; ly++) {
+                                     if(lx===0 && lz===0 && ly<4) continue; // Don't replace wood
+                                     if(Math.random()>0.2) worldData.set(getKey(x+lx, treeH+ly, z), BLOCKS.LEAVES);
+                                 }
+                             }
+                         }
+                    }
+                }
+            }
+            rebuildWorldMesh();
+        }
+
+        // Mesh management
+        let instancedMeshes = {};
+
+        function rebuildWorldMesh() {
+            // Remove old meshes
+            for(let key in instancedMeshes) {
+                scene.remove(instancedMeshes[key]);
+                instancedMeshes[key].dispose();
+            }
+            instancedMeshes = {};
+
+            // We will group blocks by type to use InstancedMesh
+            // This is efficient for rendering thousands of blocks
+            const blocksByType = {};
+            
+            // Count blocks
+            for (const [key, type] of worldData.entries()) {
+                if (type === BLOCKS.AIR) continue;
+                if (!blocksByType[type]) blocksByType[type] = [];
+                const [x, y, z] = key.split(',').map(Number);
+                
+                // Culling: Only add if visible (has an air neighbor)
+                if (isBlockVisible(x, y, z)) {
+                    blocksByType[type].push({x, y, z});
+                }
+            }
+
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+
+            for (const type in blocksByType) {
+                const count = blocksByType[type].length;
+                if (count === 0) continue;
+
+                const material = new THREE.MeshStandardMaterial({
+                    map: textures[type],
+                    roughness: 0.8,
+                    metalness: 0.1
+                });
+
+                const mesh = new THREE.InstancedMesh(geometry, material, count);
+                mesh.castShadow = true;
+                mesh.receiveShadow = true;
+
+                const dummy = new THREE.Object3D();
+                let i = 0;
+                for (const pos of blocksByType[type]) {
+                    dummy.position.set(pos.x, pos.y, pos.z);
+                    dummy.updateMatrix();
+                    mesh.setMatrixAt(i++, dummy.matrix);
+                }
+
+                scene.add(mesh);
+                instancedMeshes[type] = mesh;
+            }
+        }
+
+        function isBlockVisible(x, y, z) {
+            // Check 6 neighbors
+            if (getBlock(x+1, y, z) === BLOCKS.AIR) return true;
+            if (getBlock(x-1, y, z) === BLOCKS.AIR) return true;
+            if (getBlock(x, y+1, z) === BLOCKS.AIR) return true;
+            if (getBlock(x, y-1, z) === BLOCKS.AIR) return true;
+            if (getBlock(x, y, z+1) === BLOCKS.AIR) return true;
+            if (getBlock(x, y, z-1) === BLOCKS.AIR) return true;
+            return false;
+        }
+
+
+        // --- PLAYER CONTROLLER ---
+        const player = {
+            velocity: new THREE.Vector3(),
+            direction: new THREE.Vector3(),
+            onGround: false,
+            canJump: false
+        };
+
+        let moveForward = false;
+        let moveBackward = false;
+        let moveLeft = false;
+        let moveRight = false;
+
+        const onKeyDown = function (event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW': moveForward = true; break;
+                case 'ArrowLeft':
+                case 'KeyA': moveLeft = true; break;
+                case 'ArrowDown':
+                case 'KeyS': moveBackward = true; break;
+                case 'ArrowRight':
+                case 'KeyD': moveRight = true; break;
+                case 'Space': 
+                    if (player.canJump === true) player.velocity.y += JUMP_FORCE;
+                    player.canJump = false;
+                    break;
+                case 'Digit1': selectedBlock = BLOCKS.GRASS; updateHotbar(); break;
+                case 'Digit2': selectedBlock = BLOCKS.DIRT; updateHotbar(); break;
+                case 'Digit3': selectedBlock = BLOCKS.STONE; updateHotbar(); break;
+                case 'Digit4': selectedBlock = BLOCKS.WOOD; updateHotbar(); break;
+                case 'Digit5': selectedBlock = BLOCKS.LEAVES; updateHotbar(); break;
+            }
+        };
+
+        const onKeyUp = function (event) {
+            switch (event.code) {
+                case 'ArrowUp':
+                case 'KeyW': moveForward = false; break;
+                case 'ArrowLeft':
+                case 'KeyA': moveLeft = false; break;
+                case 'ArrowDown':
+                case 'KeyS': moveBackward = false; break;
+                case 'ArrowRight':
+                case 'KeyD': moveRight = false; break;
+            }
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
+
+        // --- MOUSE CONTROLS ---
+        // Basic Pitch/Yaw helper since PointerLockControls is an external addon often
+        let isLocked = false;
+        let pitch = 0;
+        let yaw = 0;
+        
+        document.getElementById('startBtn').addEventListener('click', () => {
+            document.body.requestPointerLock();
+        });
+
+        document.addEventListener('pointerlockchange', () => {
+            if (document.pointerLockElement === document.body) {
+                isLocked = true;
+                document.getElementById('overlay').style.display = 'none';
+            } else {
+                isLocked = false;
+                document.getElementById('overlay').style.display = 'flex';
+            }
+        });
+
+        document.addEventListener('mousemove', (event) => {
+            if (!isLocked) return;
+            const sensitivity = 0.002;
+            yaw -= event.movementX * sensitivity;
+            pitch -= event.movementY * sensitivity;
+            // Clamp pitch
+            pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
+            
+            // Apply to camera
+            // We use a specific order: Y (yaw) then X (pitch)
+            // But standard FirstPerson is: Camera parent rotates Y, Camera rotates X
+            // To keep it simple in one file without parenting hell:
+            const quaternion = new THREE.Quaternion();
+            quaternion.setFromEuler(new THREE.Euler(pitch, yaw, 0, 'YXZ'));
+            camera.quaternion.copy(quaternion);
+        });
+
+        // --- RAYCASTING & INTERACTION ---
+        const raycaster = new THREE.Raycaster();
+        const center = new THREE.Vector2(0, 0);
+        
+        let highlightMesh = new THREE.Mesh(
+            new THREE.BoxGeometry(1.01, 1.01, 1.01),
+            new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true, transparent: true, opacity: 0.5 })
+        );
+        scene.add(highlightMesh);
+        highlightMesh.visible = false;
+
+        document.addEventListener('mousedown', (event) => {
+            if (!isLocked) return;
+            
+            raycaster.setFromCamera(center, camera);
+            
+            // We need to raycast against world geometry. 
+            // InstancedMesh raycasting is expensive but native in Three.js now.
+            const intersects = raycaster.intersectObjects(Object.values(instancedMeshes));
+            
+            if (intersects.length > 0 && intersects[0].distance < REACH) {
+                const intersect = intersects[0];
+                const instanceId = intersect.instanceId;
+                const mesh = intersect.object;
+
+                // Get position of the instance
+                const matrix = new THREE.Matrix4();
+                mesh.getMatrixAt(instanceId, matrix);
+                const pos = new THREE.Vector3();
+                pos.setFromMatrixPosition(matrix);
+                
+                const x = Math.round(pos.x);
+                const y = Math.round(pos.y);
+                const z = Math.round(pos.z);
+
+                if (event.button === 0) {
+                    // Left Click: Destroy
+                    setBlock(x, y, z, BLOCKS.AIR);
+                } else if (event.button === 2) {
+                    // Right Click: Place
+                    // Use face normal to find adjacent block
+                    const nx = x + Math.round(intersect.face.normal.x);
+                    const ny = y + Math.round(intersect.face.normal.y);
+                    const nz = z + Math.round(intersect.face.normal.z);
+                    
+                    // Prevent placing inside player
+                    const pPos = camera.position;
+                    // Simple distance check usually enough, or bounding box
+                    if (Math.abs(nx - pPos.x) < 0.8 && Math.abs(ny - (pPos.y - 1)) < 1.8 && Math.abs(nz - pPos.z) < 0.8) {
+                        return; // Player is occupying this space
+                    }
+
+                    setBlock(nx, ny, nz, selectedBlock);
+                }
+            }
+        });
+
+        // --- UI ---
+        const hotbar = document.getElementById('hotbar');
+        const hotbarItems = [
+            { id: BLOCKS.GRASS, name: 'Grass' },
+            { id: BLOCKS.DIRT, name: 'Dirt' },
+            { id: BLOCKS.STONE, name: 'Stone' },
+            { id: BLOCKS.WOOD, name: 'Wood' },
+            { id: BLOCKS.LEAVES, name: 'Leaf' }
+        ];
+        let selectedBlock = BLOCKS.GRASS;
+
+        function initUI() {
+            hotbar.innerHTML = '';
+            hotbarItems.forEach((item, index) => {
+                const div = document.createElement('div');
+                div.className = 'slot';
+                if(item.id === selectedBlock) div.classList.add('active');
+                
+                // Get texture canvas and display as image
+                if (textures[item.id] && textures[item.id].image) {
+                    const canvas = textures[item.id].image;
+                    const img = document.createElement('img');
+                    img.src = canvas.toDataURL(); // Convert procedural canvas to image
+                    div.appendChild(img);
+                }
+                
+                // Key binding number
+                const span = document.createElement('span');
+                span.innerText = index + 1;
+                div.appendChild(span);
+
+                hotbar.appendChild(div);
+            });
+        }
+
+        function updateHotbar() {
+            const slots = document.querySelectorAll('.slot');
+            slots.forEach((slot, index) => {
+                if(hotbarItems[index].id === selectedBlock) slot.classList.add('active');
+                else slot.classList.remove('active');
+            });
+        }
+
+        initUI();
+
+        // --- GAME LOOP ---
+        const clock = new THREE.Clock();
+        
+        // Initial spawn
+        generateWorld();
+        camera.position.set(0, 15, 0);
+
+        function checkCollision(position) {
+            // Player dimensions
+            const width = 0.6;
+            const height = 1.8;
+            
+            // Check feet
+            const x = Math.round(position.x);
+            const y = Math.round(position.y - height/2);
+            const z = Math.round(position.z);
+            
+            // Very simple block check - if block exists at center point
+            // For better collision we'd check corners of bounding box, 
+            // but for <100 lines of physics logic this suffices for a demo
+            
+            // Check body (head and feet)
+            if (getBlock(Math.round(position.x), Math.round(position.y - 1.5), Math.round(position.z)) !== BLOCKS.AIR) return true;
+            if (getBlock(Math.round(position.x), Math.round(position.y - 0.5), Math.round(position.z)) !== BLOCKS.AIR) return true;
+
+            return false;
+        }
+        
+        // Better Physics: Axis Aligned Bounding Box
+        function resolveCollision(newPos, oldPos) {
+            // Check X
+            if (getBlock(Math.round(newPos.x), Math.round(oldPos.y-1), Math.round(oldPos.z)) !== BLOCKS.AIR ||
+                getBlock(Math.round(newPos.x), Math.round(oldPos.y), Math.round(oldPos.z)) !== BLOCKS.AIR) {
+                newPos.x = oldPos.x;
+                player.velocity.x = 0;
+            }
+            // Check Z
+            if (getBlock(Math.round(newPos.x), Math.round(oldPos.y-1), Math.round(newPos.z)) !== BLOCKS.AIR ||
+                getBlock(Math.round(newPos.x), Math.round(oldPos.y), Math.round(newPos.z)) !== BLOCKS.AIR) {
+                newPos.z = oldPos.z;
+                player.velocity.z = 0;
+            }
+            // Check Y (Floor/Ceiling)
+            // Feet
+            if (player.velocity.y < 0) {
+                 if (getBlock(Math.round(newPos.x), Math.round(newPos.y - 1.5), Math.round(newPos.z)) !== BLOCKS.AIR) {
+                     newPos.y = Math.round(newPos.y - 1.5) + 1.5 + 0.001; // Snap to top of block
+                     player.velocity.y = 0;
+                     player.onGround = true;
+                     player.canJump = true;
+                 } else {
+                     player.onGround = false;
+                 }
+            } else if (player.velocity.y > 0) {
+                 // Head
+                 if (getBlock(Math.round(newPos.x), Math.round(newPos.y + 0.5), Math.round(newPos.z)) !== BLOCKS.AIR) {
+                     newPos.y = Math.round(newPos.y + 0.5) - 0.5 - 0.001;
+                     player.velocity.y = 0;
+                 }
+            }
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = Math.min(clock.getDelta(), 0.1);
+
+            if (isLocked) {
+                // Movement
+                player.velocity.x -= player.velocity.x * 10.0 * delta;
+                player.velocity.z -= player.velocity.z * 10.0 * delta;
+                player.velocity.y -= GRAVITY * delta;
+
+                player.direction.z = Number(moveForward) - Number(moveBackward);
+                player.direction.x = Number(moveLeft) - Number(moveRight);
+                player.direction.normalize();
+
+                if (moveForward || moveBackward) player.velocity.z -= player.direction.z * MOVE_SPEED * delta * 10; // *10 for damping compensation
+                if (moveLeft || moveRight) player.velocity.x -= player.direction.x * MOVE_SPEED * delta * 10;
+
+                // Physics Step
+                const oldPos = camera.position.clone();
+                
+                // Apply X/Z velocity relative to camera look direction
+                // We need to calculate global X/Z motion based on yaw
+                const sin = Math.sin(yaw);
+                const cos = Math.cos(yaw);
+                
+                const vX = player.velocity.x; // Right/Left strafe local
+                const vZ = player.velocity.z; // Forward/Back local
+                
+                // Rotate vector (vZ is forward/back, vX is strafe)
+                const globalVx = (vZ * sin + vX * cos);
+                const globalVz = (vZ * cos - vX * sin);
+
+                camera.position.x += globalVx * delta;
+                camera.position.z += globalVz * delta;
+                
+                // Collision X/Z
+                resolveCollision(camera.position, oldPos);
+                
+                // Apply Y
+                oldPos.copy(camera.position);
+                camera.position.y += player.velocity.y * delta;
+                
+                // Collision Y
+                resolveCollision(camera.position, oldPos);
+
+                // Fell out of world
+                if (camera.position.y < -30) {
+                    camera.position.set(0, 20, 0);
+                    player.velocity.set(0,0,0);
+                }
+
+                // Highlight Block
+                raycaster.setFromCamera(center, camera);
+                const intersects = raycaster.intersectObjects(Object.values(instancedMeshes));
+                if (intersects.length > 0 && intersects[0].distance < REACH) {
+                    const i = intersects[0];
+                    const matrix = new THREE.Matrix4();
+                    i.object.getMatrixAt(i.instanceId, matrix);
+                    const pos = new THREE.Vector3().setFromMatrixPosition(matrix);
+                    
+                    highlightMesh.position.copy(pos);
+                    highlightMesh.visible = true;
+                } else {
+                    highlightMesh.visible = false;
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Resize handler
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        animate();
+
+    </script>
+</body>
+</html>
