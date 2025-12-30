@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Floating Cube Platformer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            font-family: Arial, sans-serif;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #ui {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            z-index: 100;
+            font-size: 14px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+        
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            z-index: 100;
+            font-size: 12px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+        }
+        
+        #gameOver {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            text-align: center;
+            z-index: 200;
+            font-size: 24px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.8);
+            display: none;
+        }
+        
+        canvas {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="ui">
+            <div>Distance: <span id="distance">0</span>m</div>
+            <div>Height: <span id="height">0</span>m</div>
+            <div>Cubes Touched: <span id="cubes">0</span></div>
+        </div>
+        
+        <div id="controls">
+            <div><strong>Controls:</strong></div>
+            <div>WASD - Move | Mouse - Look | Space - Jump | R - Reset</div>
+            <div>Jump between floating cubes to survive!</div>
+        </div>
+        
+        <div id="gameOver">
+            <div>Game Over!</div>
+            <div>Press R to restart</div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        class FloatingCubePlatformer {
+            constructor() {
+                this.scene = new THREE.Scene();
+                this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                this.clock = new THREE.Clock();
+                
+                this.player = {
+                    position: new THREE.Vector3(0, 2, 0),
+                    velocity: new THREE.Vector3(0, 0, 0),
+                    rotation: { x: 0, y: 0 },
+                    onCube: null,
+                    speed: 8,
+                    jumpPower: 12,
+                    coyoteTime: 0,
+                    maxCoyoteTime: 0.2
+                };
+                
+                this.keys = {};
+                this.mouse = { locked: false };
+                this.floatingCubes = [];
+                this.distance = 0;
+                this.cubesReached = 0;
+                this.gameOver = false;
+                this.voidY = -50;
+                
+                this.init();
+                this.generateCubes();
+                this.setupControls();
+                this.animate();
+            }
+            
+            init() {
+                this.renderer.setSize(window.innerWidth, window.innerHeight);
+                this.renderer.setClearColor(0x000011);
+                this.renderer.shadowMap.enabled = true;
+                this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+                
+                document.getElementById('gameContainer').appendChild(this.renderer.domElement);
+                
+                // Setup camera
+                this.camera.position.copy(this.player.position);
+                this.camera.position.y += 1.6;
+                
+                // Add atmospheric lighting
+                const ambientLight = new THREE.AmbientLight(0x404080, 0.4);
+                this.scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+                directionalLight.position.set(20, 50, 20);
+                directionalLight.castShadow = true;
+                directionalLight.shadow.mapSize.width = 2048;
+                directionalLight.shadow.mapSize.height = 2048;
+                directionalLight.shadow.camera.near = 0.1;
+                directionalLight.shadow.camera.far = 100;
+                directionalLight.shadow.camera.left = -50;
+                directionalLight.shadow.camera.right = 50;
+                directionalLight.shadow.camera.top = 50;
+                directionalLight.shadow.camera.bottom = -50;
+                this.scene.add(directionalLight);
+                
+                // Add some stars
+                this.createStars();
+                
+                // Create starting platform
+                this.createStartingPlatform();
+            }
+            
+            createStars() {
+                const starGeometry = new THREE.BufferGeometry();
+                const starMaterial = new THREE.PointsMaterial({ color: 0xFFFFFF, size: 2 });
+                
+                const starVertices = [];
+                for (let i = 0; i < 1000; i++) {
+                    const x = (Math.random() - 0.5) * 2000;
+                    const y = Math.random() * 1000;
+                    const z = (Math.random() - 0.5) * 2000;
+                    starVertices.push(x, y, z);
+                }
+                
+                starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
+                const stars = new THREE.Points(starGeometry, starMaterial);
+                this.scene.add(stars);
+            }
+            
+            createStartingPlatform() {
+                const geometry = new THREE.BoxGeometry(4, 1, 4);
+                const material = new THREE.MeshLambertMaterial({ color: 0x00FF00 });
+                const platform = new THREE.Mesh(geometry, material);
+                platform.position.set(0, 0, 0);
+                platform.castShadow = true;
+                platform.receiveShadow = true;
+                platform.userData = { 
+                    type: 'platform', 
+                    safe: true,
+                    touched: false
+                };
+                this.scene.add(platform);
+                this.floatingCubes.push(platform);
+            }
+            
+            generateCubes() {
+                const cubeTypes = [
+                    { color: 0x4169E1, size: 3, stable: true },      // Royal Blue - stable
+                    { color: 0xFF4500, size: 2.5, stable: true },   // Orange Red - stable
+                    { color: 0xFFD700, size: 2, stable: false },    // Gold - unstable
+                    { color: 0x8A2BE2, size: 1.5, stable: false },  // Blue Violet - small unstable
+                    { color: 0x00CED1, size: 3.5, stable: true },   // Dark Turquoise - large stable
+                ];
+                
+                let lastPosition = new THREE.Vector3(0, 0, 0);
+                
+                for (let i = 0; i < 200; i++) {
+                    const cubeType = cubeTypes[Math.floor(Math.random() * cubeTypes.length)];
+                    const cube = this.createFloatingCube(cubeType);
+                    
+                    // Position cubes in a challenging but possible pattern
+                    const angle = Math.random() * Math.PI * 2;
+                    const distance = Math.random() * 6 + 3; // 3-9 units away
+                    const heightVariation = (Math.random() - 0.5) * 8;
+                    
+                    const x = lastPosition.x + Math.cos(angle) * distance;
+                    const y = lastPosition.y + heightVariation + Math.random() * 10 + 5;
+                    const z = lastPosition.z + Math.sin(angle) * distance;
+                    
+                    cube.position.set(x, y, z);
+                    
+                    // Add some movement to unstable cubes
+                    if (!cubeType.stable) {
+                        cube.userData.floatSpeed = Math.random() * 0.5 + 0.5;
+                        cube.userData.floatRange = Math.random() * 2 + 1;
+                        cube.userData.startY = y;
+                        cube.userData.rotationSpeed = (Math.random() - 0.5) * 0.02;
+                    }
+                    
+                    this.scene.add(cube);
+                    this.floatingCubes.push(cube);
+                    lastPosition = cube.position.clone();
+                }
+            }
+            
+            createFloatingCube(type) {
+                const geometry = new THREE.BoxGeometry(type.size, type.size, type.size);
+                const material = new THREE.MeshLambertMaterial({ 
+                    color: type.color,
+                    transparent: !type.stable,
+                    opacity: type.stable ? 1 : 0.8
+                });
+                const cube = new THREE.Mesh(geometry, material);
+                cube.castShadow = true;
+                cube.receiveShadow = true;
+                cube.userData = { 
+                    type: 'platform',
+                    stable: type.stable,
+                    size: type.size,
+                    touched: false,
+                    disappearTimer: 0
+                };
+                
+                // Add a glow effect to unstable cubes
+                if (!type.stable) {
+                    const glowGeometry = new THREE.BoxGeometry(type.size * 1.1, type.size * 1.1, type.size * 1.1);
+                    const glowMaterial = new THREE.MeshBasicMaterial({ 
+                        color: type.color,
+                        transparent: true,
+                        opacity: 0.2
+                    });
+                    const glow = new THREE.Mesh(glowGeometry, glowMaterial);
+                    cube.add(glow);
+                }
+                
+                return cube;
+            }
+            
+            setupControls() {
+                document.addEventListener('keydown', (e) => {
+                    this.keys[e.code] = true;
+                    if (e.code === 'Space') {
+                        e.preventDefault();
+                        this.jump();
+                    }
+                    if (e.code === 'KeyR') {
+                        this.reset();
+                    }
+                });
+                
+                document.addEventListener('keyup', (e) => {
+                    this.keys[e.code] = false;
+                });
+                
+                document.addEventListener('click', () => {
+                    this.renderer.domElement.requestPointerLock();
+                });
+                
+                document.addEventListener('pointerlockchange', () => {
+                    this.mouse.locked = document.pointerLockElement === this.renderer.domElement;
+                });
+                
+                document.addEventListener('mousemove', (e) => {
+                    if (this.mouse.locked && !this.gameOver) {
+                        this.player.rotation.y -= e.movementX * 0.002;
+                        this.player.rotation.x -= e.movementY * 0.002;
+                        this.player.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, this.player.rotation.x));
+                    }
+                });
+                
+                window.addEventListener('resize', () => {
+                    this.camera.aspect = window.innerWidth / window.innerHeight;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(window.innerWidth, window.innerHeight);
+                });
+            }
+            
+            jump() {
+                if (this.gameOver) return;
+                
+                if (this.player.onCube || this.player.coyoteTime > 0) {
+                    this.player.velocity.y = this.player.jumpPower;
+                    this.player.onCube = null;
+                    this.player.coyoteTime = 0;
+                }
+            }
+            
+            reset() {
+                this.gameOver = false;
+                this.player.position.set(0, 2, 0);
+                this.player.velocity.set(0, 0, 0);
+                this.player.rotation.x = 0;
+                this.player.rotation.y = 0;
+                this.player.onCube = null;
+                this.player.coyoteTime = 0;
+                this.distance = 0;
+                this.cubesReached = 0;
+                
+                // Reset all cubes
+                this.floatingCubes.forEach(cube => {
+                    cube.userData.touched = false;
+                    cube.userData.disappearTimer = 0;
+                    cube.visible = true;
+                });
+                
+                document.getElementById('gameOver').style.display = 'none';
+                this.updateUI();
+            }
+            
+            updatePlayer(deltaTime) {
+                if (this.gameOver) return;
+                
+                // Handle movement input
+                const moveVector = new THREE.Vector3();
+                
+                if (this.keys['KeyW']) moveVector.z -= 1;
+                if (this.keys['KeyS']) moveVector.z += 1;
+                if (this.keys['KeyA']) moveVector.x -= 1;
+                if (this.keys['KeyD']) moveVector.x += 1;
+                
+                // Apply rotation to movement
+                if (moveVector.length() > 0) {
+                    moveVector.normalize();
+                    moveVector.multiplyScalar(this.player.speed * deltaTime);
+                    
+                    const rotationMatrix = new THREE.Matrix4();
+                    rotationMatrix.makeRotationY(this.player.rotation.y);
+                    moveVector.applyMatrix4(rotationMatrix);
+                    
+                    this.player.position.add(moveVector);
+                }
+                
+                // Update coyote time
+                if (this.player.coyoteTime > 0) {
+                    this.player.coyoteTime -= deltaTime;
+                }
+                
+                // Apply gravity
+                this.player.velocity.y -= 25 * deltaTime;
+                this.player.position.y += this.player.velocity.y * deltaTime;
+                
+                // Check for falling into void
+                if (this.player.position.y < this.voidY) {
+                    this.endGame();
+                }
+                
+                // Update camera
+                this.camera.position.copy(this.player.position);
+                this.camera.position.y += 1.6;
+                this.camera.rotation.x = this.player.rotation.x;
+                this.camera.rotation.y = this.player.rotation.y;
+                
+                // Update stats
+                this.distance = Math.max(this.distance, Math.sqrt(this.player.position.x * this.player.position.x + this.player.position.z * this.player.position.z));
+                this.updateUI();
+            }
+            
+            updateCubes(deltaTime) {
+                this.floatingCubes.forEach(cube => {
+                    // Animate unstable cubes
+                    if (!cube.userData.stable && cube.userData.floatSpeed) {
+                        cube.position.y = cube.userData.startY + Math.sin(Date.now() * 0.001 * cube.userData.floatSpeed) * cube.userData.floatRange;
+                        if (cube.userData.rotationSpeed) {
+                            cube.rotation.y += cube.userData.rotationSpeed;
+                        }
+                    }
+                    
+                    // Handle disappearing cubes
+                    if (cube.userData.touched && !cube.userData.stable) {
+                        cube.userData.disappearTimer += deltaTime;
+                        if (cube.userData.disappearTimer > 3) {
+                            cube.visible = false;
+                        } else if (cube.userData.disappearTimer > 1) {
+                            // Start flashing
+                            cube.visible = Math.sin(cube.userData.disappearTimer * 10) > 0;
+                        }
+                    }
+                });
+            }
+            
+            checkCubeCollisions() {
+                if (this.gameOver) return;
+                
+                const playerBox = new THREE.Box3().setFromCenterAndSize(
+                    this.player.position,
+                    new THREE.Vector3(0.8, 1.8, 0.8)
+                );
+                
+                let onAnyCube = false;
+                
+                this.floatingCubes.forEach(cube => {
+                    if (!cube.visible) return;
+                    
+                    const cubeBox = new THREE.Box3().setFromObject(cube);
+                    
+                    // Check if player is on top of cube
+                    if (playerBox.intersectsBox(cubeBox)) {
+                        const cubeTop = cubeBox.max.y;
+                        const playerBottom = playerBox.min.y;
+                        
+                        // Player is landing on top of cube
+                        if (this.player.velocity.y <= 0 && playerBottom <= cubeTop + 0.1) {
+                            this.player.position.y = cubeTop + 0.9;
+                            this.player.velocity.y = 0;
+                            this.player.onCube = cube;
+                            this.player.coyoteTime = this.player.maxCoyoteTime;
+                            onAnyCube = true;
+                            
+                            // Mark cube as touched
+                            if (!cube.userData.touched) {
+                                cube.userData.touched = true;
+                                if (cube.userData.type === 'platform' && !cube.userData.safe) {
+                                    this.cubesReached++;
+                                }
+                            }
+                        }
+                    }
+                });
+                
+                if (!onAnyCube) {
+                    this.player.onCube = null;
+                }
+            }
+            
+            endGame() {
+                this.gameOver = true;
+                document.getElementById('gameOver').style.display = 'block';
+            }
+            
+            updateUI() {
+                document.getElementById('distance').textContent = Math.floor(this.distance);
+                document.getElementById('height').textContent = Math.floor(Math.max(0, this.player.position.y));
+                document.getElementById('cubes').textContent = this.cubesReached;
+            }
+            
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                
+                const deltaTime = this.clock.getDelta();
+                
+                this.updatePlayer(deltaTime);
+                this.updateCubes(deltaTime);
+                this.checkCubeCollisions();
+                
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+        
+        // Start the game
+        const game = new FloatingCubePlatformer();
+    </script>
+</body>
+</html>
