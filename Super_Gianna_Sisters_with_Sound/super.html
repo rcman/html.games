@@ -1,0 +1,938 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Super Gianna Sisters</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #202028;
+            color: white;
+            font-family: 'Press Start 2P', cursive;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            max-width: 800px;
+            max-height: 600px;
+            background: #5c94fc; /* Sky blue */
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            overflow: hidden;
+        }
+
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            image-rendering: pixelated;
+        }
+
+        /* UI Overlays */
+        #ui-layer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 20px;
+            box-sizing: border-box;
+        }
+
+        .hud-top {
+            display: flex;
+            justify-content: space-between;
+            text-shadow: 2px 2px 0 #000;
+            font-size: 16px;
+        }
+
+        #start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            pointer-events: auto;
+            text-align: center;
+        }
+
+        h1 {
+            color: #ffcc00;
+            text-shadow: 4px 4px 0 #b35900;
+            font-size: 32px;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .btn {
+            background: #e60012;
+            color: white;
+            border: 4px solid white;
+            padding: 15px 30px;
+            font-family: inherit;
+            font-size: 16px;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 4px 4px 0 #8b0000;
+            transition: transform 0.1s;
+        }
+
+        .btn:active {
+            transform: translate(2px, 2px);
+            box-shadow: 2px 2px 0 #8b0000;
+        }
+
+        /* Mobile Controls */
+        #mobile-controls {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            width: 100%;
+            height: 120px;
+            display: none; /* Hidden by default, shown via JS */
+            pointer-events: none;
+            padding: 0 20px;
+            box-sizing: border-box;
+        }
+
+        .d-pad {
+            position: absolute;
+            bottom: 10px;
+            left: 20px;
+            width: 120px;
+            height: 120px;
+            pointer-events: auto;
+        }
+
+        .action-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 80px;
+            height: 80px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            pointer-events: auto;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 24px;
+            color: white;
+            user-select: none;
+        }
+
+        .action-btn:active, .d-pad-btn:active {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        .d-pad-row {
+            display: flex;
+            justify-content: center;
+            height: 33%;
+        }
+        
+        .d-pad-btn {
+            width: 33%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.2);
+            border: 1px solid rgba(255,255,255,0.3);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .instructions {
+            margin-top: 20px;
+            font-size: 12px;
+            color: #ccc;
+            line-height: 1.6;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="game-container">
+    <canvas id="gameCanvas"></canvas>
+    
+    <div id="ui-layer">
+        <div class="hud-top">
+            <div id="score-display">SCORE: 00000</div>
+            <div id="time-display">TIME: 300</div>
+            <div id="diamonds-display">DIAMONDS: 0</div>
+        </div>
+    </div>
+
+    <div id="mobile-controls">
+        <div class="d-pad">
+            <div class="d-pad-row">
+                <div class="d-pad-btn" style="visibility: hidden;"></div>
+                <div class="d-pad-btn" id="btn-up">▲</div>
+                <div class="d-pad-btn" style="visibility: hidden;"></div>
+            </div>
+            <div class="d-pad-row">
+                <div class="d-pad-btn" id="btn-left">◀</div>
+                <div class="d-pad-btn" style="visibility: hidden;"></div>
+                <div class="d-pad-btn" id="btn-right">▶</div>
+            </div>
+            <div class="d-pad-row">
+                <div class="d-pad-btn" style="visibility: hidden;"></div>
+                <div class="d-pad-btn" id="btn-down">▼</div>
+                <div class="d-pad-btn" style="visibility: hidden;"></div>
+            </div>
+        </div>
+        <div class="action-btn" id="btn-jump">J</div>
+    </div>
+
+    <div id="start-screen">
+        <h1>SUPER<br>GIANNA SISTERS</h1>
+        <button class="btn" id="start-btn">START GAME</button>
+        <div class="instructions">
+            Desktop: Arrows/WASD to Move, Space to Jump<br>
+            Mobile: Use On-screen Controls<br>
+            Enable Audio for Full Experience!
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * AUDIO ENGINE (Web Audio API)
+ * Synthesizes retro sounds and music in real-time.
+ */
+const AudioEngine = {
+    ctx: null,
+    masterGain: null,
+    bgmOscillators: [],
+    isPlaying: false,
+    tempo: 120,
+    noteTime: 0,
+    
+    init() {
+        window.AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioContext();
+        this.masterGain = this.ctx.createGain();
+        this.masterGain.gain.value = 0.3; // Master volume
+        this.masterGain.connect(this.ctx.destination);
+    },
+
+    playTone(freq, type, duration, time, vol = 0.5) {
+        if (!this.ctx) return;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, time);
+        
+        gain.gain.setValueAtTime(vol, time);
+        gain.gain.exponentialRampToValueAtTime(0.01, time + duration);
+
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        
+        osc.start(time);
+        osc.stop(time + duration);
+    },
+
+    playNoise(duration, time) {
+        if (!this.ctx) return;
+        const bufferSize = this.ctx.sampleRate * duration;
+        const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1;
+        }
+
+        const noise = this.ctx.createBufferSource();
+        noise.buffer = buffer;
+        const gain = this.ctx.createGain();
+        
+        // Bandpass filter for snare/hi-hat feel
+        const filter = this.ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 1000;
+
+        gain.gain.setValueAtTime(0.1, time);
+        gain.gain.exponentialRampToValueAtTime(0.001, time + duration);
+
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(this.masterGain);
+        noise.start(time);
+    },
+
+    // SFX Methods
+    sfxJump() {
+        if(!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(150, t);
+        osc.frequency.linearRampToValueAtTime(300, t + 0.1);
+        gain.gain.setValueAtTime(0.1, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.1);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(t);
+        osc.stop(t + 0.1);
+    },
+
+    sfxCoin() {
+        if(!this.ctx) return;
+        const t = this.ctx.currentTime;
+        this.playTone(987.77, 'sine', 0.1, t, 0.2); // B5
+        this.playTone(1318.51, 'sine', 0.3, t + 0.05, 0.2); // E6
+    },
+
+    sfxDie() {
+        if(!this.ctx) return;
+        const t = this.ctx.currentTime;
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(200, t);
+        osc.frequency.linearRampToValueAtTime(50, t + 0.5);
+        gain.gain.setValueAtTime(0.2, t);
+        gain.gain.linearRampToValueAtTime(0, t + 0.5);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(t);
+        osc.stop(t + 0.5);
+    },
+
+    // Music Sequencer
+    startMusic() {
+        if (!this.ctx || this.isPlaying) return;
+        this.isPlaying = true;
+        this.noteTime = this.ctx.currentTime + 0.1;
+        this.schedule();
+    },
+
+    schedule() {
+        if (!this.isPlaying) return;
+        
+        const lookahead = 25.0; // ms
+        const scheduleAheadTime = 0.1; // s
+
+        while (this.noteTime < this.ctx.currentTime + scheduleAheadTime) {
+            this.playStep(this.noteTime);
+            this.noteTime += (60.0 / this.tempo) / 2; // Eighth notes
+        }
+        
+        setTimeout(() => this.schedule(), lookahead);
+    },
+
+    stepIndex: 0,
+    playStep(time) {
+        // Simple C Major Progression: C - G - Am - F
+        // Melody notes (Hz)
+        const C4=261.63, D4=293.66, E4=329.63, F4=349.23, G4=392.00, A4=440.00, B4=493.88, C5=523.25;
+        
+        // 16-step pattern loop
+        const melody = [
+            E4, null, E4, null, C4, E4, null, G4,
+            null, null, G4, null, null, null, null, null
+        ];
+        
+        const bass = [
+            C4, C4, G4, G4, A4, A4, F4, F4,
+            C4, C4, G4, G4, A4, A4, F4, F4
+        ];
+
+        const idx = this.stepIndex % 16;
+
+        // Bass
+        if (idx % 2 === 0) { // Quarter notes
+            // Simple arpeggio bass logic
+            let bassNote = bass[idx] / 2; // Lower octave
+            this.playTone(bassNote, 'triangle', 0.2, time, 0.3);
+        }
+
+        // Melody
+        if (melody[idx]) {
+            this.playTone(melody[idx], 'square', 0.1, time, 0.15);
+        }
+
+        // Drums
+        if (idx % 4 === 0) {
+            // Kick
+             this.playTone(100, 'sine', 0.1, time, 0.5);
+        } else if (idx % 4 === 2) {
+            // Snare
+            this.playNoise(0.1, time);
+        }
+
+        this.stepIndex++;
+    }
+};
+
+/**
+ * GAME ENGINE
+ */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Game Constants
+const TILE_SIZE = 32;
+const GRAVITY = 0.8;
+const MAX_SPEED = 6;
+const JUMP_FORCE = -14;
+const ACCEL = 0.5;
+const FRICTION = 0.8;
+
+// Input State
+const keys = { ArrowUp: false, ArrowDown: false, ArrowLeft: false, ArrowRight: false, Space: false, KeyW: false, KeyA: false, KeyS: false, KeyD: false };
+
+// Game State
+let gameState = {
+    running: false,
+    score: 0,
+    diamonds: 0,
+    timeLeft: 300,
+    camera: { x: 0, y: 0 },
+    entities: [],
+    particles: []
+};
+
+// Map Data (0: Empty, 1: Ground, 2: Brick, 3: ? Block, 4: Hard Block)
+// Generating a procedural-ish level for length
+const mapWidth = 200;
+const mapHeight = 15;
+let levelMap = [];
+
+function generateLevel() {
+    levelMap = [];
+    for(let y=0; y<mapHeight; y++) {
+        let row = [];
+        for(let x=0; x<mapWidth; x++) {
+            if (y > 12) row.push(1); // Floor
+            else row.push(0);
+        }
+        levelMap.push(row);
+    }
+
+    // Add features
+    for(let x=10; x<mapWidth-10; x++) {
+        // Pits
+        if (Math.random() < 0.1 && x > 15) {
+            levelMap[13][x] = 0;
+            levelMap[14][x] = 0;
+            x += 2; // Gap width
+            continue;
+        }
+
+        // Platforms
+        if (Math.random() < 0.2) {
+            let h = 9;
+            levelMap[h][x] = 2;
+            levelMap[h][x+1] = 2;
+            levelMap[h][x+2] = 3; // ? block
+            levelMap[h][x+3] = 2;
+            
+            // Enemy on top?
+            if(Math.random() < 0.5) {
+                gameState.entities.push(new Enemy((x+1)*TILE_SIZE, (h-1)*TILE_SIZE, 'punk'));
+            }
+        }
+
+        // Pipes/Walls
+        if (Math.random() < 0.05 && x > 20) {
+            levelMap[12][x] = 4;
+            levelMap[11][x] = 4;
+            levelMap[10][x] = 4;
+        }
+    }
+    
+    // Castle/End
+    for(let y=12; y>8; y--) {
+        for(let x=mapWidth-10; x<mapWidth-5; x++) {
+            levelMap[y][x] = 4;
+        }
+    }
+}
+
+// Entity Classes
+class Entity {
+    constructor(x, y, w, h, type) {
+        this.x = x;
+        this.y = y;
+        this.w = w;
+        this.h = h;
+        this.vx = 0;
+        this.vy = 0;
+        this.type = type;
+        this.dead = false;
+        this.grounded = false;
+    }
+
+    draw(ctx, camX, camY) {
+        // Placeholder
+        ctx.fillStyle = 'red';
+        ctx.fillRect(this.x - camX, this.y - camY, this.w, this.h);
+    }
+
+    update() {}
+}
+
+class Player extends Entity {
+    constructor(x, y) {
+        super(x, y, 24, 30, 'player');
+        this.facingRight = true;
+        this.animFrame = 0;
+        this.invincible = 0;
+    }
+
+    update() {
+        // Input
+        const left = keys.ArrowLeft || keys.KeyA;
+        const right = keys.ArrowRight || keys.KeyD;
+        const jump = keys.ArrowUp || keys.Space || keys.KeyW;
+
+        if (left) { this.vx -= ACCEL; this.facingRight = false; }
+        if (right) { this.vx += ACCEL; this.facingRight = true; }
+        
+        // Friction
+        if (!left && !right) this.vx *= FRICTION;
+
+        // Limits
+        if (this.vx > MAX_SPEED) this.vx = MAX_SPEED;
+        if (this.vx < -MAX_SPEED) this.vx = -MAX_SPEED;
+
+        // Jump
+        if (jump && this.grounded) {
+            this.vy = JUMP_FORCE;
+            this.grounded = false;
+            AudioEngine.sfxJump();
+        }
+
+        // Gravity
+        this.vy += GRAVITY;
+
+        // Apply Velocity
+        this.x += this.vx;
+        this.checkCollision(true); // Horizontal
+        this.y += this.vy;
+        this.checkCollision(false); // Vertical
+
+        // Pits
+        if (this.y > mapHeight * TILE_SIZE) {
+            die();
+        }
+
+        // Animation
+        if (Math.abs(this.vx) > 0.5) this.animFrame += 0.2;
+        
+        // Invincibility
+        if (this.invincible > 0) this.invincible--;
+    }
+
+    checkCollision(horizontal) {
+        // Simple AABB vs Tilemap
+        const startX = Math.floor(this.x / TILE_SIZE);
+        const endX = Math.floor((this.x + this.w) / TILE_SIZE);
+        const startY = Math.floor(this.y / TILE_SIZE);
+        const endY = Math.floor((this.y + this.h) / TILE_SIZE);
+
+        for (let y = startY; y <= endY; y++) {
+            for (let x = startX; x <= endX; x++) {
+                if (y < 0 || y >= mapHeight || x < 0 || x >= mapWidth) continue;
+                const tile = levelMap[y][x];
+                
+                if (tile !== 0) {
+                    if (horizontal) {
+                        if (this.vx > 0) this.x = x * TILE_SIZE - this.w - 0.1;
+                        else if (this.vx < 0) this.x = (x + 1) * TILE_SIZE + 0.1;
+                        this.vx = 0;
+                    } else {
+                        if (this.vy > 0) { // Landing
+                            this.y = y * TILE_SIZE - this.h - 0.1;
+                            this.grounded = true;
+                            this.vy = 0;
+                        } else if (this.vy < 0) { // Hitting head
+                            this.y = (y + 1) * TILE_SIZE + 0.1;
+                            this.vy = 0;
+                            // Block interaction
+                            if (tile === 2) { // Breakable brick
+                                levelMap[y][x] = 0;
+                                createParticles(x * TILE_SIZE, y * TILE_SIZE, '#a05040');
+                            } else if (tile === 3) { // ? Block
+                                levelMap[y][x] = 4; // Turn to hard block
+                                spawnItem(x, y - 1);
+                                AudioEngine.sfxCoin();
+                            }
+                        }
+                    }
+                    return;
+                }
+            }
+        }
+        if(!horizontal && this.vy > 0) this.grounded = false; // Falling
+    }
+
+    draw(ctx, camX, camY) {
+        if (this.invincible > 0 && Math.floor(Date.now() / 50) % 2 === 0) return;
+
+        ctx.save();
+        ctx.translate(Math.floor(this.x - camX), Math.floor(this.y - camY));
+        if (!this.facingRight) {
+            ctx.translate(this.w, 0);
+            ctx.scale(-1, 1);
+        }
+
+        // Draw Gianna (Punk Style)
+        // Hair
+        ctx.fillStyle = '#ffcc00'; 
+        ctx.beginPath();
+        ctx.moveTo(0, 0); ctx.lineTo(24, 5); ctx.lineTo(0, 10); ctx.fill();
+        
+        // Face
+        ctx.fillStyle = '#ffccaa';
+        ctx.fillRect(4, 5, 16, 14);
+        
+        // Eye
+        ctx.fillStyle = 'black';
+        ctx.fillRect(14, 8, 2, 4);
+
+        // Body
+        ctx.fillStyle = '#e60012'; // Red shirt
+        ctx.fillRect(6, 18, 12, 8);
+        
+        // Pants
+        ctx.fillStyle = '#333'; // Dark jeans
+        ctx.fillRect(6, 26, 12, 4);
+
+        // Legs (animate)
+        if (Math.abs(this.vx) > 0.5 && !this.grounded === false) {
+             const runOffset = Math.sin(this.animFrame) * 4;
+             ctx.fillRect(4 + runOffset, 28, 4, 4); // Back leg
+             ctx.fillRect(14 - runOffset, 28, 4, 4); // Front leg
+        } else {
+            ctx.fillRect(6, 28, 4, 4);
+            ctx.fillRect(14, 28, 4, 4);
+        }
+
+        ctx.restore();
+    }
+}
+
+class Enemy extends Entity {
+    constructor(x, y) {
+        super(x, y, 24, 24, 'enemy');
+        this.vx = -2;
+    }
+
+    update() {
+        this.vy += GRAVITY;
+        this.x += this.vx;
+        
+        // Simple wall collision turnaround
+        let tx = Math.floor((this.x + (this.vx > 0 ? this.w : 0)) / TILE_SIZE);
+        let ty = Math.floor((this.y + 10) / TILE_SIZE);
+        
+        if (levelMap[ty] && levelMap[ty][tx] !== 0) {
+             this.vx *= -1;
+        }
+
+        this.y += this.vy;
+        
+        // Floor collision
+        let fy = Math.floor((this.y + this.h) / TILE_SIZE);
+        let fx = Math.floor((this.x + this.w/2) / TILE_SIZE);
+        if (levelMap[fy] && levelMap[fy][fx] !== 0) {
+            this.y = fy * TILE_SIZE - this.h;
+            this.vy = 0;
+        }
+    }
+
+    draw(ctx, camX, camY) {
+        const x = Math.floor(this.x - camX);
+        const y = Math.floor(this.y - camY);
+        
+        // Draw Punk Owl Ball
+        ctx.fillStyle = '#aa00cc'; // Purple
+        ctx.beginPath();
+        ctx.arc(x + 12, y + 12, 12, 0, Math.PI * 2);
+        ctx.fill();
+        
+        // Eyes
+        ctx.fillStyle = 'white';
+        ctx.fillRect(x + 4, y + 6, 6, 6);
+        ctx.fillRect(x + 14, y + 6, 6, 6);
+        ctx.fillStyle = 'black';
+        ctx.fillRect(x + 6, y + 8, 2, 2);
+        ctx.fillRect(x + 16, y + 8, 2, 2);
+        
+        // Beak
+        ctx.fillStyle = 'orange';
+        ctx.beginPath();
+        ctx.moveTo(x+10, y+16); ctx.lineTo(x+14, y+16); ctx.lineTo(x+12, y+20);
+        ctx.fill();
+        
+        // Mohawk
+        ctx.fillStyle = '#00ff00';
+        ctx.fillRect(x+10, y-4, 4, 6);
+    }
+}
+
+class Item extends Entity {
+    constructor(x, y) {
+        super(x, y, 20, 20, 'diamond');
+        this.initialY = y;
+        this.floatOffset = 0;
+    }
+    
+    update() {
+        this.floatOffset += 0.1;
+        this.y = this.initialY + Math.sin(this.floatOffset) * 5;
+    }
+
+    draw(ctx, camX, camY) {
+        const x = this.x - camX;
+        const y = this.y - camY;
+        
+        ctx.fillStyle = '#00ffff';
+        ctx.beginPath();
+        ctx.moveTo(x+10, y);
+        ctx.lineTo(x+20, y+10);
+        ctx.lineTo(x+10, y+20);
+        ctx.lineTo(x, y+10);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillRect(x+8, y+5, 4, 4);
+    }
+}
+
+// Particle System
+function createParticles(x, y, color) {
+    for(let i=0; i<4; i++) {
+        gameState.particles.push({
+            x: x + 16, y: y + 16,
+            vx: (Math.random() - 0.5) * 10,
+            vy: (Math.random() - 0.5) * 10,
+            life: 30,
+            color: color
+        });
+    }
+}
+
+function updateParticles() {
+    for(let i = gameState.particles.length - 1; i >= 0; i--) {
+        let p = gameState.particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vy += GRAVITY;
+        p.life--;
+        if(p.life <= 0) gameState.particles.splice(i, 1);
+    }
+}
+
+function drawParticles(ctx, camX, camY) {
+    gameState.particles.forEach(p => {
+        ctx.fillStyle = p.color;
+        ctx.fillRect(p.x - camX, p.y - camY, 6, 6);
+    });
+}
+
+// Game Logic Helpers
+function spawnItem(tx, ty) {
+    gameState.entities.push(new Item(tx * TILE_SIZE + 6, ty * TILE_SIZE + 6));
+}
+
+function die() {
+    AudioEngine.sfxDie();
+    resetGame();
+}
+
+function resetGame() {
+    player = new Player(50, 200);
+    gameState.entities = [];
+    gameState.camera.x = 0;
+    generateLevel();
+}
+
+// Main Game Loop
+let player;
+let lastTime = 0;
+
+function init() {
+    // Resize handling
+    function resize() {
+        canvas.width = document.getElementById('game-container').offsetWidth;
+        canvas.height = document.getElementById('game-container').offsetHeight;
+        
+        // Show mobile controls on touch devices
+        if ('ontouchstart' in window || navigator.maxTouchPoints) {
+            document.getElementById('mobile-controls').style.display = 'block';
+        }
+    }
+    window.addEventListener('resize', resize);
+    resize();
+    
+    // Bind Inputs
+    window.addEventListener('keydown', e => {
+        if(keys.hasOwnProperty(e.code)) keys[e.code] = true;
+    });
+    window.addEventListener('keyup', e => {
+        if(keys.hasOwnProperty(e.code)) keys[e.code] = false;
+    });
+
+    // Touch Inputs
+    const bindTouch = (id, code) => {
+        const el = document.getElementById(id);
+        el.addEventListener('touchstart', (e) => { e.preventDefault(); keys[code] = true; });
+        el.addEventListener('touchend', (e) => { e.preventDefault(); keys[code] = false; });
+    };
+    bindTouch('btn-left', 'ArrowLeft');
+    bindTouch('btn-right', 'ArrowRight');
+    bindTouch('btn-up', 'ArrowUp');
+    bindTouch('btn-jump', 'Space');
+
+    document.getElementById('start-btn').addEventListener('click', () => {
+        AudioEngine.init();
+        AudioEngine.startMusic();
+        document.getElementById('start-screen').style.display = 'none';
+        resetGame();
+        gameState.running = true;
+        requestAnimationFrame(loop);
+    });
+}
+
+function loop(timestamp) {
+    if (!gameState.running) return;
+    const dt = timestamp - lastTime;
+    lastTime = timestamp;
+
+    // Update
+    player.update();
+    gameState.entities.forEach(e => e.update());
+    
+    // Entity Collision
+    for (let i = gameState.entities.length - 1; i >= 0; i--) {
+        let e = gameState.entities[i];
+        if (rectIntersect(player.x, player.y, player.w, player.h, e.x, e.y, e.w, e.h)) {
+            if (e.type === 'enemy') {
+                // Stomp logic
+                if (player.vy > 0 && player.y + player.h < e.y + e.h / 2) {
+                    player.vy = -8; // Bounce
+                    e.dead = true;
+                    gameState.score += 100;
+                    AudioEngine.playNoise(0.05, AudioEngine.ctx.currentTime);
+                } else if (player.invincible === 0) {
+                    die();
+                    return; // Stop frame
+                }
+            } else if (e.type === 'diamond') {
+                e.dead = true;
+                gameState.diamonds++;
+                gameState.score += 500;
+                AudioEngine.sfxCoin();
+            }
+        }
+    }
+    
+    gameState.entities = gameState.entities.filter(e => !e.dead);
+    updateParticles();
+
+    // Camera
+    gameState.camera.x = player.x - canvas.width / 2;
+    // Clamp camera
+    if (gameState.camera.x < 0) gameState.camera.x = 0;
+    if (gameState.camera.x > (mapWidth * TILE_SIZE) - canvas.width) gameState.camera.x = (mapWidth * TILE_SIZE) - canvas.width;
+
+    // Render
+    ctx.fillStyle = '#5c94fc';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    const camX = Math.floor(gameState.camera.x);
+    const camY = gameState.camera.y;
+
+    // Draw Map
+    const startCol = Math.floor(camX / TILE_SIZE);
+    const endCol = startCol + (canvas.width / TILE_SIZE) + 1;
+
+    for (let y = 0; y < mapHeight; y++) {
+        for (let x = startCol; x <= endCol; x++) {
+            if (x >= 0 && x < mapWidth) {
+                const tile = levelMap[y][x];
+                const dX = Math.floor(x * TILE_SIZE - camX);
+                const dY = Math.floor(y * TILE_SIZE - camY);
+
+                if (tile === 1) {
+                    // Ground
+                    ctx.fillStyle = '#804000';
+                    ctx.fillRect(dX, dY, TILE_SIZE, TILE_SIZE);
+                    ctx.fillStyle = '#5c2e00';
+                    ctx.fillRect(dX + 4, dY + 4, TILE_SIZE - 8, TILE_SIZE - 8);
+                } else if (tile === 2) {
+                    // Brick
+                    ctx.fillStyle = '#b85c00';
+                    ctx.fillRect(dX, dY, TILE_SIZE, TILE_SIZE);
+                    ctx.fillStyle = 'black';
+                    ctx.strokeRect(dX, dY, TILE_SIZE, TILE_SIZE);
+                    ctx.beginPath();
+                    ctx.moveTo(dX, dY+16); ctx.lineTo(dX+32, dY+16);
+                    ctx.stroke();
+                } else if (tile === 3) {
+                    // ? Block
+                    ctx.fillStyle = '#ffd700';
+                    ctx.fillRect(dX, dY, TILE_SIZE, TILE_SIZE);
+                    ctx.fillStyle = 'black';
+                    ctx.font = '20px sans-serif';
+                    ctx.fillText('?', dX + 10, dY + 24);
+                } else if (tile === 4) {
+                    // Hard Block
+                    ctx.fillStyle = '#555';
+                    ctx.fillRect(dX, dY, TILE_SIZE, TILE_SIZE);
+                    ctx.strokeStyle = '#333';
+                    ctx.strokeRect(dX, dY, TILE_SIZE, TILE_SIZE);
+                }
+            }
+        }
+    }
+
+    // Draw Entities
+    gameState.entities.forEach(e => e.draw(ctx, camX, camY));
+    player.draw(ctx, camX, camY);
+    drawParticles(ctx, camX, camY);
+
+    // Update HUD
+    document.getElementById('score-display').innerText = `SCORE: ${gameState.score.toString().padStart(5, '0')}`;
+    document.getElementById('diamonds-display').innerText = `DIAMONDS: ${gameState.diamonds}`;
+    
+    requestAnimationFrame(loop);
+}
+
+function rectIntersect(x1, y1, w1, h1, x2, y2, w2, h2) {
+    return x2 < x1 + w1 && x2 + w2 > x1 && y2 < y1 + h1 && y2 + h2 > y1;
+}
+
+// Start
+init();
+
+</script>
+</body>
+</html>
