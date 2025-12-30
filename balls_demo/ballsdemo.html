@@ -1,0 +1,361 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Falling Balls Physics Demo</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        
+        canvas {
+            border: 3px solid #fff;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            background: #000;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        button {
+            background: #4CAF50;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            margin: 0 10px;
+            border-radius: 25px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            background: #45a049;
+            transform: translateY(-2px);
+        }
+        
+        .info {
+            color: white;
+            margin-top: 15px;
+            font-size: 18px;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        }
+        
+        .score {
+            font-size: 24px;
+            font-weight: bold;
+            color: #ffd700;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="800" height="600"></canvas>
+    
+    <div class="controls">
+        <button onclick="addBall()">Add Ball</button>
+        <button onclick="clearBalls()">Clear All</button>
+        <button onclick="togglePause()">Pause/Resume</button>
+    </div>
+    
+    <div class="info">
+        <div class="score">Score: <span id="score">0</span></div>
+        <div>Balls: <span id="ballCount">0</span> | Groups Cleared: <span id="groupsCleared">0</span></div>
+        <div style="font-size: 14px; margin-top: 10px;">
+            4+ balls of the same color touching will disappear!
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Game state
+        let balls = [];
+        let isPaused = false;
+        let score = 0;
+        let groupsCleared = 0;
+        
+        // Physics constants
+        const GRAVITY = 0.5;
+        const BOUNCE_DAMPING = 0.8;
+        const FRICTION = 0.99;
+        const BALL_RADIUS = 25;
+        
+        // Colors
+        const COLORS = ['#FF4444', '#4444FF', '#8844FF', '#FFFF44']; // Red, Blue, Purple, Yellow
+        
+        class Ball {
+            constructor(x, y, color) {
+                this.x = x;
+                this.y = y;
+                this.vx = (Math.random() - 0.5) * 4;
+                this.vy = Math.random() * 2 + 1;
+                this.radius = BALL_RADIUS;
+                this.color = color;
+                this.id = Math.random();
+                this.isMarkedForRemoval = false;
+            }
+            
+            update() {
+                if (isPaused) return;
+                
+                // Apply gravity
+                this.vy += GRAVITY;
+                
+                // Update position
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // Apply friction
+                this.vx *= FRICTION;
+                
+                // Bounce off walls
+                if (this.x - this.radius <= 0 || this.x + this.radius >= canvas.width) {
+                    this.vx = -this.vx * BOUNCE_DAMPING;
+                    this.x = Math.max(this.radius, Math.min(canvas.width - this.radius, this.x));
+                }
+                
+                // Bounce off floor
+                if (this.y + this.radius >= canvas.height) {
+                    this.vy = -this.vy * BOUNCE_DAMPING;
+                    this.y = canvas.height - this.radius;
+                    
+                    // Stop very small bounces
+                    if (Math.abs(this.vy) < 1) {
+                        this.vy = 0;
+                    }
+                }
+                
+                // Collision with other balls
+                balls.forEach(other => {
+                    if (other !== this && !other.isMarkedForRemoval && !this.isMarkedForRemoval) {
+                        const dx = other.x - this.x;
+                        const dy = other.y - this.y;
+                        const distance = Math.sqrt(dx * dx + dy * dy);
+                        
+                        if (distance < this.radius + other.radius) {
+                            // Collision response
+                            const angle = Math.atan2(dy, dx);
+                            const sin = Math.sin(angle);
+                            const cos = Math.cos(angle);
+                            
+                            // Rotate velocities
+                            const vx1 = this.vx * cos + this.vy * sin;
+                            const vy1 = this.vy * cos - this.vx * sin;
+                            const vx2 = other.vx * cos + other.vy * sin;
+                            const vy2 = other.vy * cos - other.vx * sin;
+                            
+                            // Swap x velocities
+                            const finalVx1 = vx2;
+                            const finalVx2 = vx1;
+                            
+                            // Rotate back
+                            this.vx = finalVx1 * cos - vy1 * sin;
+                            this.vy = vy1 * cos + finalVx1 * sin;
+                            other.vx = finalVx2 * cos - vy2 * sin;
+                            other.vy = vy2 * cos + finalVx2 * sin;
+                            
+                            // Separate balls
+                            const overlap = (this.radius + other.radius) - distance;
+                            const separateX = cos * overlap * 0.5;
+                            const separateY = sin * overlap * 0.5;
+                            
+                            this.x -= separateX;
+                            this.y -= separateY;
+                            other.x += separateX;
+                            other.y += separateY;
+                        }
+                    }
+                });
+            }
+            
+            draw() {
+                // Ball shadow
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+                ctx.beginPath();
+                ctx.arc(this.x + 3, this.y + 3, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Ball
+                const gradient = ctx.createRadialGradient(
+                    this.x - this.radius * 0.3, this.y - this.radius * 0.3, 0,
+                    this.x, this.y, this.radius
+                );
+                gradient.addColorStop(0, this.color);
+                gradient.addColorStop(1, this.darkenColor(this.color, 0.4));
+                
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Highlight
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
+                ctx.beginPath();
+                ctx.arc(this.x - this.radius * 0.3, this.y - this.radius * 0.3, this.radius * 0.3, 0, Math.PI * 2);
+                ctx.fill();
+                
+                // Border
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, this.radius, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            
+            darkenColor(color, factor) {
+                const hex = color.replace('#', '');
+                const r = parseInt(hex.substr(0, 2), 16);
+                const g = parseInt(hex.substr(2, 2), 16);
+                const b = parseInt(hex.substr(4, 2), 16);
+                
+                return `rgb(${Math.floor(r * (1 - factor))}, ${Math.floor(g * (1 - factor))}, ${Math.floor(b * (1 - factor))})`;
+            }
+        }
+        
+        function addBall() {
+            const x = Math.random() * (canvas.width - 100) + 50;
+            const y = -50;
+            const color = COLORS[Math.floor(Math.random() * COLORS.length)];
+            balls.push(new Ball(x, y, color));
+            updateUI();
+        }
+        
+        function clearBalls() {
+            balls = [];
+            updateUI();
+        }
+        
+        function togglePause() {
+            isPaused = !isPaused;
+        }
+        
+        function findConnectedBalls(startBall, visited = new Set()) {
+            if (visited.has(startBall.id) || startBall.isMarkedForRemoval) {
+                return [];
+            }
+            
+            visited.add(startBall.id);
+            let group = [startBall];
+            
+            balls.forEach(other => {
+                if (other !== startBall && !visited.has(other.id) && 
+                    !other.isMarkedForRemoval && other.color === startBall.color) {
+                    
+                    const dx = other.x - startBall.x;
+                    const dy = other.y - startBall.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    // Check if balls are touching (with small tolerance)
+                    if (distance <= (startBall.radius + other.radius) * 1.1) {
+                        const connectedGroup = findConnectedBalls(other, visited);
+                        group = group.concat(connectedGroup);
+                    }
+                }
+            });
+            
+            return group;
+        }
+        
+        function checkForGroups() {
+            const visited = new Set();
+            const groupsToRemove = [];
+            
+            balls.forEach(ball => {
+                if (!visited.has(ball.id) && !ball.isMarkedForRemoval) {
+                    const group = findConnectedBalls(ball, new Set());
+                    group.forEach(b => visited.add(b.id));
+                    
+                    if (group.length >= 4) {
+                        groupsToRemove.push(group);
+                    }
+                }
+            });
+            
+            // Mark balls for removal with animation
+            groupsToRemove.forEach(group => {
+                group.forEach(ball => {
+                    ball.isMarkedForRemoval = true;
+                });
+            });
+            
+            if (groupsToRemove.length > 0) {
+                // Add points
+                groupsToRemove.forEach(group => {
+                    score += group.length * 10;
+                    groupsCleared++;
+                });
+                
+                // Remove marked balls after a short delay for visual effect
+                setTimeout(() => {
+                    balls = balls.filter(ball => !ball.isMarkedForRemoval);
+                    updateUI();
+                }, 300);
+            }
+        }
+        
+        function updateUI() {
+            document.getElementById('score').textContent = score;
+            document.getElementById('ballCount').textContent = balls.length;
+            document.getElementById('groupsCleared').textContent = groupsCleared;
+        }
+        
+        function animate() {
+            // Clear canvas with gradient background
+            const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            gradient.addColorStop(0, '#001122');
+            gradient.addColorStop(1, '#003366');
+            ctx.fillStyle = gradient;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Update and draw balls
+            balls.forEach(ball => {
+                ball.update();
+                
+                // Flash effect for balls marked for removal
+                if (ball.isMarkedForRemoval) {
+                    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+                    ctx.beginPath();
+                    ctx.arc(ball.x, ball.y, ball.radius + 5, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                ball.draw();
+            });
+            
+            // Check for groups periodically
+            if (Math.random() < 0.02) { // Check roughly every 50 frames
+                checkForGroups();
+            }
+            
+            requestAnimationFrame(animate);
+        }
+        
+        // Auto-add balls periodically
+        setInterval(() => {
+            if (!isPaused && balls.length < 15) {
+                addBall();
+            }
+        }, 2000);
+        
+        // Start the animation
+        animate();
+        
+        // Add some initial balls
+        for (let i = 0; i < 3; i++) {
+            setTimeout(() => addBall(), i * 500);
+        }
+    </script>
+</body>
+</html>
