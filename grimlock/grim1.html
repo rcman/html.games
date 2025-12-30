@@ -1,0 +1,714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Dungeon Crawler</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background: #2a2a2a;
+            overflow: hidden;
+            font-family: 'Courier New', monospace;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        
+        #ui {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 140px;
+            background: linear-gradient(to bottom, rgba(50,50,50,0.8), rgba(30,30,30,0.95));
+            border-top: 2px solid #666;
+            display: flex;
+            justify-content: space-around;
+            align-items: center;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        
+        .character-panel {
+            width: 120px;
+            height: 120px;
+            background: rgba(60, 60, 60, 0.9);
+            border: 2px solid #888;
+            border-radius: 4px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 8px;
+            color: #fff;
+            position: relative;
+        }
+        
+        .character-portrait {
+            width: 48px;
+            height: 48px;
+            border-radius: 4px;
+            background: linear-gradient(45deg, #654321, #8B4513);
+            margin-bottom: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            border: 1px solid #999;
+        }
+        
+        .character-name {
+            font-size: 10px;
+            font-weight: bold;
+            margin-bottom: 4px;
+            text-align: center;
+        }
+        
+        .health-bar, .mana-bar {
+            width: 80px;
+            height: 6px;
+            background: #333;
+            border: 1px solid #666;
+            margin-bottom: 2px;
+            position: relative;
+        }
+        
+        .health-fill {
+            height: 100%;
+            background: linear-gradient(to right, #cc0000, #ff3333);
+            transition: width 0.3s;
+        }
+        
+        .mana-fill {
+            height: 100%;
+            background: linear-gradient(to right, #0044cc, #3366ff);
+            transition: width 0.3s;
+        }
+        
+        .character-weapon {
+            position: absolute;
+            bottom: 8px;
+            right: 8px;
+            width: 24px;
+            height: 24px;
+            background: rgba(100, 100, 100, 0.7);
+            border: 1px solid #777;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+        
+        .controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            color: #fff;
+            font-size: 12px;
+            background: rgba(0,0,0,0.7);
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #666;
+        }
+        
+        .inventory-slots {
+            position: absolute;
+            bottom: 150px;
+            right: 10px;
+            display: grid;
+            grid-template-columns: repeat(6, 40px);
+            grid-gap: 2px;
+        }
+        
+        .inventory-slot {
+            width: 40px;
+            height: 40px;
+            background: rgba(60, 60, 60, 0.8);
+            border: 1px solid #888;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #fff;
+        }
+        
+        .spell-slots {
+            position: absolute;
+            bottom: 150px;
+            left: 10px;
+            display: grid;
+            grid-template-columns: repeat(4, 50px);
+            grid-gap: 4px;
+        }
+        
+        .spell-slot {
+            width: 50px;
+            height: 50px;
+            background: rgba(60, 60, 60, 0.8);
+            border: 2px solid #888;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            color: #fff;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        
+        .spell-slot:hover {
+            border-color: #aaa;
+            background: rgba(80, 80, 80, 0.9);
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div class="controls">
+            WASD: Move | Mouse: Look<br>
+            Click: Attack | E: Interact
+        </div>
+        
+        <div class="spell-slots">
+            <div class="spell-slot">🔥</div>
+            <div class="spell-slot">❄️</div>
+            <div class="spell-slot">⚡</div>
+            <div class="spell-slot">🛡️</div>
+        </div>
+        
+        <div class="inventory-slots">
+            <div class="inventory-slot">🗡️</div>
+            <div class="inventory-slot">🏹</div>
+            <div class="inventory-slot">🧪</div>
+            <div class="inventory-slot">💎</div>
+            <div class="inventory-slot">🔑</div>
+            <div class="inventory-slot">📜</div>
+        </div>
+        
+        <div id="ui">
+            <div class="character-panel">
+                <div class="character-portrait">🧙</div>
+                <div class="character-name">Gandor</div>
+                <div class="health-bar"><div class="health-fill" style="width: 85%"></div></div>
+                <div class="mana-bar"><div class="mana-fill" style="width: 70%"></div></div>
+                <div class="character-weapon">🔮</div>
+            </div>
+            
+            <div class="character-panel">
+                <div class="character-portrait">⚔️</div>
+                <div class="character-name">Thorek</div>
+                <div class="health-bar"><div class="health-fill" style="width: 95%"></div></div>
+                <div class="mana-bar"><div class="mana-fill" style="width: 100%"></div></div>
+                <div class="character-weapon">⚔️</div>
+            </div>
+            
+            <div class="character-panel">
+                <div class="character-portrait">🏹</div>
+                <div class="character-name">Lyara</div>
+                <div class="health-bar"><div class="health-fill" style="width: 75%"></div></div>
+                <div class="mana-bar"><div class="mana-fill" style="width: 90%"></div></div>
+                <div class="character-weapon">🏹</div>
+            </div>
+            
+            <div class="character-panel">
+                <div class="character-portrait">✨</div>
+                <div class="character-name">Serana</div>
+                <div class="health-bar"><div class="health-fill" style="width: 80%"></div></div>
+                <div class="mana-bar"><div class="mana-fill" style="width: 95%"></div></div>
+                <div class="character-weapon">⚡</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Game variables
+        let scene, camera, renderer;
+        let player = { x: 1, z: 1, angle: 0 };
+        let enemies = [];
+        let dungeon = [];
+        let moveSpeed = 0.15;
+        
+        // Input handling
+        let keys = {};
+        let mouseX = 0, mouseY = 0;
+        
+        // Initialize the game
+        function init() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x4a3c28);
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100);
+            camera.position.set(1, 1.6, 1);
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.setClearColor(0x4a3c28);
+            document.getElementById('gameContainer').appendChild(renderer.domElement);
+            
+            // Create dungeon
+            createDungeon();
+            
+            // Create lighting
+            createLighting();
+            
+            // Create enemies and objects
+            createGameObjects();
+            
+            // Set up event listeners
+            setupEventListeners();
+            
+            // Start game loop
+            animate();
+        }
+        
+        function createStoneTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            
+            // Base stone color
+            ctx.fillStyle = '#8B7355';
+            ctx.fillRect(0, 0, 64, 64);
+            
+            // Add stone texture
+            for (let i = 0; i < 100; i++) {
+                const x = Math.random() * 64;
+                const y = Math.random() * 64;
+                const size = Math.random() * 3 + 1;
+                const shade = Math.random() * 0.3 + 0.7;
+                ctx.fillStyle = `rgba(139, 115, 85, ${shade})`;
+                ctx.fillRect(x, y, size, size);
+            }
+            
+            // Add mortar lines
+            ctx.strokeStyle = '#654832';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 64; i += 16) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, 64);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(64, i);
+                ctx.stroke();
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(1, 1);
+            return texture;
+        }
+        
+        function createFloorTexture() {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64;
+            canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            
+            // Base floor color
+            ctx.fillStyle = '#6B5B47';
+            ctx.fillRect(0, 0, 64, 64);
+            
+            // Add stone tile pattern
+            ctx.strokeStyle = '#5a4a37';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 64; i += 32) {
+                ctx.beginPath();
+                ctx.moveTo(i, 0);
+                ctx.lineTo(i, 64);
+                ctx.stroke();
+                
+                ctx.beginPath();
+                ctx.moveTo(0, i);
+                ctx.lineTo(64, i);
+                ctx.stroke();
+            }
+            
+            // Add wear and dirt
+            for (let i = 0; i < 50; i++) {
+                const x = Math.random() * 64;
+                const y = Math.random() * 64;
+                const size = Math.random() * 4 + 1;
+                const shade = Math.random() * 0.2 + 0.8;
+                ctx.fillStyle = `rgba(107, 91, 71, ${shade})`;
+                ctx.fillRect(x, y, size, size);
+            }
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.wrapS = THREE.RepeatWrapping;
+            texture.wrapT = THREE.RepeatWrapping;
+            texture.repeat.set(2, 2);
+            return texture;
+        }
+        
+        function createDungeon() {
+            // Dungeon layout (1 = wall, 0 = floor)
+            dungeon = [
+                [1,1,1,1,1,1,1,1,1,1,1,1,1],
+                [1,0,0,0,0,0,1,0,0,0,0,0,1],
+                [1,0,1,1,0,0,1,0,0,1,1,0,1],
+                [1,0,1,0,0,0,0,0,0,0,1,0,1],
+                [1,0,0,0,1,1,0,1,1,0,0,0,1],
+                [1,0,0,0,1,0,0,0,1,0,0,0,1],
+                [1,1,1,0,0,0,0,0,0,0,1,1,1],
+                [1,0,0,0,1,0,0,0,1,0,0,0,1],
+                [1,0,0,0,1,1,0,1,1,0,0,0,1],
+                [1,0,1,0,0,0,0,0,0,0,1,0,1],
+                [1,0,1,1,0,0,1,0,0,1,1,0,1],
+                [1,0,0,0,0,0,1,0,0,0,0,0,1],
+                [1,1,1,1,1,1,1,1,1,1,1,1,1]
+            ];
+            
+            // Create materials
+            const stoneTexture = createStoneTexture();
+            const floorTexture = createFloorTexture();
+            
+            const wallMaterial = new THREE.MeshLambertMaterial({ 
+                map: stoneTexture,
+                color: 0xaaaaaa
+            });
+            
+            const floorMaterial = new THREE.MeshLambertMaterial({ 
+                map: floorTexture,
+                color: 0x999999
+            });
+            
+            const ceilingMaterial = new THREE.MeshLambertMaterial({ 
+                color: 0x555555
+            });
+            
+            // Build dungeon geometry
+            for (let x = 0; x < dungeon.length; x++) {
+                for (let z = 0; z < dungeon[x].length; z++) {
+                    const worldX = x - 6;
+                    const worldZ = z - 6;
+                    
+                    // Floor
+                    const floorGeometry = new THREE.PlaneGeometry(1, 1);
+                    const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+                    floor.rotation.x = -Math.PI / 2;
+                    floor.position.set(worldX, 0, worldZ);
+                    floor.receiveShadow = true;
+                    scene.add(floor);
+                    
+                    // Ceiling
+                    const ceiling = new THREE.Mesh(floorGeometry, ceilingMaterial);
+                    ceiling.rotation.x = Math.PI / 2;
+                    ceiling.position.set(worldX, 3, worldZ);
+                    scene.add(ceiling);
+                    
+                    // Walls
+                    if (dungeon[x][z] === 1) {
+                        const wallGeometry = new THREE.BoxGeometry(1, 3, 1);
+                        const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+                        wall.position.set(worldX, 1.5, worldZ);
+                        wall.castShadow = true;
+                        wall.receiveShadow = true;
+                        scene.add(wall);
+                    }
+                }
+            }
+            
+            // Add decorative elements
+            addDecorations();
+        }
+        
+        function addDecorations() {
+            // Add braziers/torches
+            const brazierPositions = [
+                { x: -4, z: -4 },
+                { x: 4, z: -4 },
+                { x: -4, z: 4 },
+                { x: 4, z: 4 },
+                { x: 0, z: -5 },
+                { x: 0, z: 5 }
+            ];
+            
+            brazierPositions.forEach(pos => {
+                if (canPlaceAt(pos.x + 6, pos.z + 6)) {
+                    createBrazier(pos.x, pos.z);
+                }
+            });
+            
+            // Add pillars
+            const pillarGeometry = new THREE.CylinderGeometry(0.25, 0.25, 3, 12);
+            const pillarMaterial = new THREE.MeshLambertMaterial({ color: 0x777777 });
+            
+            const pillarPositions = [
+                { x: -2, z: -2 },
+                { x: 2, z: -2 },
+                { x: -2, z: 2 },
+                { x: 2, z: 2 }
+            ];
+            
+            pillarPositions.forEach(pos => {
+                if (canPlaceAt(pos.x + 6, pos.z + 6)) {
+                    const pillar = new THREE.Mesh(pillarGeometry, pillarMaterial);
+                    pillar.position.set(pos.x, 1.5, pos.z);
+                    pillar.castShadow = true;
+                    pillar.receiveShadow = true;
+                    scene.add(pillar);
+                }
+            });
+        }
+        
+        function createBrazier(x, z) {
+            const brazierGroup = new THREE.Group();
+            
+            // Base
+            const baseGeometry = new THREE.CylinderGeometry(0.3, 0.35, 0.2, 8);
+            const baseMaterial = new THREE.MeshLambertMaterial({ color: 0x444444 });
+            const base = new THREE.Mesh(baseGeometry, baseMaterial);
+            base.position.y = 0.1;
+            brazierGroup.add(base);
+            
+            // Post
+            const postGeometry = new THREE.CylinderGeometry(0.08, 0.08, 1.5, 8);
+            const postMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+            const post = new THREE.Mesh(postGeometry, postMaterial);
+            post.position.y = 0.95;
+            brazierGroup.add(post);
+            
+            // Bowl
+            const bowlGeometry = new THREE.CylinderGeometry(0.25, 0.2, 0.3, 8);
+            const bowlMaterial = new THREE.MeshLambertMaterial({ color: 0x444444 });
+            const bowl = new THREE.Mesh(bowlGeometry, bowlMaterial);
+            bowl.position.y = 1.85;
+            brazierGroup.add(bowl);
+            
+            // Flame effect
+            const flameGeometry = new THREE.ConeGeometry(0.15, 0.4, 6);
+            const flameMaterial = new THREE.MeshBasicMaterial({ 
+                color: 0xff6600,
+                transparent: true,
+                opacity: 0.7
+            });
+            const flame = new THREE.Mesh(flameGeometry, flameMaterial);
+            flame.position.y = 2.1;
+            brazierGroup.add(flame);
+            
+            // Light source
+            const light = new THREE.PointLight(0xffaa44, 0.8, 8);
+            light.position.y = 2.2;
+            light.castShadow = true;
+            light.shadow.mapSize.width = 512;
+            light.shadow.mapSize.height = 512;
+            brazierGroup.add(light);
+            
+            brazierGroup.position.set(x, 0, z);
+            scene.add(brazierGroup);
+        }
+        
+        function createLighting() {
+            // Much brighter ambient light
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+            scene.add(ambientLight);
+            
+            // Main directional light (bright)
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+            directionalLight.position.set(5, 10, 5);
+            directionalLight.target.position.set(0, 0, 0);
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048;
+            directionalLight.shadow.mapSize.height = 2048;
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = 50;
+            directionalLight.shadow.camera.left = -10;
+            directionalLight.shadow.camera.right = 10;
+            directionalLight.shadow.camera.top = 10;
+            directionalLight.shadow.camera.bottom = -10;
+            scene.add(directionalLight);
+            
+            // Additional fill light
+            const fillLight = new THREE.DirectionalLight(0xffffff, 0.5);
+            fillLight.position.set(-5, 8, -5);
+            scene.add(fillLight);
+        }
+        
+        function createGameObjects() {
+            // Create enemies in open spaces
+            const enemyPositions = [
+                { x: -3, z: -3 },
+                { x: 3, z: -3 },
+                { x: -3, z: 3 },
+                { x: 3, z: 3 },
+                { x: 0, z: -2 },
+                { x: 0, z: 2 }
+            ];
+            
+            enemyPositions.forEach(pos => {
+                if (canPlaceAt(pos.x + 6, pos.z + 6)) {
+                    createEnemy(pos.x, pos.z);
+                }
+            });
+        }
+        
+        function createEnemy(x, z) {
+            const enemyGroup = new THREE.Group();
+            
+            // Enemy body (orc-like)
+            const bodyGeometry = new THREE.CylinderGeometry(0.4, 0.4, 1.6, 8);
+            const bodyMaterial = new THREE.MeshLambertMaterial({ color: 0x4a5d23 });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            body.position.y = 0.8;
+            enemyGroup.add(body);
+            
+            // Enemy head
+            const headGeometry = new THREE.SphereGeometry(0.3, 8, 8);
+            const headMaterial = new THREE.MeshLambertMaterial({ color: 0x3d4f1e });
+            const head = new THREE.Mesh(headGeometry, headMaterial);
+            head.position.y = 1.8;
+            enemyGroup.add(head);
+            
+            // Eyes
+            const eyeGeometry = new THREE.SphereGeometry(0.06, 4, 4);
+            const eyeMaterial = new THREE.MeshBasicMaterial({ color: 0xff4444 });
+            
+            const leftEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            leftEye.position.set(-0.12, 1.85, 0.25);
+            enemyGroup.add(leftEye);
+            
+            const rightEye = new THREE.Mesh(eyeGeometry, eyeMaterial);
+            rightEye.position.set(0.12, 1.85, 0.25);
+            enemyGroup.add(rightEye);
+            
+            // Weapon
+            const weaponGeometry = new THREE.BoxGeometry(0.1, 1.2, 0.1);
+            const weaponMaterial = new THREE.MeshLambertMaterial({ color: 0x654321 });
+            const weapon = new THREE.Mesh(weaponGeometry, weaponMaterial);
+            weapon.position.set(0.5, 1.2, 0);
+            weapon.rotation.z = -0.3;
+            enemyGroup.add(weapon);
+            
+            enemyGroup.position.set(x, 0, z);
+            scene.add(enemyGroup);
+            
+            enemies.push({
+                group: enemyGroup,
+                x: x,
+                z: z,
+                health: 100,
+                angle: 0
+            });
+        }
+        
+        function canPlaceAt(x, z) {
+            if (x < 0 || x >= dungeon.length || z < 0 || z >= dungeon[0].length) {
+                return false;
+            }
+            return dungeon[x][z] === 0;
+        }
+        
+        function setupEventListeners() {
+            // Keyboard events
+            document.addEventListener('keydown', (e) => {
+                keys[e.code] = true;
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                keys[e.code] = false;
+            });
+            
+            // Mouse events
+            document.addEventListener('mousemove', (e) => {
+                if (document.pointerLockElement === renderer.domElement) {
+                    mouseX += e.movementX * 0.002;
+                    mouseY += e.movementY * 0.002;
+                    mouseY = Math.max(-Math.PI/3, Math.min(Math.PI/3, mouseY));
+                }
+            });
+            
+            document.addEventListener('click', () => {
+                if (document.pointerLockElement !== renderer.domElement) {
+                    renderer.domElement.requestPointerLock();
+                }
+            });
+            
+            // Window resize
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
+        
+        function handleInput() {
+            let moveX = 0;
+            let moveZ = 0;
+            
+            if (keys['KeyW']) moveZ -= 1;
+            if (keys['KeyS']) moveZ += 1;
+            if (keys['KeyA']) moveX -= 1;
+            if (keys['KeyD']) moveX += 1;
+            
+            if (moveX !== 0 || moveZ !== 0) {
+                // Calculate movement based on camera direction
+                const direction = new THREE.Vector3();
+                camera.getWorldDirection(direction);
+                direction.y = 0;
+                direction.normalize();
+                
+                const right = new THREE.Vector3();
+                right.crossVectors(direction, new THREE.Vector3(0, 1, 0));
+                
+                const movement = new THREE.Vector3();
+                movement.addScaledVector(direction, -moveZ * moveSpeed);
+                movement.addScaledVector(right, moveX * moveSpeed);
+                
+                const newX = player.x + movement.x;
+                const newZ = player.z + movement.z;
+                
+                const gridX = Math.floor(newX + 6.5);
+                const gridZ = Math.floor(newZ + 6.5);
+                
+                if (canPlaceAt(gridX, gridZ)) {
+                    player.x = newX;
+                    player.z = newZ;
+                }
+            }
+            
+            // Update camera position and rotation
+            camera.position.set(player.x, 1.6, player.z);
+            camera.rotation.x = mouseY;
+            camera.rotation.y = mouseX;
+        }
+        
+        function updateEnemies() {
+            enemies.forEach(enemy => {
+                // Simple AI: slowly rotate and bob
+                enemy.angle += 0.005;
+                enemy.group.rotation.y = enemy.angle;
+                
+                // Bob up and down slightly
+                enemy.group.position.y = Math.sin(Date.now() * 0.001 + enemy.angle) * 0.02;
+            });
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            handleInput();
+            updateEnemies();
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Start the game
+        init();
+    </script>
+</body>
+</html>
